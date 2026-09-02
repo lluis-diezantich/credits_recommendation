@@ -1,0 +1,301 @@
+"""Scoring policy: what a credit is worth, and what it takes to be worth looking up.
+
+This file is the whole reason the project is laid out this way. It is NOT in
+core/ -- it lives at the root, one copy, visible, because these numbers are
+judgement calls that deserve to be argued with rather than buried in a client.
+
+It merges the two tables that used to be copied into qobuz_resolve.py and
+discogs_resolve.py. They never disagreed on a shared key, but each was missing
+keys the other had, and a missing key silently returns INSTRUMENT_WEIGHT (0.8):
+
+    mastered by   0.15 in discogs_resolve, 0.8 in qobuz_resolve
+    written-by    0.30 in discogs_resolve, 0.8 in qobuz_resolve
+    performer     0.40 in qobuz_resolve,   0.8 in discogs_resolve
+
+Nine spellings diverged that way, always upward, always for the credits that
+deserve the least weight. The union below is the fix: an explicit value always
+beats an absence.
+"""
+from __future__ import annotations
+
+# How much a credit tells you, by role. Two ideas are baked in:
+#   - a producer or a player is CHOSEN for how they sound; a mastering engineer
+#     is an industrial service. One facility masters thousands of records across
+#     every genre, so "shares a mastering engineer" means "used the same shop".
+#   - composer/lyricist and main/featured credits are a different relationship
+#     entirely (a song the seed covered, or a billing line), not a collaboration.
+# Anything unlisted is an instrument or vocal credit, which scores INSTRUMENT.
+#
+# Both Qobuz spellings ("MixingEngineer") and Discogs' ("Mixed by") appear, since
+# role_key() folds punctuation and case but cannot invent a synonym.
+ROLE_WEIGHTS: dict[str, float] = {
+    # production
+    "producer": 1.0, "co-producer": 0.9, "co- producer": 0.9, "production": 0.9,
+    "executive producer": 0.4,            # usually money, not sound
+    # arrangement
+    "arranger": 0.8, "instrument arranger": 0.8, "vocal arranger": 0.8,
+    "conductor": 0.7,
+    # engineering, strongest to weakest
+    "mixer": 0.5, "mixing engineer": 0.5, "mixed by": 0.5,  # shapes the sound
+    "remix": 0.4,
+    "engineer": 0.45, "recording engineer": 0.45, "recorded by": 0.45,
+    "assistant engineer": 0.2, "assistantengineer": 0.2,
+    "mastering engineer": 0.15, "masterer": 0.15, "mastered by": 0.15,
+    #                                             ^ weakest signal there is
+    # writing - a different relationship, not a collaboration
+    "composer": 0.3, "lyricist": 0.3, "composerlyricist": 0.3,
+    "written-by": 0.3, "adapter": 0.3,
+    # billing
+    "mainartist": 0.25, "featuredartist": 0.25, "associatedperformer": 0.25,
+    "main": 0.25,
+    "performer": 0.4, "performance": 0.4,
+}
+INSTRUMENT_WEIGHT = 0.8
+
+# Roles that are studio/admin rather than musical, added after --list-roles
+# showed StudioPersonnel and AssociatedPerformer scoring as instruments.
+EXTRA_WEIGHTS: dict[str, float] = {
+    "studiopersonnel": 0.2, "associatedperformer": 0.25,
+    "orchestra": 0.7, "choir": 0.6,
+}
+
+# Role CLASSES, so --roles can take a group instead of listing every instrument.
+# Keys are role_key() normalised, because Qobuz spells the same role several
+# ways: "AssistantEngineer", "Assistant Engineer", "Co- Producer".
+ROLE_CLASS: dict[str, str] = {
+    **{r: "production" for r in (
+        "producer", "coproducer", "production", "executiveproducer")},
+    **{r: "engineering" for r in (
+        "engineer", "recordingengineer", "mixedby", "mixer", "mixingengineer",
+        "assistantengineer", "asstrecordingengineer", "masteredby",
+        "masteringengineer", "masterer", "studiopersonnel")},
+    **{r: "writing" for r in (
+        "composer", "lyricist", "composerlyricist", "writtenby", "adapter",
+        "author", "writer", "arranger", "instrumentarranger", "vocalarranger")},
+    **{r: "billing" for r in (
+        "mainartist", "main", "featuredartist", "associatedperformer",
+        "performer", "performance")},
+}
+CLASS_NAMES = {"production", "engineering", "writing", "billing", "performance"}
+
+# Referral classes that are not a working relationship. A person credited ONLY
+# under these is dropped by default (--keep-weak overrides): on the Drexler pool
+# they were 45% of the rows.
+WEAK_CLASSES = {"writing", "billing"}
+
+# Gate defaults, calibrated on the 54 unresolved people in the Drexler run:
+#   0.2 sits between mastering (0.15) and assistant engineer (0.20), so it drops
+#   the two masterers for free and keeps Manuel Pajaro exactly on the boundary.
+MIN_ROLE_WEIGHT = 0.2
+MIN_SIGNAL = 0.2
+
+
+def role_key(role: str) -> str:
+    """Fold spelling variants: 'Co- Producer' and 'MixingEngineer' both match."""
+    return "".join(ch for ch in role.lower() if ch.isalnum())
+
+
+_WEIGHTS_BY_KEY: dict[str, float] = {role_key(k): v for k, v in ROLE_WEIGHTS.items()}
+_WEIGHTS_BY_KEY.update(EXTRA_WEIGHTS)
+
+
+def role_weight(role: str | None) -> float:
+    if not role:
+        return INSTRUMENT_WEIGHT
+    return _WEIGHTS_BY_KEY.get(role_key(role), INSTRUMENT_WEIGHT)
+
+
+def role_class(role: str) -> str:
+    """Anything unrecognised is an instrument or vocal credit."""
+    return ROLE_CLASS.get(role_key(role), "performance")
+
+
+def person_roles(person: dict) -> list[str]:
+    """The person's roles, most frequent first (resolve_qobuz stores them so)."""
+    return list(person.get("roles") or [])
+
+
+def person_role_weight(person: dict) -> float:
+    """What they mainly are, weighted -- their TOP role, as wanted() defaults to.
+
+    Someone who mastered ten of the seed's albums is a mastering engineer
+    whatever else they once played. Reads only what resolve_qobuz already
+    wrote, so this gates before spending a single request.
+    """
+    roles = person_roles(person)
+    return role_weight(roles[0]) if roles else 0.0
+
+
+def selectivity(total_releases: int) -> tuple[float, str]:
+    """How much one credit from this person is worth.
+
+    The more records someone touches, the less "they touched this one" tells
+    you. Fred Kevorkian has mastered 1,070 releases across every genre; Carles
+    Campi Campon has 45. Bands rather than a formula, so a score is explainable.
+    """
+    if total_releases <= 0:
+        return 0.5, "unknown"
+    if total_releases <= 60:
+        return 1.0, "selective"
+    if total_releases <= 200:
+        return 0.6, "moderate"
+    if total_releases <= 600:
+        return 0.3, "prolific"
+    return 0.1, "service"          # an industrial service, not a collaborator
+
+
+# ---------------------------------------------------------------------------
+# Discovery-stage vocabulary. DELIBERATELY COARSER than ROLE_CLASS above, and
+# kept separate rather than merged: qobuz_discover folded every engineering role
+# into "production", which is why discovery_*.json and watchlist.json carry the
+# classes performance/production/writing/billing and no "engineering" at all.
+# Unifying the two would change that written data, so it is a decision to make
+# on purpose, not a side effect of tidying. WEAK_CLASSES is unaffected either
+# way (engineers are weak under neither vocabulary).
+# ---------------------------------------------------------------------------
+
+MUSICAL_ROLES = {
+    "producer", "co-producer", "co- producer", "executive producer", "production",
+    "mixer", "mixing engineer", "recording engineer", "engineer", "assistant engineer",
+    "assistantengineer", "mastering engineer", "masterer",
+    "guitar", "electric guitar", "acoustic guitar", "classical guitar", "guitarron guitar",
+    "bass", "bass guitar", "double bass", "contrabass", "drums", "percussion",
+    "piano", "electric piano", "keyboards", "organ", "synthesizer", "programmer",
+    "violin", "viola", "cello", "strings", "trumpet", "trombone", "saxophone",
+    "clarinet", "flute", "harmonica", "accordion", "bandoneon", "charango", "cuatro",
+    "vocals", "vocal", "background vocal", "backing vocals", "choir", "chorus",
+    "arranger", "instrument arranger", "vocal arranger", "orchestra", "conductor",
+    "composer", "lyricist", "songwriter", "adapter", "performer", "mainartist",
+}
+
+DISCOVERY_ROLE_CLASSES: dict[str, str] = {
+    **{r: "production" for r in (
+        "producer", "co-producer", "co- producer", "executive producer", "production",
+        "mixer", "mixing engineer", "recording engineer", "engineer",
+        "assistant engineer", "assistantengineer", "asst. recording engineer",
+        "mastering engineer", "masterer", "studiopersonnel")},
+    **{r: "writing" for r in (
+        "composer", "lyricist", "composerlyricist", "songwriter", "adapter",
+        "author", "writer", "arranger", "instrument arranger", "vocal arranger")},
+    **{r: "billing" for r in (
+        "mainartist", "featuredartist", "associatedperformer", "performer", "performance")},
+}
+
+
+def classify_roles(roles) -> list[str]:
+    """Which kinds of relationship this person's credits represent.
+
+    Uses the coarse DISCOVERY_ROLE_CLASSES, matching what already sits in
+    discovery_*.json. Lowercase lookup only -- no role_key() folding -- again
+    to preserve the existing output exactly.
+    """
+    return sorted({DISCOVERY_ROLE_CLASSES.get(role.lower(), "performance") for role in roles})
+
+
+# ---------------------------------------------------------------------------
+# WRITING-LOOKUP VOCABULARY (stages/writing.py)
+#
+# Separate from ROLE_CLASS above, and deliberately finer. ROLE_CLASS answers
+# "is this a collaboration?" and folds every writing role into one class. That
+# is the wrong granularity here: on Shakira's "Waka Waka" Drexler is Lyricist
+# while Dooh Belly Eugene Victor, Ze Bell Jean Paul and Shakira hold Composer
+# -- he wrote the Spanish words for someone else's song. ROLE_CLASS calls that
+# identical to having composed it.
+# ---------------------------------------------------------------------------
+
+# Roles that mean "this person composed the music or is a credited author".
+COMPOSER_ROLES = {"composer", "composerlyricist", "writer", "writtenby", "author"}
+
+# Roles that put words to music, which may be original co-writing OR a
+# translation. Alone they do not establish authorship -- see writing_tier().
+LYRIC_ROLES = {"lyricist", "composerlyricist"}
+
+# Explicitly derivative: the credit itself says the song came from elsewhere.
+ADAPTATION_ROLES = {"adapter", "translator", "adaptor"}
+
+WRITING_ROLES = COMPOSER_ROLES | LYRIC_ROLES | ADAPTATION_ROLES
+
+# Roles proving they are on the recording, so it is their track or a
+# collaboration rather than a song handed to another artist.
+PERFORMANCE_ROLES = {
+    "mainartist", "featuredartist", "associatedperformer", "performer",
+    "performance", "vocal", "vocals", "backgroundvocal", "backingvocals",
+}
+
+
+def writing_tier(mine: set[str], others_compose: bool) -> str:
+    """How strong is this person's claim to have written the song?
+
+    Three outcomes, not two, because roles alone cannot separate a translation
+    from a genuine words-and-music partnership:
+
+      authored     they hold a composer/author role. Unambiguous.
+      lyrics_only  they hold ONLY a lyric role and somebody else composed.
+                   Could be a Spanish adaptation ("Waka Waka") or a real
+                   co-write where they wrote the words ("Como Las Mareas").
+                   Indistinguishable from credits alone -- so it is FLAGGED,
+                   never silently dropped.
+      adaptation   an explicit Adapter/Translator credit. Derivative by
+                   its own admission.
+    """
+    if mine & ADAPTATION_ROLES and not (mine & COMPOSER_ROLES):
+        return "adaptation"
+    if mine & COMPOSER_ROLES:
+        return "authored"
+    if mine & LYRIC_ROLES:
+        return "lyrics_only" if others_compose else "authored"
+    return "none"
+
+
+# Translations are a DIFFERENT TITLE for the same song, which no amount of
+# string folding can detect: "La Edad Del Cielo" and "A Idade do Céu" share no
+# words. Only a curated table gets these, so the table is here where it can be
+# argued with, and it is expected to grow per artist. Keys and values are
+# title_key() output (accent-stripped, punctuation-free, lowercase).
+TITLE_ALIASES: dict[str, str] = {
+    # Jorge Drexler, from the 2026-09 run
+    "a idade do ceu": "la edad del cielo",
+    "idade do ceu": "la edad del cielo",
+    "eu nao": "no voy a ser yo",
+    "me faz bem": "me haces bien",
+    "12 seconds": "12 segundos de oscuridad",
+    "row on": "al otro lado del rio",
+    "al outro lado del rio": "al otro lado del rio",
+    "la mora judia": "milonga del moro judio",
+    "que quieres de mi": "que quer de mim",
+}
+
+# Above this, two folded titles are treated as one song. Catches typos and
+# cross-language spellings of the SAME title ("orcuridad"/"oscuridad",
+# "Reio"/"Río"). Held high on purpose: at 0.92 "todo se transforma" and
+# "todo se complica" (0.65) stay apart, which they must.
+TITLE_SIMILARITY = 0.92
+
+# Entities that re-record other people's catalogues at volume. Not artists in
+# any sense that matters to a recommender: 9 of the 19 "performers" of "Al Otro
+# Lado Del Río" are these, so they dominate any cover-count signal. Substring
+# match on a normalised name, and a FLAG rather than a filter.
+COVERS_MILL_HINTS = (
+    "karaoke", "tribute", "string quartet", "piano", "rockabye", "workout",
+    "movie sounds", "various interpret", "chill out", "acoustic heartstrings",
+    "instrumental", "8-bit", "lullaby", "made famous by", "originally performed",
+)
+
+# Share of a person's page-1 credits that must carry a writing role before the
+# remaining pages are worth paying for.
+#
+# Calibrated on four people, one request each (2026-09):
+#
+#     Jorge Drexler        0.97   songwriter          keep
+#     Stephen Marcussen    0.15   mastering engineer  drop
+#     Carles Campi Campon  0.12   engineer/player     drop
+#     Fred Kevorkian       0.00   mastering engineer  drop
+#
+# The floor is not zero, because Qobuz mislabels: "Stephen Marcussen, Composer"
+# appears verbatim on 15 of his first 100 tracks. That is the source data being
+# wrong, not a parse error -- so the threshold has to clear a noise band, not
+# just exclude zero. 0.35 sits in the gap between 0.15 and 0.97.
+#
+# Four people is thin next to the 54 that tuned MIN_ROLE_WEIGHT and MIN_SIGNAL.
+# Anyone genuinely between 0.15 and 0.35 is unclassified by this evidence.
+MIN_WRITING_SHARE = 0.35

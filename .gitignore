@@ -1,0 +1,25 @@
+# Generated pipeline output. Regenerate with stages/, do not commit:
+# pool_discogs.json alone is 4.5 MB and changes on every run.
+data/*.json
+!data/.gitkeep
+
+# The store. Derived from data/ and cache/, rebuilt by stages/load.py in
+# seconds, and 42 MB of it is the listen export. Never commit a derived DB.
+data/music.db
+data/*.db
+data/*.duckdb
+data/*.parquet
+
+# API response cache - saves calls, means nothing to anyone else.
+cache/
+
+# Radar state. Committing it would make one machine's "already reported"
+# everyone's, and the radars would go quiet for the others.
+data/*_seen.json
+data/seen.json
+
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.DS_Store
+.venv/
