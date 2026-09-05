@@ -35,6 +35,8 @@ produce byte-identical output.
     notebooks/         showcase.ipynb
     docs/store.md      the store: table map, query cookbook, gotchas
     docs/duckdb.md     optional query layer over the store - measured, not quoted
+    docs/disco-bahia.md one recommendation this project could not have made
+    docs/sources.md    additional sources of discovery signals - a running list
     contrib/           qobuz_keys.py - vendored gist, not ours
 
 ## Running it
@@ -140,6 +142,9 @@ explainable `via.signal.score`. What does not exist:
 | language | no source here has it. Qobuz's raw response carries no language field; MusicBrainz *works* do | re-cache for `isrc` (10 requests), then ~910 MB lookups at 1/s |
 | evaluation | no way to tell whether a recommendation was good, and the obvious method is a trap | free, but needs discipline |
 
+The same list grouped by pipeline stage is at the end of this file, which is
+where the ranker, `core/model.py` and evaluation rows above come from.
+
 ~~**feature parity**~~ — DONE 2026-09-02. `resolve_discogs.py:486` copies `label`
 and `genre`, and the re-run happened: both pools carry both fields on all rows.
 The reasoning still applies to the next field that goes missing, because the
@@ -159,3 +164,57 @@ holds 26 listens against 13,715 in 2022, so it is a missing year, not a thin one
 The only honest measure is prospective: keep each week's list, mark it later,
 accept the small sample. `docs/store.md` has the query and the definition
 ambiguity it depends on.
+
+## The missing mechanisms, by stage
+
+The section above lists what is missing as a flat set of tasks. Grouped by the
+stage a conventional recommender puts them in, the shape is clearer: this project
+is one retrieval source and very little else. Retrieval is the stage where
+running several mechanisms at once matters, because each fails differently — a
+popularity prior misses obscure records, collaborative filtering misses new ones,
+and content-based retrieval misses anything whose attributes nobody wrote down.
+
+| stage | | | have |
+|---|---|---|---|
+| retrieval | content-based retrieval | records resembling what you like by their attributes; here, by who made them | **yes** — the whole project |
+| retrieval | popularity prior | how famous a thing is, in absolute terms | — |
+| retrieval | collaborative filtering | people who like what you like also like this | — |
+| retrieval | item-item similarity | for one band, which bands sit next to it | — |
+| retrieval | freshness source | what came out this week, independent of taste | — `radars/` collect it, nothing consumes it |
+| retrieval | co-occurrence | things that keep appearing on the same playlists | — |
+| retrieval | follow graph | artists explicitly followed, separate from play counts | — |
+| filtering | seen filter | never suggest a release already in the listen history | — |
+| filtering | quality / spam filtering | drop karaoke, tribute acts, covers mills | **partial** — `COVERS_MILL_HINTS` flags, nothing drops |
+| ranking | ranker | one score per candidate, so they can be sorted | — |
+| ranking | implicit-feedback confidence | a play is not a rating; how much does one play prove | — |
+| ranking | temporal decay | 2013 taste should not weigh what last month weighs | — |
+| post-processing | diversification / capping | not ten records by the same producer | — |
+| post-processing | explanations | say why each row is here | **yes** — `via.signal` |
+| feedback loop | impression logging | write down what was shown, and when | — |
+| feedback loop | explicit negative feedback | somewhere to record "no, not this" | — |
+| feedback loop | evaluation | check guesses against what was adopted later | — designed above, nothing writes the data |
+| cross-cutting | entity resolution | one identity per artist and release across MusicBrainz, Deezer, Spotify, Qobuz | — this is `core/model.py` |
+| cross-cutting | item cold-start | how to surface a record the databases barely know about | — |
+
+### The stages
+
+- **retrieval** — come up with a longlist of things worth considering at all.
+- **filtering** — drop the candidates that are valid but useless.
+- **ranking** — put the longlist in order, best first.
+- **post-processing** — fix problems with the list as a whole, not row by row.
+- **feedback loop** — write down what was suggested, so it can be checked later.
+- **cross-cutting** — plumbing every stage leans on, mostly knowing when two
+  records are the same record.
+
+`MIN_PLAYS = 50` in `listenbrainz_top/notebooks/top.ipynb` belongs to ranking and
+is a confidence-weighting bug rather than a threshold: it treats play count and
+usefulness-as-a-graph-edge as one number. Prune the first, never the second.
+6,922 of 7,533 artists in the export (91.9%) sit below it.
+
+Scorecard: 1 of 7 retrieval sources, 1 of 2 filters, 0 of 3 ranking mechanisms,
+1 of 2 post-processors, 0 of 3 feedback mechanisms. The one retrieval source that
+does exist is the rare one, so the gap is not that the thesis is thin — it is
+that four stages downstream of it do not exist.
+
+`docs/disco-bahia.md` works one recommendation through in full: what each source
+knew, and which three rows above it lands on.
