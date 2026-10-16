@@ -41,6 +41,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import sqlite3
 import sys
 import time
 from pathlib import Path
@@ -50,6 +51,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core import favourites
 from core.http import get as _http_get
+from core.paths import DATA
 from core.names import normalise
 
 # pick() refuses fuzzy matches on purpose, which is why unresolved names are
@@ -57,6 +59,10 @@ from core.names import normalise
 from core.qobuz import PAUSE, STORE, artist_name, pick, search_artists, store_cookies
 
 STATS_URL = "https://api.listenbrainz.org/1/stats/user/{user}/artists"
+
+# Breadth at or below this is reported as thin. Nothing is muted automatically:
+# a one-track artist can still be a real one you only just found.
+THIN_TRACKS = 2
 USER_AGENT = "favourites-resolver/1.0 (personal use)"
 
 # Every window ListenBrainz calculates, widest first so that the all_time rank
@@ -240,6 +246,67 @@ def review(store: str, dry_run: bool) -> int:
     return 0
 
 
+def set_tracks(entry: dict, key: str, counts: dict[str, int]) -> None:
+    """Record this artist's breadth, without destroying a number we already had.
+
+    A missing store or an artist the export predates both mean "unknown", so
+    they must not overwrite a real count with 0 -- that would read as "one song
+    on repeat" and invite muting a genuine favourite.
+    """
+    known = counts.get(entry.get("mbid") or "")
+    if known is None:
+        known = counts.get(key)
+    if known is not None:
+        entry["tracks"] = known
+    else:
+        entry.setdefault("tracks", None)
+
+
+def track_counts() -> dict[str, int]:
+    """Distinct recordings per artist, from the local listen store.
+
+    Breadth, not depth. A top-artists list cannot tell one song on repeat from
+    an artist you play across a dozen records, and that is exactly the
+    difference between a featured credit and a favourite: a collaboration
+    counts a play for every artist on it, so a single beloved track carries
+    strangers onto the list with it.
+
+    Read from data/music.db rather than the stats API because the API would
+    only report breadth within your top-N recordings per window -- at a few
+    hundred artists that number reflects the request limit, not your
+    listening. The store holds every listen, so the count is real.
+
+    Empty when the store has not been built, which is why the caller leaves an
+    existing count alone instead of writing 0: no store means unknown, not
+    zero. The store is also a point-in-time export, so recent artists are
+    undercounted and the newest are absent entirely.
+    """
+    store = DATA / "music.db"
+    if not store.exists():
+        print(f"note: no {store.name}, so track counts are left as they are "
+              "(build it with ./stages/load.py)", file=sys.stderr)
+        return {}
+
+    counts: dict[str, int] = {}
+    # Read-only: this stage must never be the thing that corrupts the store.
+    with sqlite3.connect(f"file:{store}?mode=ro", uri=True) as db:
+        rows = db.execute("""
+            select artist_mbid, artist_name,
+                   count(distinct coalesce(recording_mbid, track_name)) tracks
+            from listens
+            group by coalesce(artist_mbid, lower(artist_name))
+        """)
+        for mbid, name, tracks in rows:
+            if mbid:
+                counts[mbid] = tracks
+            if name:
+                # One artist can appear both with and without an MBID, so the
+                # name key takes the larger of the groups rather than the last.
+                key = normalise(name)
+                counts[key] = max(counts.get(key, 0), tracks)
+    return counts
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Resolve your top ListenBrainz artists to Qobuz ids."
@@ -301,6 +368,8 @@ def main() -> int:
           f"({needs_resolving} Qobuz request{'s' if needs_resolving != 1 else ''}).",
           file=sys.stderr)
 
+    tracks = track_counts()
+
     out: list[dict] = []
     resolved = kept = unresolved = 0
 
@@ -309,6 +378,7 @@ def main() -> int:
         entry["mbid"] = entry.get("mbid") or row["mbid"]
         entry["plays"] = row["plays"]
         entry["ranks"] = row["ranks"]
+        set_tracks(entry, key, tracks)
         # Best rank in any window, so the file can be sorted and skimmed.
         entry["rank"] = min(row["ranks"].values()) if row["ranks"] else None
         entry.setdefault("itunes_id", None)
@@ -335,6 +405,7 @@ def main() -> int:
     for leftover in existing.values():
         leftover["rank"] = None
         leftover["ranks"] = {}
+        set_tracks(leftover, normalise(leftover["name"]), tracks)
         out.append(leftover)
 
     # Widest-window rank first, then play count; unranked leftovers at the end.
@@ -342,6 +413,21 @@ def main() -> int:
 
     print(f"\n{len(merged)} unique artists: {resolved} newly resolved, "
           f"{kept} already had a Qobuz id, {unresolved} unresolved.")
+
+    thin = [e for e in out if e.get("tracks") is not None and e["tracks"] <= THIN_TRACKS]
+    unknown = sum(1 for e in out if e.get("tracks") is None)
+    if thin:
+        print(f"\n{len(thin)} artists play on {THIN_TRACKS} or fewer distinct tracks "
+              "- most likely one song you love rather than an artist you follow:")
+        for entry in sorted(thin, key=lambda e: -(e.get("plays") or 0))[:15]:
+            print(f"  {entry['plays'] or 0:>5} plays  {entry['tracks']} track"
+                  f"{'s' if entry['tracks'] != 1 else ''}  {entry['name']}")
+        if len(thin) > 15:
+            print(f"  ... and {len(thin) - 15} more")
+        print('  mute one with "watch": false, or leave it and see what it reports.')
+    if unknown:
+        print(f"\n{unknown} artists have no local listen history, so their breadth is "
+              "unknown and they are left in.")
     if existing:
         print(f"{len(existing)} kept from a previous run, no longer in any window.")
     if unresolved:
