@@ -10,7 +10,8 @@ This one asks Apple about each watched artist directly. More requests, far
 better coverage of what actually came out, but it can only ever tell you about
 artists you have listed.
 
-No API key, no auth, standard library only.
+No API key and no auth. `requests` via core/http.py for the pooling and the
+retry policy.
 
     ./itunes_releases.py              # new releases from the last 90 days
     ./itunes_releases.py --days 365   # widen the reporting window
@@ -26,15 +27,14 @@ import datetime as dt
 import json
 import sys
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
 from pathlib import Path
 
 # Run directly (./radars/qobuz.py) or as a module (python -m radars.qobuz).
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core import favourites
+from core.http import get as http_get
 from core.paths import DATA
 from core.state import load_seen as _load_seen
 from core.state import save_seen as _save_seen
@@ -98,10 +98,11 @@ def fetch_artist_releases(artist_id: int) -> list[dict]:
         "limit": 200,
         "country": STOREFRONT,
     })
-    request = urllib.request.Request(f"{LOOKUP_URL}?{query}",
-                                     headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        payload = json.load(response)
+    status, body, _ = http_get(f"{LOOKUP_URL}?{query}", timeout=30,
+                               user_agent=USER_AGENT, service="iTunes")
+    if status != 200:
+        raise RuntimeError(f"iTunes returned HTTP {status}")
+    payload = json.loads(body)
 
     # results[0] is the artist itself (wrapperType "artist"); the rest are
     # releases. An unknown ID yields an empty list rather than an error.
@@ -188,7 +189,7 @@ def main() -> int:
             time.sleep(REQUEST_PAUSE_SECONDS)
         try:
             rows = fetch_artist_releases(artist_id)
-        except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError) as error:
+        except (RuntimeError, json.JSONDecodeError) as error:
             # One artist failing should not lose the whole run.
             print(f"warning: {label} ({artist_id}) lookup failed: {error}", file=sys.stderr)
             continue

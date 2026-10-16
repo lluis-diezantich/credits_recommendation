@@ -12,10 +12,10 @@ from __future__ import annotations
 
 import json
 import sys
-import time
 import urllib.parse
 from collections.abc import Iterable
 
+from core.http import SESSION
 from core.http import get as _http_get
 from core.http import message as message  # noqa: F401  (re-exported for callers)
 from core.names import normalise
@@ -28,7 +28,6 @@ UA = "Mozilla/5.0"
 STORE = "gb-en"
 PAGE_LIMIT = 500
 PAUSE = 0.22                 # Qobuz publishes no rate limit; be unhurried
-RETRIES = 3                  # see get_json: 5xx under load is routine, not fatal
 
 
 def get(url: str, headers: dict[str, str] | None = None, timeout: int = 40):
@@ -39,45 +38,45 @@ def get(url: str, headers: dict[str, str] | None = None, timeout: int = 40):
 def store_cookies(store: str = STORE) -> str:
     """Cookies any public storefront page issues; the API wants them present.
 
-    urllib exposes repeated Set-Cookie headers individually, so collect them
-    all and keep just the name=value part of each.
+    Loading the page is what matters: core.http's shared Session keeps a
+    cookie jar, so every later request to qobuz.com carries these whether or
+    not the caller passes them on. The string is still returned because
+    callers thread it through an explicit `cookie` header, and because being
+    able to see what was issued is worth more than the line it costs.
+
+    Reading the jar rather than the Set-Cookie headers is not a detail: urllib
+    exposed repeated headers via get_all(), requests folds them into one
+    CaseInsensitiveDict, and only the jar has them separated.
     """
-    status, _, headers = get(f"{SITE}/{store}/discover")
+    status, _, _ = get(f"{SITE}/{store}/discover")
     if status != 200:
         raise SystemExit(f"could not load the {store} storefront (HTTP {status}) "
                          "- is that a valid store code?")
-    raw = headers.get_all("Set-Cookie") or []
-    pairs = [chunk.split(";", 1)[0].strip() for chunk in raw if "=" in chunk]
-    return "; ".join(pairs)
+    return "; ".join(f"{c.name}={c.value}" for c in SESSION.cookies
+                     if c.name and "qobuz" in (c.domain or "qobuz"))
 
 
 def get_json(url: str, headers: dict[str, str] | None = None,
              what: str = "Qobuz") -> tuple[dict | list | None, str]:
     """(parsed body, outcome) for a Qobuz GET: "ok", "not_found" or "error".
 
-    5xx is retried, because Qobuz returns intermittent HTTP 500 under sustained
-    load and a single attempt turns a busy minute into a permanent failure. One
-    watched artist that was tolerable; at a few hundred it is most runs.
+    No retry loop here: core.http's adapter has already retried 5xx and 429
+    with backoff before a status arrives, so a 503 at this point means it
+    stayed broken. That loop used to live here and ignored Retry-After.
 
     `what` names the thing being fetched, for the warning. Nothing here raises:
     a caller looping over hundreds of artists must be able to skip one.
     """
-    for attempt in range(RETRIES):
-        status, body, _ = get(url, headers)
-        if status == 200:
-            try:
-                return json.loads(body), "ok"
-            except json.JSONDecodeError:
-                print(f"warning: {what} returned a non-JSON body", file=sys.stderr)
-                return None, "error"
-        if status == 404:
-            return None, "not_found"
-        if status < 500:
-            print(f"warning: {what} HTTP {status}: {message(body)}", file=sys.stderr)
+    status, body, _ = get(url, headers)
+    if status == 200:
+        try:
+            return json.loads(body), "ok"
+        except json.JSONDecodeError:
+            print(f"warning: {what} returned a non-JSON body", file=sys.stderr)
             return None, "error"
-        if attempt < RETRIES - 1:
-            time.sleep(0.8 * (attempt + 1))
-    print(f"warning: {what} failed with 5xx after {RETRIES} tries", file=sys.stderr)
+    if status == 404:
+        return None, "not_found"
+    print(f"warning: {what} HTTP {status}: {message(body)}", file=sys.stderr)
     return None, "error"
 
 

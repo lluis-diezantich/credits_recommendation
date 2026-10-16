@@ -30,9 +30,7 @@ import json
 import sys
 import time
 import unicodedata
-import urllib.error
 import urllib.parse
-import urllib.request
 from pathlib import Path
 
 # Run directly (./stages/discover.py) or as a module (python -m stages.discover):

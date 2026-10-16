@@ -6,7 +6,8 @@ MusicBrainz knows about in a window around today. We intersect that against
 WATCHED_ARTISTS locally, then subtract whatever we already reported on a
 previous run, so each run shows only what is new to you.
 
-No API key, no auth, standard library only.
+No API key and no auth. `requests` via core/http.py for the pooling and the
+retry policy.
 
     ./fresh_releases.py              # what is new since last run
     ./fresh_releases.py --all        # everything in the window, ignore state
@@ -20,14 +21,13 @@ import argparse
 import datetime as dt
 import json
 import sys
-import urllib.error
-import urllib.request
 from pathlib import Path
 
 # Run directly (./radars/qobuz.py) or as a module (python -m radars.qobuz).
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core import favourites
+from core.http import get as http_get
 from core.paths import DATA
 from core.state import load_seen as _load_seen
 from core.state import save_seen as _save_seen
@@ -75,14 +75,12 @@ USER_AGENT = "fresh-releases-radar/1.0 (personal use)"
 def fetch_feed(anchor: dt.date, days: int) -> list[dict]:
     """Return every release in the feed window around `anchor`."""
     url = f"{FEED_URL}?release_date={anchor.isoformat()}&days={days}"
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    status, body, _ = http_get(url, timeout=60, user_agent=USER_AGENT,
+                               service="ListenBrainz")
+    if status != 200:
+        sys.exit(f"ListenBrainz returned HTTP {status} for {url}")
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            payload = json.load(response)
-    except urllib.error.HTTPError as error:
-        sys.exit(f"ListenBrainz returned HTTP {error.code} for {url}")
-    except urllib.error.URLError as error:
-        sys.exit(f"Could not reach ListenBrainz: {error.reason}")
+        payload = json.loads(body)
     except json.JSONDecodeError:
         sys.exit("ListenBrainz returned a response that was not JSON")
 

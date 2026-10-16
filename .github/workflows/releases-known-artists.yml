@@ -15,8 +15,8 @@
 # nothing. The cost is that a release can appear in two consecutive issues when
 # DAYS exceeds seven, which is cheap and visible, unlike a cache miss.
 #
-# Needs nothing but the repo: no secrets, no dependencies, and the watchlist
-# (data/favourites.json) is committed.
+# Needs no secrets: the watchlist (data/favourites.json) is committed and the
+# Qobuz app id is a public web-player value, not a key.
 name: "releases: known artists"
 
 on:
@@ -48,6 +48,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e .
 
       - name: Run the radar
         env:

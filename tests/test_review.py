@@ -1,137 +1,171 @@
-"""Exercise --review with no network and no touching data/favourites.json."""
-import io, sys, tempfile
-from pathlib import Path
+"""stages/favourites.py --review: fixing the matches that did not resolve."""
 
-REPO = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO))
-import stages.favourites as fav
+from __future__ import annotations
 
-CANDS = {
-    "Javier Colina": [
-        {"id": 111, "name": "Javier Colina", "albumsCount": 9},
-        {"id": 222, "name": "Javier Colina", "albumsCount": 40},
-    ],
+CANDIDATES = {
+    "Javier Colina": [{"id": 111, "name": "Javier Colina", "albumsCount": 9},
+                      {"id": 222, "name": "Javier Colina", "albumsCount": 40}],
     "Rosalia": [{"id": 333, "name": "ROSALÍA", "albumsCount": 7}],
     "Nobody At All": [],
 }
-calls = []
-fav.search_artists = lambda name, store: (calls.append(name), CANDS.get(name, []))[1]
 
-TMP = Path(tempfile.mkdtemp())
 
-class Stub:
-    FILE = TMP / "out.json"
-    def __init__(self, entries): self.entries, self.saved = entries, None
-    def load(self, *a, **k): return self.entries
-    def save(self, artists, generated, *a, **k): self.saved = artists
+def rows():
+    return [
+        {"name": "Javier Colina", "qobuz_id": 111, "qobuz_match": "ambiguous", "plays": 300},
+        {"name": "Nobody At All", "qobuz_id": None, "qobuz_match": "not_found", "plays": 80},
+        {"name": "Unwanted", "qobuz_id": None, "qobuz_match": "no_exact_match", "plays": 5},
+        {"name": "Fine", "qobuz_id": 9, "qobuz_match": "exact"},
+        {"name": "Already", "qobuz_id": 8, "qobuz_match": "manual"},
+        {"name": "Hushed", "qobuz_id": None, "qobuz_match": "not_found", "watch": False},
+    ]
 
-def run(entries, keys, dry_run=False):
-    stub = Stub(entries)
-    fav.favourites = stub
-    sys.stdin = io.StringIO("".join(k + "\n" for k in keys))
-    out = io.StringIO()
-    real, sys.stdout = sys.stdout, out
-    try:
-        code = fav.review("gb-en", dry_run)
-    finally:
-        sys.stdout = real
-    return code, stub.saved, out.getvalue()
 
-# 1. pick by number, re-search, mute
-entries = [
-    {"name": "Javier Colina", "qobuz_id": 111, "qobuz_match": "ambiguous", "plays": 300},
-    {"name": "Nobody At All", "qobuz_id": None, "qobuz_match": "not_found", "plays": 80},
-    {"name": "Unwanted", "qobuz_id": None, "qobuz_match": "no_exact_match", "plays": 5},
-    {"name": "Fine", "qobuz_id": 9, "qobuz_match": "exact"},
-    {"name": "Already", "qobuz_id": 8, "qobuz_match": "manual"},
-    {"name": "Hushed", "qobuz_id": None, "qobuz_match": "not_found", "watch": False},
-]
-code, saved, text = run(entries, ["2", "/Rosalia", "1", "m"])
-assert code == 0, code
-assert "3 artists to review" in text, text
-assert entries[0]["qobuz_id"] == 222 and entries[0]["qobuz_match"] == "manual"
-assert entries[1]["qobuz_id"] == 333 and entries[1]["qobuz_match"] == "manual"
-assert entries[2]["watch"] is False
-assert entries[3]["qobuz_id"] == 9 and entries[4]["qobuz_id"] == 8   # untouched
-assert "watch" not in entries[3]
-assert saved is entries
-assert "1 picked" not in text and "2 picked, 1 muted, 0 left open." in text, text
-assert calls == ["Javier Colina", "Nobody At All", "Rosalia", "Unwanted"], calls
-print("1 ok: pick / re-search / mute, exact+manual+muted all skipped")
+def review(favourites_file, monkeypatch, answers, entries=None, dry_run=False):
+    stage = favourites_file.install()
+    favourites_file.entries = entries if entries is not None else rows()
+    monkeypatch.setattr(stage, "search_artists",
+                        lambda name, store: CANDIDATES.get(name, []))
+    favourites_file.answers(answers)
+    return stage.review("gb-en", dry_run)
 
-# 2. the * marks the id already held
-code, saved, text = run(
-    [{"name": "Javier Colina", "qobuz_id": 222, "qobuz_match": "ambiguous"}], ["s"])
-assert "*2." in text and " 1." in text, text
-assert "0 picked, 0 muted, 1 left open." in text
-print("2 ok: current id marked, skip leaves it alone")
 
-# 3. q stops early and still saves what was decided
-rows = [{"name": "Javier Colina", "qobuz_id": None, "qobuz_match": "not_found"},
-        {"name": "Rosalia", "qobuz_id": None, "qobuz_match": "not_found"}]
-code, saved, text = run(rows, ["1", "q"])
-assert rows[0]["qobuz_id"] == 111 and rows[1]["qobuz_id"] is None
-assert "stopped at 2 of 2" in text and saved is rows
-print("3 ok: q saves the decisions made so far")
+def test_only_open_rows_are_asked_about(favourites_file, monkeypatch, capsys):
+    """An exact match needs no second opinion, a manual one has already had
+    yours, and a muted row is a decision too."""
+    code = review(favourites_file, monkeypatch, ["2", "/Rosalia", "1", "m"])
+    entries = favourites_file.entries
+    out = capsys.readouterr().out
 
-# 4. bad input re-prompts rather than crashing or guessing
-code, saved, text = run(
-    [{"name": "Javier Colina", "qobuz_id": None, "qobuz_match": "not_found"}], ["7", "x", "1"])
-assert text.count("? expected") == 2, text
-print("4 ok: out-of-range and junk re-prompt")
+    assert code == 0
+    assert "3 artists to review" in out
+    assert entries[3]["qobuz_id"] == 9 and "watch" not in entries[3]
+    assert entries[4]["qobuz_id"] == 8
 
-# 5. --dry-run writes nothing
-rows = [{"name": "Rosalia", "qobuz_id": None, "qobuz_match": "not_found"}]
-code, saved, text = run(rows, ["1"], dry_run=True)
-assert saved is None and "nothing written" in text and rows[0]["qobuz_id"] == 333
-print("5 ok: dry-run decides but does not save")
 
-# 6. nothing to review
-code, saved, text = run([{"name": "Fine", "qobuz_id": 1, "qobuz_match": "exact"}], [])
-assert code == 0 and saved is None and "nothing to review" in text
-print("6 ok: clean file says so and writes nothing")
+def test_picking_a_number_records_it_as_manual(favourites_file, monkeypatch):
+    """`manual` is what stops --refresh overruling you later."""
+    review(favourites_file, monkeypatch, ["2", "s", "s"])
+    entry = favourites_file.entries[0]
+    assert entry["qobuz_id"] == 222 and entry["qobuz_match"] == "manual"
 
-assert not Stub.FILE.exists(), "test must not write any file"
-print("\nall 6 ok, no network, no file written")
 
-# --- #<id> ---------------------------------------------------------------
-NAMES = {41620: ("Jorge Drexler", "ok"), 999: (None, "not_found")}
-seen_cookies = []
-fav.store_cookies = lambda store: (seen_cookies.append(store), "c=1")[1]
-fav.artist_name = lambda i, store, cookies: NAMES.get(i, (None, "error"))
+def test_slash_searches_a_different_spelling(favourites_file, monkeypatch):
+    """The way out of not_found, where the artist's own name returns nothing."""
+    review(favourites_file, monkeypatch, ["s", "/Rosalia", "1", "s"])
+    assert favourites_file.entries[1]["qobuz_id"] == 333
 
-# 7. a confirmed id is accepted and the name echoed
-rows = [{"name": "Nobody At All", "qobuz_id": None, "qobuz_match": "not_found"}]
-code, saved, text = run(rows, ["#41620"])
-assert rows[0]["qobuz_id"] == 41620 and rows[0]["qobuz_match"] == "manual"
-assert "set 41620  Jorge Drexler" in text, text
-assert seen_cookies == ["gb-en"], seen_cookies
-print("7 ok: #<id> confirmed, name echoed, cookies fetched once")
 
-# 8. unknown id, junk id and a failed lookup all re-prompt without setting
-rows = [{"name": "Nobody At All", "qobuz_id": None, "qobuz_match": "not_found"}]
-code, saved, text = run(rows, ["#999", "#abc", "#7", "s"])
-assert "no artist 999" in text and "#<id> wants a number" in text
-assert "could not confirm 7" in text, text
-assert rows[0]["qobuz_id"] is None and rows[0]["qobuz_match"] == "not_found"
-assert "0 picked, 0 muted, 1 left open." in text
-print("8 ok: bad ids never written")
+def test_m_mutes_and_s_leaves_the_row_alone(favourites_file, monkeypatch, capsys):
+    review(favourites_file, monkeypatch, ["s", "s", "m"])
+    assert favourites_file.entries[2]["watch"] is False
+    assert favourites_file.entries[0]["qobuz_id"] == 111        # skipped, unchanged
+    assert "0 picked, 1 muted, 2 left open." in capsys.readouterr().out
 
-# 9. cookies are not fetched when no #<id> is used
-seen_cookies.clear()
-code, saved, text = run(
-    [{"name": "Javier Colina", "qobuz_id": None, "qobuz_match": "not_found"}], ["1"])
-assert seen_cookies == [], seen_cookies
-print("9 ok: no #<id>, no cookie request")
 
-# 10. a storefront failure mid-review loses nothing
-def boom(store): raise SystemExit("could not load the zz-zz storefront (HTTP 404)")
-fav.store_cookies = boom
-rows = [{"name": "Javier Colina", "qobuz_id": None, "qobuz_match": "not_found"}]
-code, saved, text = run(rows, ["#41620", "1"])
-assert "could not load the zz-zz storefront" in text, text
-assert rows[0]["qobuz_id"] == 111, rows          # fell back to picking, kept working
-assert saved is rows
-print("10 ok: store_cookies exiting does not kill the session")
+def test_the_current_id_is_marked_so_skipping_is_an_informed_choice(
+        favourites_file, monkeypatch, capsys):
+    review(favourites_file, monkeypatch, ["s"],
+           entries=[{"name": "Javier Colina", "qobuz_id": 222, "qobuz_match": "ambiguous"}])
+    out = capsys.readouterr().out
+    assert "*2." in out and " 1." in out
 
-print("\nall 10 ok")
+
+def test_q_saves_the_decisions_made_so_far(favourites_file, monkeypatch, capsys):
+    entries = [{"name": "Javier Colina", "qobuz_id": None, "qobuz_match": "not_found"},
+               {"name": "Rosalia", "qobuz_id": None, "qobuz_match": "not_found"}]
+    review(favourites_file, monkeypatch, ["1", "q"], entries=entries)
+    assert entries[0]["qobuz_id"] == 111 and entries[1]["qobuz_id"] is None
+    assert "stopped at 2 of 2" in capsys.readouterr().out
+    assert favourites_file.saved is entries
+
+
+def test_junk_and_out_of_range_re_prompt(favourites_file, monkeypatch, capsys):
+    review(favourites_file, monkeypatch, ["7", "x", "1", "s", "s"])
+    assert capsys.readouterr().out.count("? expected") == 2
+
+
+def test_dry_run_decides_but_does_not_save(favourites_file, monkeypatch, capsys):
+    review(favourites_file, monkeypatch, ["1", "s", "s"], dry_run=True)
+    assert favourites_file.saved is None
+    assert "nothing written" in capsys.readouterr().out
+
+
+def test_a_clean_file_says_there_is_nothing_to_review(favourites_file, monkeypatch, capsys):
+    code = review(favourites_file, monkeypatch, [],
+                  entries=[{"name": "Fine", "qobuz_id": 1, "qobuz_match": "exact"}])
+    assert code == 0 and favourites_file.saved is None
+    assert "nothing to review" in capsys.readouterr().out
+
+
+# --- #<id>, the hand-typed escape hatch ----------------------------------
+
+def hand_typed(favourites_file, monkeypatch, answers, names=None):
+    stage = favourites_file.install()
+    favourites_file.entries = [{"name": "Nobody At All", "qobuz_id": None,
+                                "qobuz_match": "not_found"}]
+    monkeypatch.setattr(stage, "search_artists", lambda n, s: [])
+    cookies = []
+    monkeypatch.setattr(stage, "store_cookies",
+                        lambda store: cookies.append(store) or "c=1")
+    monkeypatch.setattr(stage, "artist_name",
+                        lambda i, store, c: (names or {}).get(i, (None, "error")))
+    favourites_file.answers(answers)
+    stage.review("gb-en", False)
+    return cookies
+
+
+def test_a_confirmed_id_is_accepted_and_echoed(favourites_file, monkeypatch, capsys):
+    """A typo'd id would otherwise watch nobody forever and look like a quiet
+    month, so it is confirmed against Qobuz before being written."""
+    cookies = hand_typed(favourites_file, monkeypatch, ["#41620"],
+                         {41620: ("Jorge Drexler", "ok")})
+    entry = favourites_file.entries[0]
+    assert entry["qobuz_id"] == 41620 and entry["qobuz_match"] == "manual"
+    assert "set 41620  Jorge Drexler" in capsys.readouterr().out
+    assert cookies == ["gb-en"]
+
+
+def test_an_unknown_or_unreachable_id_is_never_written(favourites_file, monkeypatch, capsys):
+    hand_typed(favourites_file, monkeypatch, ["#999", "#abc", "#7", "s"],
+               {999: (None, "not_found")})
+    out = capsys.readouterr().out
+    assert "no artist 999" in out
+    assert "#<id> wants a number" in out
+    assert "could not confirm 7" in out
+    assert favourites_file.entries[0]["qobuz_id"] is None
+
+
+def test_cookies_are_only_fetched_when_an_id_is_typed(favourites_file, monkeypatch):
+    """autosuggest needs none; artist/get does. A review that never types #
+    should cost no extra request."""
+    stage = favourites_file.install()
+    favourites_file.entries = [{"name": "Javier Colina", "qobuz_id": None,
+                                "qobuz_match": "not_found"}]
+    monkeypatch.setattr(stage, "search_artists", lambda n, s: CANDIDATES["Javier Colina"])
+    cookies = []
+    monkeypatch.setattr(stage, "store_cookies",
+                        lambda store: cookies.append(store) or "c=1")
+    favourites_file.answers(["1"])
+    stage.review("gb-en", False)
+    assert cookies == []
+
+
+def test_a_storefront_failure_mid_review_loses_nothing(favourites_file, monkeypatch, capsys):
+    """store_cookies raises SystemExit, which would discard every decision
+    made so far."""
+    stage = favourites_file.install()
+    favourites_file.entries = [{"name": "Javier Colina", "qobuz_id": None,
+                                "qobuz_match": "not_found"}]
+    monkeypatch.setattr(stage, "search_artists", lambda n, s: CANDIDATES["Javier Colina"])
+
+    def boom(store):
+        raise SystemExit("could not load the zz-zz storefront (HTTP 404)")
+
+    monkeypatch.setattr(stage, "store_cookies", boom)
+    favourites_file.answers(["#41620", "1"])
+    stage.review("gb-en", False)
+
+    assert "could not load the zz-zz storefront" in capsys.readouterr().out
+    assert favourites_file.entries[0]["qobuz_id"] == 111
+    assert favourites_file.saved is favourites_file.entries

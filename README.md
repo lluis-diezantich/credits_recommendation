@@ -41,13 +41,16 @@ produce byte-identical output.
     docs/disco-bahia.md one recommendation this project could not have made
     docs/sources.md    additional sources of discovery signals - a running list
     docs/architecture.md the module map, and the one module the rest waits on
-    tests/             ./tests/run.py - stdlib asserts, no pytest, no network
+    tests/             pytest, offline - every network call stubbed at the seam
     contrib/           qobuz_keys.py - vendored gist, not ours
 
 ## Running it
 
-No install, no venv, no dependencies. Every script is standard library and runs
-directly:
+One dependency, `requests`, so there is an install step:
+
+    python3 -m venv .venv && ./.venv/bin/pip install -e ".[dev]"
+
+With the venv active, every script runs directly:
 
     ./stages/discover.py --help
     ./stages/resolve_discogs.py --explain-gate     # free, spends no API calls
@@ -57,12 +60,11 @@ directly:
 `data/`, so any stage can be rerun alone and `--pool-only` can resume a run that
 died halfway through the Qobuz fan-out.
 
-    ./tests/run.py                  # 7 files, ~40 cases, a few seconds
+    pytest -q                       # 58 cases, under a second
 
-No pytest, for the same reason there are no runtime dependencies. Every test is
-a plain script that stubs the network and writes only to a temp directory, so
-the suite cannot reach Qobuz or damage `data/` — verified by hashing `data/`
-before and after. `./tests/run.py dedup` runs a subset.
+Offline by construction: `tests/conftest.py` stubs the network at
+`core/http.py`'s seam and points every write at `tmp_path`, so the suite cannot
+reach Qobuz or damage `data/`. `pytest -k dedup` runs a subset.
 
 ## The store
 
@@ -72,7 +74,8 @@ Because most of what is listed below is a JOIN, not a model — "people in 3+
 discovery graphs", "did the graph built on listens to 2024 contain the artists
 adopted in 2025" — and each is one SQL statement here against a page of Python.
 
-Stdlib `sqlite3`, so still no dependencies. The DB is derived and disposable:
+Stdlib `sqlite3`, so the store adds no dependency of its own. The DB is derived
+and disposable:
 rebuilt every run, gitignored, never migrated, because `cache/` is the source of
 truth. It adds no fields — there is no language column anywhere in this project,
 since no source it reads has one.

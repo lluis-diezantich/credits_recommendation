@@ -5,7 +5,8 @@
 # is the Friday radar -- a change that breaks it would otherwise show up as an
 # empty issue or a red run a week later.
 #
-# No dependencies, no secrets, no network: ./tests/run.py stubs every call.
+# No secrets and no network: the suite stubs every call at the seam, so it
+# cannot reach Qobuz or ListenBrainz and cannot touch data/.
 name: tests
 
 on:
@@ -22,11 +23,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # No setup-python: the tests are standard library only, and ubuntu-latest
-      # ships a python3 new enough for the `X | None` annotations this project
-      # uses at runtime. Pinning a version here would be the first dependency.
-      - name: Which python
-        run: python3 --version
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e ".[dev]"
 
       - name: Run the suite
-        run: ./tests/run.py
+        run: pytest -q

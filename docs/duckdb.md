@@ -23,8 +23,8 @@ Once loaded, DuckDB reads that same sqlite file directly:
     pip install duckdb          # python module - what the examples below use
     brew install duckdb         # optional CLI, if you like a REPL
 
-Nothing in the pipeline requires it. The README's "no install, no dependencies"
-stays true; this is an optional query layer.
+Nothing in the pipeline requires it, and nothing in `pyproject.toml` pulls it
+in; this is an optional query layer you install yourself.
 
 ## Setup: attach the store
 

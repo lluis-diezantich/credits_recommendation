@@ -28,8 +28,9 @@ Deleting `cache/` costs the corpus.
 
 ## Engine
 
-Stdlib `sqlite3`, always, even with DuckDB installed. The README's "no install,
-no venv, no dependencies" stays true, and sqlite is not a consolation prize here —
+Stdlib `sqlite3`, always, even with DuckDB installed. The store adds no
+dependency of its own — `requests` is the project's only one, and the store
+needs no network — and sqlite is not a consolation prize here —
 it builds these 216k rows in **2.0s** where DuckDB takes **68.7s**, because
 DuckDB is columnar and inserts rows one at a time.
 

@@ -35,10 +35,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core import favourites
 from core.paths import DATA
-from core.qobuz import API, APP_ID, PAGE_LIMIT, PAUSE, STORE
+from core.qobuz import API, APP_ID, PAGE_LIMIT, PAUSE, STORE, search_artists, store_cookies
 from core.qobuz import get_json as _get_json
-from core.qobuz import search_artists
-from core.qobuz import store_cookies
 from core.state import load_seen as _load_seen
 from core.state import save_seen as _save_seen
 

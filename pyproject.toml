@@ -1,13 +1,38 @@
-# Metadata and lint config only. There are deliberately NO runtime dependencies:
-# every stage and radar is standard library, so `./stages/discover.py` runs on a
-# bare Python with no install step, no venv and no import gymnastics. That
-# property is worth more than packaging elegance - keep it.
+# This project ran on the standard library alone for most of its life, and the
+# reason was good: every stage and radar worked on a bare Python, with no venv
+# and no install step. What ended it was not elegance but two specific things
+# the stdlib does badly -- connection pooling across ~90 sequential requests to
+# one host, and retry/backoff that honours Retry-After -- plus roughly 70 lines
+# of hand-rolled HTTP and test-runner code kept only to avoid these.
+#
+# The cost is real: `./radars/qobuz.py` now needs the venv on PATH.
+#     python3 -m venv .venv && ./.venv/bin/pip install -e ".[dev]"
 [project]
 name = "credits-recommendation"
 version = "0.1.0"
 description = "Credits-based music discovery: who made the records you like, and what else they made."
 requires-python = ">=3.11"        # uses `X | None` at runtime and Self-less generics
-dependencies = []
+dependencies = [
+    "requests>=2.32",             # core/http.py: pooling, and urllib3's Retry
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+# This is a collection of scripts, not a distributable package, but naming the
+# real packages is what lets `pip install -e .` work at all: left to guess,
+# setuptools finds data/, cache/ and notebooks/ too and refuses. The install
+# exists to pull requests in, not to ship anything.
+[tool.setuptools]
+packages = ["core", "stages", "radars"]
+
+[tool.pytest.ini_options]
+# So `import core.qobuz` works without a sys.path line in every test file.
+pythonpath = ["."]
+testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 96

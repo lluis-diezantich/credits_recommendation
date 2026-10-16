@@ -25,7 +25,8 @@ the same reason: a human wrote the row. Crosswalking to MBIDs is the caller's
 problem, and an expensive one (~75% hit rate, ~15% wrong-entity on naive name
 matching, and Puerto Rican urbano is missing almost entirely).
 
-No API key, no auth, standard library only.
+No API key and no auth. Still parses the HTML with the standard library,
+which is the next thing a dependency would earn its place in.
 
     ./radars/remezcla.py                      # picks new since last run
     ./radars/remezcla.py --curator "Cheky"    # one beat only
