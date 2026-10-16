@@ -45,9 +45,17 @@ def load(path: Path = FILE) -> list[dict]:
     return data.get("artists") or []
 
 
+# Written into the file itself, because this one is meant to be read and
+# hand-edited: the mute knob is invisible until something flips it.
+NOTE = ('hand-edits are kept: set "watch": false to stop watching an artist '
+        '(or run stages/favourites.py --mute "Name"), and a qobuz_id you fix '
+        'by hand is never re-resolved.')
+
+
 def save(artists: list[dict], generated: str, path: Path = FILE) -> None:
     path.write_text(
-        json.dumps({"generated": generated, "artists": artists}, indent=2, ensure_ascii=False)
+        json.dumps({"generated": generated, "note": NOTE, "artists": artists},
+                   indent=2, ensure_ascii=False)
         + "\n"
     )
 

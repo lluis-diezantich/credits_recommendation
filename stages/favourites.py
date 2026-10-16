@@ -6,12 +6,10 @@ per artist to turn each name into a Qobuz artist id. Writes
 data/favourites.json, which the radars read instead of their own hardcoded
 WATCHED_ARTISTS dicts.
 
-By default it asks for EVERY window and unions the results, because the windows
-answer different questions: all_time is who you are, this_week is what you are
-on right now, and an artist you played 400 times in 2019 and never since should
-not share a list with one you discovered on Tuesday without that being visible.
-Each entry records its rank in every window it charted in, so the file says
-which kind of favourite each artist is.
+By default it asks for all_time only. It can take several windows and union
+them -- each entry records its rank in every window it charted in -- but every
+window is another 100-odd artists deep into the tail, and one count across all
+of them is the wrong knob: all_time wants to be generous, this_week does not.
 
 Run this monthly, not weekly. The windows move slowly, the resolve spends one
 request per NEW name, and a wrong match nobody looked at poisons a radar
@@ -25,11 +23,13 @@ so two spellings of one artist can both appear -- mute one with "watch": false.
 
     ./stages/favourites.py --user lluisdiezantich
     ./stages/favourites.py --user X --dry-run             # print, write nothing
-    ./stages/favourites.py --user X --range all_time      # one window only
-    ./stages/favourites.py --user X --range week,month    # some of them
+    ./stages/favourites.py --user X --range week,month    # union two windows
+    ./stages/favourites.py --user X --range all           # union all nine
     ./stages/favourites.py --user X --count 20            # per window, not total
     ./stages/favourites.py --user X --refresh             # re-ask about ids we have
     ./stages/favourites.py --review                       # fix the doubtful ones
+    ./stages/favourites.py --mute "Bobby Cruz"            # stop watching someone
+    ./stages/favourites.py --unmute "Bobby Cruz"          # watch them again
 
 --review needs no --user and makes no ListenBrainz call: it walks the entries
 that did not resolve cleanly, shows you Qobuz's candidates for each, and writes
@@ -41,7 +41,6 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
-import sqlite3
 import sys
 import time
 from pathlib import Path
@@ -51,7 +50,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core import favourites
 from core.http import get as _http_get
-from core.paths import DATA
 from core.names import normalise
 
 # pick() refuses fuzzy matches on purpose, which is why unresolved names are
@@ -60,9 +58,6 @@ from core.qobuz import PAUSE, STORE, artist_name, pick, search_artists, store_co
 
 STATS_URL = "https://api.listenbrainz.org/1/stats/user/{user}/artists"
 
-# Breadth at or below this is reported as thin. Nothing is muted automatically:
-# a one-track artist can still be a real one you only just found.
-THIN_TRACKS = 2
 USER_AGENT = "favourites-resolver/1.0 (personal use)"
 
 # Every window ListenBrainz calculates, widest first so that the all_time rank
@@ -126,6 +121,54 @@ def collect(user: str, periods: list[str], count: int) -> dict[str, dict]:
             found["plays"] = max(found["plays"] or 0, row.get("listen_count") or 0)
             found["ranks"][period] = rank
     return merged
+
+
+def set_watch(names: list[str], watching: bool, dry_run: bool) -> int:
+    """Mute or unmute artists by name, so the file need not be hand-edited.
+
+    Muting rather than deleting is the point: a deleted entry is just a name
+    nobody recognises, so the next run adds it straight back from the top
+    lists. The entry has to stay for the exclusion to stick.
+
+    Unmuting removes the key instead of writing `watch: true`, because absent
+    means watched everywhere else here, and a default written into data is one
+    you cannot change later without rewriting every row.
+    """
+    entries = favourites.load()
+    if not entries:
+        sys.exit(f"no {favourites.FILE.name} yet - run the resolve first")
+
+    by_key = {normalise(entry["name"]): entry for entry in entries if entry.get("name")}
+    changed = 0
+
+    for name in names:
+        entry = by_key.get(normalise(name))
+        if entry is None:
+            # A typo should not look the same as an artist you never had.
+            near = [e["name"] for key, e in by_key.items() if normalise(name) in key]
+            hint = f" - did you mean {', '.join(near[:3])}?" if near else ""
+            print(f"not found: {name}{hint}", file=sys.stderr)
+            continue
+        if entry.get("watch", True) is watching:
+            print(f"  {entry['name']}: already {'watched' if watching else 'muted'}")
+            continue
+        if watching:
+            entry.pop("watch", None)
+        else:
+            entry["watch"] = False
+        changed += 1
+        print(f"  {entry['name']}: {'watched' if watching else 'muted'}")
+
+    if not changed:
+        print("nothing changed.")
+        return 0
+    if dry_run:
+        print("--dry-run: nothing written.")
+        return 0
+
+    favourites.save(entries, dt.datetime.now(dt.UTC).isoformat(timespec="seconds"))
+    print(f"wrote {favourites.FILE} ({changed} changed)")
+    return 0
 
 
 def review(store: str, dry_run: bool) -> int:
@@ -246,75 +289,14 @@ def review(store: str, dry_run: bool) -> int:
     return 0
 
 
-def set_tracks(entry: dict, key: str, counts: dict[str, int]) -> None:
-    """Record this artist's breadth, without destroying a number we already had.
-
-    A missing store or an artist the export predates both mean "unknown", so
-    they must not overwrite a real count with 0 -- that would read as "one song
-    on repeat" and invite muting a genuine favourite.
-    """
-    known = counts.get(entry.get("mbid") or "")
-    if known is None:
-        known = counts.get(key)
-    if known is not None:
-        entry["tracks"] = known
-    else:
-        entry.setdefault("tracks", None)
-
-
-def track_counts() -> dict[str, int]:
-    """Distinct recordings per artist, from the local listen store.
-
-    Breadth, not depth. A top-artists list cannot tell one song on repeat from
-    an artist you play across a dozen records, and that is exactly the
-    difference between a featured credit and a favourite: a collaboration
-    counts a play for every artist on it, so a single beloved track carries
-    strangers onto the list with it.
-
-    Read from data/music.db rather than the stats API because the API would
-    only report breadth within your top-N recordings per window -- at a few
-    hundred artists that number reflects the request limit, not your
-    listening. The store holds every listen, so the count is real.
-
-    Empty when the store has not been built, which is why the caller leaves an
-    existing count alone instead of writing 0: no store means unknown, not
-    zero. The store is also a point-in-time export, so recent artists are
-    undercounted and the newest are absent entirely.
-    """
-    store = DATA / "music.db"
-    if not store.exists():
-        print(f"note: no {store.name}, so track counts are left as they are "
-              "(build it with ./stages/load.py)", file=sys.stderr)
-        return {}
-
-    counts: dict[str, int] = {}
-    # Read-only: this stage must never be the thing that corrupts the store.
-    with sqlite3.connect(f"file:{store}?mode=ro", uri=True) as db:
-        rows = db.execute("""
-            select artist_mbid, artist_name,
-                   count(distinct coalesce(recording_mbid, track_name)) tracks
-            from listens
-            group by coalesce(artist_mbid, lower(artist_name))
-        """)
-        for mbid, name, tracks in rows:
-            if mbid:
-                counts[mbid] = tracks
-            if name:
-                # One artist can appear both with and without an MBID, so the
-                # name key takes the larger of the groups rather than the last.
-                key = normalise(name)
-                counts[key] = max(counts.get(key, 0), tracks)
-    return counts
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Resolve your top ListenBrainz artists to Qobuz ids."
     )
     parser.add_argument("--user", help="ListenBrainz username (not needed with --review)")
-    parser.add_argument("--range", dest="period", default="all",
+    parser.add_argument("--range", dest="period", default="all_time",
                         help="stats windows, comma-separated, or 'all' for every one "
-                             f"(default: all). Valid: {', '.join(RANGES)}")
+                             f"(default: all_time). Valid: {', '.join(RANGES)}")
     parser.add_argument("--count", type=int, default=40,
                         help="top artists to ask for PER WINDOW, not in total (default: 40)")
     parser.add_argument("--store", default=STORE, help=f"Qobuz storefront (default: {STORE})")
@@ -323,10 +305,19 @@ def main() -> int:
                              "ones you picked by hand")
     parser.add_argument("--review", action="store_true",
                         help="walk the entries that did not resolve cleanly and pick by hand")
+    parser.add_argument("--mute", nargs="+", metavar="NAME",
+                        help="stop watching these artists; keeps the entry, so a later "
+                             "run cannot re-add them")
+    parser.add_argument("--unmute", nargs="+", metavar="NAME",
+                        help="watch these artists again")
     parser.add_argument("--dry-run", action="store_true",
                         help="report without writing data/favourites.json")
     args = parser.parse_args()
 
+    if args.mute and args.unmute:
+        parser.error("--mute and --unmute are separate runs")
+    if args.mute or args.unmute:
+        return set_watch(args.mute or args.unmute, bool(args.unmute), args.dry_run)
     if args.review:
         return review(args.store, args.dry_run)
     if not args.user:
@@ -368,8 +359,6 @@ def main() -> int:
           f"({needs_resolving} Qobuz request{'s' if needs_resolving != 1 else ''}).",
           file=sys.stderr)
 
-    tracks = track_counts()
-
     out: list[dict] = []
     resolved = kept = unresolved = 0
 
@@ -378,7 +367,6 @@ def main() -> int:
         entry["mbid"] = entry.get("mbid") or row["mbid"]
         entry["plays"] = row["plays"]
         entry["ranks"] = row["ranks"]
-        set_tracks(entry, key, tracks)
         # Best rank in any window, so the file can be sorted and skimmed.
         entry["rank"] = min(row["ranks"].values()) if row["ranks"] else None
         entry.setdefault("itunes_id", None)
@@ -405,7 +393,6 @@ def main() -> int:
     for leftover in existing.values():
         leftover["rank"] = None
         leftover["ranks"] = {}
-        set_tracks(leftover, normalise(leftover["name"]), tracks)
         out.append(leftover)
 
     # Widest-window rank first, then play count; unranked leftovers at the end.
@@ -414,20 +401,6 @@ def main() -> int:
     print(f"\n{len(merged)} unique artists: {resolved} newly resolved, "
           f"{kept} already had a Qobuz id, {unresolved} unresolved.")
 
-    thin = [e for e in out if e.get("tracks") is not None and e["tracks"] <= THIN_TRACKS]
-    unknown = sum(1 for e in out if e.get("tracks") is None)
-    if thin:
-        print(f"\n{len(thin)} artists play on {THIN_TRACKS} or fewer distinct tracks "
-              "- most likely one song you love rather than an artist you follow:")
-        for entry in sorted(thin, key=lambda e: -(e.get("plays") or 0))[:15]:
-            print(f"  {entry['plays'] or 0:>5} plays  {entry['tracks']} track"
-                  f"{'s' if entry['tracks'] != 1 else ''}  {entry['name']}")
-        if len(thin) > 15:
-            print(f"  ... and {len(thin) - 15} more")
-        print('  mute one with "watch": false, or leave it and see what it reports.')
-    if unknown:
-        print(f"\n{unknown} artists have no local listen history, so their breadth is "
-              "unknown and they are left in.")
     if existing:
         print(f"{len(existing)} kept from a previous run, no longer in any window.")
     if unresolved:
