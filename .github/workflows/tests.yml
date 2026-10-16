@@ -1,0 +1,32 @@
+# The suite, on every push to main and every pull request.
+#
+# Advisory on purpose: no branch protection and no required checks, because a
+# solo repo gains nothing from being unable to push a one-line fix. The point
+# is the Friday radar -- a change that breaks it would otherwise show up as an
+# empty issue or a red run a week later.
+#
+# No dependencies, no secrets, no network: ./tests/run.py stubs every call.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # No setup-python: the tests are standard library only, and ubuntu-latest
+      # ships a python3 new enough for the `X | None` annotations this project
+      # uses at runtime. Pinning a version here would be the first dependency.
+      - name: Which python
+        run: python3 --version
+
+      - name: Run the suite
+        run: ./tests/run.py
