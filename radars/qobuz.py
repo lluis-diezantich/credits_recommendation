@@ -211,6 +211,11 @@ def main() -> int:
 
     found: list[dict] = []
     everything: set[str] = set()
+    # Ids already collected THIS run. `seen` only holds previous runs, so
+    # without this a release credited to two watched artists is fetched once
+    # per artist and reported twice, identically.
+    collected: set[str] = set()
+    shared = 0
     scanned = 0
 
     failed = 0
@@ -235,10 +240,14 @@ def main() -> int:
             everything.add(release["id"])
             if release["id"] in seen:
                 continue
+            if release["id"] in collected:
+                shared += 1
+                continue
             if release["type"] not in KEEP_TYPES:
                 continue
             if cutoff and release["date"] < cutoff:
                 continue
+            collected.add(release["id"])
             found.append(release)
 
     watching = len(WATCHED_ARTISTS)
@@ -257,6 +266,9 @@ def main() -> int:
             print(f"  {describe(release, today)}")
         print()
         print(f"{len(found)} new release{'s' if len(found) != 1 else ''}.")
+        if shared:
+            print(f"({shared} were credited to more than one artist you watch, "
+                  "and are listed once.)")
 
     # Record everything seen, not just what was reported, so the date cutoff
     # does not cause old releases to resurface later.
