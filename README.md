@@ -35,6 +35,7 @@ produce byte-identical output.
     cache/credits/     Qobuz credit responses, keyed store_albumid
     cache/search/      Qobuz track/search pages, keyed store_query_offset
     notebooks/         showcase.ipynb
+    docs/favourites.md your own top artists -> the release radar, and its cadence
     docs/store.md      the store: table map, query cookbook, gotchas
     docs/duckdb.md     optional query layer over the store - measured, not quoted
     docs/disco-bahia.md one recommendation this project could not have made

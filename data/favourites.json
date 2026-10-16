@@ -1,0 +1,1057 @@
+{
+  "generated": "2026-10-16T16:10:14+00:00",
+  "note": "hand-edits are kept: set \"watch\": false to stop watching an artist (or run stages/favourites.py --mute \"Name\"), and a qobuz_id you fix by hand is never re-resolved.",
+  "artists": [
+    {
+      "name": "Jorge Drexler",
+      "mbid": "abb91078-f7db-41f2-8f07-7f37bb739143",
+      "plays": 7723,
+      "ranks": {
+        "all_time": 1
+      },
+      "rank": 1,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 41620
+    },
+    {
+      "name": "Bad Bunny",
+      "mbid": "89aa5ecb-59ad-46f5-b3eb-2d424e941f19",
+      "plays": 4635,
+      "ranks": {
+        "all_time": 2
+      },
+      "rank": 2,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 2739838
+    },
+    {
+      "name": "Tom Waits",
+      "mbid": "c3aeb863-7b26-4388-94e8-5a240f2be21b",
+      "plays": 3835,
+      "ranks": {
+        "all_time": 3
+      },
+      "rank": 3,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 21621
+    },
+    {
+      "name": "PJ Harvey",
+      "mbid": "e795e03d-b5d5-4a5f-834d-162cfb308a2c",
+      "plays": 3020,
+      "ranks": {
+        "all_time": 4
+      },
+      "rank": 4,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 35405
+    },
+    {
+      "name": "Radiohead",
+      "mbid": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+      "plays": 2607,
+      "ranks": {
+        "all_time": 5
+      },
+      "rank": 5,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 43840
+    },
+    {
+      "name": "Nine Inch Nails",
+      "mbid": "b7ffd2af-418f-4be2-bdd1-22f8b48613da",
+      "plays": 2074,
+      "ranks": {
+        "all_time": 6
+      },
+      "rank": 6,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 61740
+    },
+    {
+      "name": "The Mars Volta",
+      "mbid": "20883363-1ea4-4d72-ad72-c0e767038f3e",
+      "plays": 1928,
+      "ranks": {
+        "all_time": 7
+      },
+      "rank": 7,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 36438
+    },
+    {
+      "name": "CA7RIEL",
+      "mbid": "a5aa915d-1696-4387-8b1b-58425539942a",
+      "plays": 1775,
+      "ranks": {
+        "all_time": 8
+      },
+      "rank": 8,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 3630169
+    },
+    {
+      "name": "EELS",
+      "mbid": "14387b0f-765c-4852-852f-135335790466",
+      "plays": 1754,
+      "ranks": {
+        "all_time": 9
+      },
+      "rank": 9,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 51308,
+      "watch": false
+    },
+    {
+      "name": "Paco Amoroso",
+      "mbid": "d069bf52-d213-49ac-8f9c-31841405bc9d",
+      "plays": 1654,
+      "ranks": {
+        "all_time": 10
+      },
+      "rank": 10,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 4757577
+    },
+    {
+      "name": "Nathy Peluso",
+      "mbid": "88e70937-92ae-4a15-bfc6-a94940ce916b",
+      "plays": 862,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 3526537
+    },
+    {
+      "name": "Little Simz",
+      "mbid": "3cdb40fe-a63e-4bb9-b40d-17cda5f50979",
+      "plays": 728,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 2020906
+    },
+    {
+      "name": "Chuwi",
+      "mbid": "ec924d55-2e15-4dc1-8b34-d78a7a015d3d",
+      "plays": 626,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 4244764
+    },
+    {
+      "name": "Silvana Estrada",
+      "mbid": "d306c4dc-f9c9-4ec6-aa74-2e2a7210537f",
+      "plays": 478,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 4382618
+    },
+    {
+      "name": "Mon Laferte",
+      "mbid": "ab966c0f-e526-46ae-b492-82c27b87f81f",
+      "plays": 440,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 1610770
+    },
+    {
+      "name": "KAROL G",
+      "mbid": "de22adae-f8ac-414f-b653-b0162611bd60",
+      "plays": 437,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 2587039
+    },
+    {
+      "name": "El Gran Combo de Puerto Rico",
+      "mbid": "a34ab81e-a7e0-4d0c-b5f8-2438f104733d",
+      "plays": 418,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 22882
+    },
+    {
+      "name": "Doechii",
+      "mbid": "9f75277c-b283-4846-ac8c-f932255cd0ac",
+      "plays": 417,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 10054766
+    },
+    {
+      "name": "Hiatus Kaiyote",
+      "mbid": "55c03773-59ea-4d4e-9057-87c2ecab005d",
+      "plays": 336,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 955455
+    },
+    {
+      "name": "Valeria Castro",
+      "mbid": "29213acd-8f0b-45d6-822e-461fd0ecf1b5",
+      "plays": 327,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 6289697
+    },
+    {
+      "name": "Bomba Estéreo",
+      "mbid": "aea8576d-7ad5-4430-bf2e-63725d80f05c",
+      "plays": 284,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 378820
+    },
+    {
+      "name": "RaiNao",
+      "mbid": "449898b5-898d-42a6-ac4b-c8be77f98a0d",
+      "plays": 270,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 10286267
+    },
+    {
+      "name": "Celia Cruz",
+      "mbid": "7b8e1188-9ca4-4aa5-8393-172de6fa04de",
+      "plays": 268,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 23562,
+      "watch": false
+    },
+    {
+      "name": "Paloma Morphy",
+      "mbid": "15e504ab-28eb-4784-b0e8-627fa4c0adfd",
+      "plays": 267,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 16380019
+    },
+    {
+      "name": "Rawayana",
+      "mbid": "7de398f0-b4cf-476d-ac60-41d47d3511ca",
+      "plays": 242,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 5999924
+    },
+    {
+      "name": "Kali Uchis",
+      "mbid": "d0c7656d-8169-4f77-9dbe-b8f24e40105d",
+      "plays": 227,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 2222870
+    },
+    {
+      "name": "Seu Jorge",
+      "mbid": "c73d651d-87c9-4c5e-8abb-4ec9c4077241",
+      "plays": 216,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 41672
+    },
+    {
+      "name": "iLe",
+      "mbid": "25e7697d-24cb-4cba-904e-a90b53cc3004",
+      "plays": 213,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 1770413
+    },
+    {
+      "name": "Maria Jaume",
+      "mbid": "fa9fd345-4620-4f12-9ce7-e1bd5ce0bd63",
+      "plays": 200,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 7312138
+    },
+    {
+      "name": "Los Pleneros de la Cresta",
+      "mbid": "c30686c5-1e6a-4a1d-a916-edfd1310f6e2",
+      "plays": 187,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 5069185
+    },
+    {
+      "name": "Bhavi",
+      "mbid": "031dd255-f118-403c-869c-2373340c8ff4",
+      "plays": 180,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 4321386
+    },
+    {
+      "name": "Daniel, me estás matando",
+      "mbid": "0ef2464c-1391-4df8-a1d5-f45b52330f55",
+      "plays": 179,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 6820375
+    },
+    {
+      "name": "Frankie Ruiz",
+      "mbid": "98017692-63e0-485d-93c4-0306e53b3527",
+      "plays": 175,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 392682
+    },
+    {
+      "name": "Rauw Alejandro",
+      "mbid": "197b70c7-8910-4030-ad03-632d82aa40e3",
+      "plays": 173,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 3126008
+    },
+    {
+      "name": "Massive Attack",
+      "mbid": "10adbe5e-a2c0-4bf3-8249-2b4cbf6e6ca8",
+      "plays": 172,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 53293
+    },
+    {
+      "name": "Willie Colón",
+      "mbid": "f1edfbed-9315-4550-859c-599cc3fdee57",
+      "plays": 170,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 23546
+    },
+    {
+      "name": "Manuel Turizo",
+      "mbid": "30a57b7b-47c9-4234-86fd-9b8ff660e7cb",
+      "plays": 170,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 3086013,
+      "watch": false
+    },
+    {
+      "name": "Residente",
+      "mbid": "b38a00f2-3746-4e9e-93de-8257ca5b1680",
+      "plays": 169,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 717509
+    },
+    {
+      "name": "ROSALÍA",
+      "mbid": "25f3abd9-63b5-471a-bd25-feb9672dfa11",
+      "plays": 169,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "manual",
+      "qobuz_id": 219860
+    },
+    {
+      "name": "Frankie Ruiz y su Orquesta",
+      "mbid": "54281a78-6a60-4356-a99f-f381afef089b",
+      "plays": 168,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 4200733
+    },
+    {
+      "name": "Adolescent’s Orquesta",
+      "mbid": "e727df57-b913-4d89-806d-bc2661567f61",
+      "plays": 166,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "manual",
+      "qobuz_id": 1129381
+    },
+    {
+      "name": "Gilberto Santa Rosa",
+      "mbid": "de13522c-692e-4755-955e-dc931fea4e2b",
+      "plays": 163,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "manual",
+      "qobuz_id": 148873
+    },
+    {
+      "name": "Peu Meurray",
+      "mbid": "283bc550-838f-4005-ad02-db7c7a5e87ef",
+      "plays": 161,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 713401
+    },
+    {
+      "name": "Erykah Badu",
+      "mbid": "321531fc-db73-4ffa-a959-61a61a2908c1",
+      "plays": 158,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 37926
+    },
+    {
+      "name": "Brad Mehldau",
+      "mbid": "b7723b3f-9a35-438d-bc42-8ad8b5e027ae",
+      "plays": 155,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 50712,
+      "watch": false
+    },
+    {
+      "name": "Wisin & Yandel",
+      "mbid": "3deeb747-c228-4d33-9892-f0aa081783c3",
+      "plays": 152,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "manual",
+      "qobuz_id": 116101
+    },
+    {
+      "name": "Manel",
+      "mbid": "4e7209ee-ef02-4cb7-bdff-815b0473c27c",
+      "plays": 152,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 570144
+    },
+    {
+      "name": "Sonora Ponceña",
+      "mbid": "c7c9ce08-020e-40a6-a213-e6eddf7855c8",
+      "plays": 148,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 209999
+    },
+    {
+      "name": "Yerai Cortés",
+      "mbid": "9c9a7d26-8598-481e-a3aa-a51c6be8f0ac",
+      "plays": 147,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 4037898
+    },
+    {
+      "name": "Reyna Tropical",
+      "mbid": "1527780e-ee93-42fe-8736-5adc529235ef",
+      "plays": 147,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 4943006
+    },
+    {
+      "name": "Obongjayar",
+      "mbid": "9fef8897-8e04-455c-9ac4-cb4c0f855dc5",
+      "plays": 147,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 3119471
+    },
+    {
+      "name": "Calle 13",
+      "mbid": "5be7d200-5499-4bba-b29b-1ac554199d23",
+      "plays": 144,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 238197
+    },
+    {
+      "name": "Sílvia Pérez Cruz",
+      "mbid": "c532c746-29b7-46a1-b37e-705a62827bab",
+      "plays": 144,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 656411
+    },
+    {
+      "name": "PJ Sin Suela",
+      "mbid": "435219b9-7985-4588-9b7f-96f19b5cd344",
+      "plays": 140,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 2851738
+    },
+    {
+      "name": "Fela Kuti",
+      "mbid": "6514cffa-fbe0-4965-ad88-e998ead8a82a",
+      "plays": 139,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 206236
+    },
+    {
+      "name": "Laura Itandehui",
+      "mbid": "56bac337-4772-4c7f-8e50-2a8bbe093d24",
+      "plays": 134,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 6043083
+    },
+    {
+      "name": "Luiza Brina",
+      "mbid": "919476c1-5562-4bc3-aa45-cd264ef568f6",
+      "plays": 130,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 1603439
+    },
+    {
+      "name": "Rita Indiana",
+      "mbid": "0ee75c5f-09ac-4c68-a86b-42734c461bee",
+      "plays": 124,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 564601
+    },
+    {
+      "name": "Mac Miller",
+      "mbid": "a0e8a1b1-5f8f-475a-a253-17415c17d0ff",
+      "plays": 117,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 665881
+    },
+    {
+      "name": "Nico Roig",
+      "mbid": null,
+      "plays": 110,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 590261
+    },
+    {
+      "name": "Chet Baker",
+      "mbid": "1ba1d493-7114-45e2-b163-a36d49a0c065",
+      "plays": 110,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 462118
+    },
+    {
+      "name": "NAPA",
+      "mbid": "d76eeba7-d35c-4fe8-bffa-ce2885c97765",
+      "plays": 109,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "manual",
+      "qobuz_id": 2557136
+    },
+    {
+      "name": "Rita Indiana y Los Misterios",
+      "mbid": "ec115953-caab-4b59-b3fe-d768a60c5f3d",
+      "plays": 105,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "manual",
+      "qobuz_id": 564601
+    },
+    {
+      "name": "Newen Afrobeat",
+      "mbid": "e9f34d84-4b44-43d2-a2a2-00f5c235a2c1",
+      "plays": 105,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 2964045
+    },
+    {
+      "name": "Natalia Lafourcade",
+      "mbid": "2ceb4e66-4eaa-4dba-ad3a-30df3b742557",
+      "plays": 105,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 148515
+    },
+    {
+      "name": "Øyunn",
+      "mbid": null,
+      "plays": 104,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 7929013
+    },
+    {
+      "name": "Oscar D’León",
+      "mbid": "b6059fbd-b176-4585-bb58-ea2f34269500",
+      "plays": 100,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 12371666
+    },
+    {
+      "name": "Gala i Ovidio",
+      "mbid": "636b07ff-b0f9-487d-91c8-20ef7a5d1b41",
+      "plays": 100,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 25473312
+    },
+    {
+      "name": "Kishi Bashi",
+      "mbid": "7c340ac5-6eda-4981-91d6-d5b1f4d1bbbf",
+      "plays": 99,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 2050260
+    },
+    {
+      "name": "Bob Vylan",
+      "mbid": "d1bc5be1-f552-4e2e-95ae-da8d6a4d3c17",
+      "plays": 99,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 4755605
+    },
+    {
+      "name": "Arca",
+      "mbid": "f7625f34-1799-42a4-a1c6-22b5377c767b",
+      "plays": 99,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 81780
+    },
+    {
+      "name": "Stan Getz",
+      "mbid": "8f2422ab-0ec6-4c92-80c4-afe9622fab32",
+      "plays": 98,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 35381,
+      "watch": false
+    },
+    {
+      "name": "Joshua Idehen",
+      "mbid": "3fc0070f-6b5b-4fc3-b5d3-afc87c80354a",
+      "plays": 97,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 803335
+    },
+    {
+      "name": "Yussef Dayes",
+      "mbid": "fdbffd97-c991-433c-9137-cafee3ded97a",
+      "plays": 92,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 2762950
+    },
+    {
+      "name": "Extremoduro",
+      "mbid": "f59163ba-1a7a-4349-b0fd-fb9582ebe333",
+      "plays": 92,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 277820
+    },
+    {
+      "name": "Índio da Cuíca",
+      "mbid": "c5a0cd48-39e9-4a57-9ffb-7e6ed2856b57",
+      "plays": 91,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 13819066
+    },
+    {
+      "name": "Lua de Santana",
+      "mbid": "23159990-3930-4794-b57f-a659d3cfda02",
+      "plays": 91,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 19508108
+    },
+    {
+      "name": "Los Abuelos de la Nada",
+      "mbid": "4a8caef2-56e4-4358-a66a-f2346bd7dfa5",
+      "plays": 91,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 115978
+    },
+    {
+      "name": "Blonde Redhead",
+      "mbid": "6821bf3f-5d5b-4b0f-8fa4-79d2ab2d9219",
+      "plays": 91,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 384665
+    },
+    {
+      "name": "Jamiroquai",
+      "mbid": "f4857fb9-e255-4dc6-bd01-e4ca7cc68544",
+      "plays": 90,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 111444
+    },
+    {
+      "name": "Manu Chao",
+      "mbid": "7570a0dd-5a67-401b-b19a-261eee01a284",
+      "plays": 88,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 55268
+    },
+    {
+      "name": "Majur",
+      "mbid": "f1fe343f-06d9-49e9-a3b3-da0f9a3fd14b",
+      "plays": 88,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 4593804
+    },
+    {
+      "name": "Grupo Frontera",
+      "mbid": "4c57c827-4ce3-4cf4-9492-0ff7f1ee2b0f",
+      "plays": 88,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 3128171
+    },
+    {
+      "name": "Enrique Morente",
+      "mbid": "779f54f8-732b-49b9-8fd8-2e9538a272ea",
+      "plays": 88,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 60449
+    },
+    {
+      "name": "Buscabulla",
+      "mbid": "22c6dc01-76b9-4d63-a756-8abded216970",
+      "plays": 87,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 1963803
+    },
+    {
+      "name": "Ana Lua Caiano",
+      "mbid": "6a8615c1-e3b0-4934-a3a0-403a4d47c070",
+      "plays": 87,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 14140321
+    },
+    {
+      "name": "Olivia Dean",
+      "mbid": "15e0d608-0869-429b-898d-3d8db3ecedd5",
+      "plays": 84,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 5639782,
+      "watch": false
+    },
+    {
+      "name": "Azuquita y su Melao",
+      "mbid": "eb7250d0-63ca-4d6f-b1bb-c944d861f03b",
+      "plays": 81,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 4547235
+    },
+    {
+      "name": "Joe Arroyo",
+      "mbid": "64c69f29-f3f7-4dae-bd1b-84b429be43fe",
+      "plays": 80,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 23350
+    },
+    {
+      "name": "Bill Evans",
+      "mbid": "8247a3f2-3a8e-4256-b322-6c57b03a4e36",
+      "plays": 79,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "manual",
+      "qobuz_id": 27183,
+      "watch": false
+    },
+    {
+      "name": "aja monet",
+      "mbid": "c1d14ed4-9a04-43e1-bc7b-f16471768f42",
+      "plays": 78,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 3004947
+    },
+    {
+      "name": "Peso Pluma",
+      "mbid": "75e4f8ef-34c3-44fd-8467-88a7d9599f77",
+      "plays": 78,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 8855416,
+      "watch": false
+    },
+    {
+      "name": "Héctor Lavoe",
+      "mbid": "2cf18512-c129-482b-aff1-7430a1a7850b",
+      "plays": 78,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 31519,
+      "watch": false
+    },
+    {
+      "name": "Ángeles Toledano",
+      "mbid": "dfa621b5-18be-4d5e-bf02-008be1819d6d",
+      "plays": 77,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 6586678
+    },
+    {
+      "name": "Vicente García",
+      "mbid": "2f1507e5-6e8b-4a67-828e-5ce3f75c1281",
+      "plays": 77,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 8899
+    },
+    {
+      "name": "Dora Morelenbaum",
+      "mbid": "45a76e42-b6f2-4b0c-abaf-15b3c900b38f",
+      "plays": 77,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 3190792
+    },
+    {
+      "name": "Yann Tiersen",
+      "mbid": "12d432a3-feb0-49b1-a107-d20751880764",
+      "plays": 76,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 28731
+    },
+    {
+      "name": "Marvin Gaye",
+      "mbid": "afdb7919-059d-43c1-b668-ba1d265e7e42",
+      "plays": 76,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 25043
+    },
+    {
+      "name": "Björk",
+      "mbid": "87c5dedd-371d-4a53-9f7f-80522fb7f3cb",
+      "plays": 76,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 27940
+    },
+    {
+      "name": "Santana",
+      "mbid": "9a3bf45c-347d-4630-894d-7cf3e8e0b632",
+      "plays": 75,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 63347,
+      "watch": false
+    },
+    {
+      "name": "rusowsky",
+      "mbid": "d836bdef-52ef-4142-baba-573e5b529478",
+      "plays": 73,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 7128242,
+      "watch": false
+    },
+    {
+      "name": "Víctor Cabezuelo",
+      "mbid": "1bf50c19-a783-4326-a33e-8f3fd863e8f5",
+      "plays": 73,
+      "ranks": {},
+      "rank": null,
+      "itunes_id": null,
+      "qobuz_match": "exact",
+      "qobuz_id": 815959
+    }
+  ]
+}
