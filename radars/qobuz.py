@@ -188,6 +188,8 @@ def main() -> int:
                         help=f"only report releases this recent; 0 disables (default: {RECENT_DAYS})")
     parser.add_argument("--all", action="store_true", help="report everything, ignoring the state file")
     parser.add_argument("--dry-run", action="store_true", help="report without recording anything")
+    parser.add_argument("--json", metavar="PATH",
+                        help="also write the report as JSON, for radars/report.py to format")
     args = parser.parse_args()
 
     if args.find:
@@ -252,6 +254,38 @@ def main() -> int:
 
     watching = len(WATCHED_ARTISTS)
     window = f"last {args.days} days" if args.days > 0 else "all dates"
+
+    # Every artist failing is not an empty week, it is a broken run -- most
+    # likely Qobuz refusing the caller. Saying "nothing new" there would make a
+    # block indistinguishable from a quiet week, so exit non-zero instead.
+    if failed and failed == watching:
+        print(f"every one of {watching} artists failed to fetch - treating this as a "
+              "broken run, not an empty one.", file=sys.stderr)
+        return 1
+
+    if args.json:
+        # The reporting stage's input: no formatting decisions, just what was
+        # found and what the run was. radars/itunes.py already anticipated this
+        # seam -- the three radars normalise releases into the same shape, so
+        # one formatter can serve all of them.
+        Path(args.json).write_text(json.dumps({
+            "generated": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
+            "source": "qobuz",
+            "store": args.store,
+            "window": window,
+            "days": args.days,
+            "watching": watching,
+            "fetched": watching - failed,
+            "failed": failed,
+            "scanned": scanned,
+            "shared": shared,
+            # Stamped here, not in the formatter: only the run knows what
+            # "today" was, and a report can be formatted days later.
+            "releases": [dict(release, upcoming=release["date"] > today.isoformat())
+                         for release in sorted(found, key=lambda r: r["date"])],
+        }, indent=2, ensure_ascii=False) + "\n")
+        print(f"wrote {args.json} ({len(found)} releases)", file=sys.stderr)
+
     print(f"Scanned {scanned} releases from {watching - failed} of {watching} "
           f"artist{'s' if watching != 1 else ''} in the {args.store} store ({window}).")
     if failed:

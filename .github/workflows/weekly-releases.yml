@@ -1,0 +1,75 @@
+# Weekly new-release radar, opened as an issue.
+#
+# Stateless on purpose. data/qobuz_seen.json is gitignored and a runner has no
+# disk between runs, so the two alternatives were committing 136 KB of ids back
+# every week, or actions/cache -- where an eviction silently resets the radar to
+# "everything is new" and reports 8,000 releases as a week's news. Instead the
+# date window does the filtering: --all ignores the state file and writes
+# nothing. The cost is that a release can appear in two consecutive issues when
+# DAYS exceeds seven, which is cheap and visible, unlike a cache miss.
+#
+# Needs nothing but the repo: no secrets, no dependencies, and the watchlist
+# (data/favourites.json) is committed.
+name: weekly releases
+
+on:
+  schedule:
+    # Fridays, 05:17 CET -- written as 04:17 UTC, because GitHub cron has no
+    # timezone and Europe/Madrid is UTC+1 in winter, UTC+2 in summer. So this
+    # is 05:17 under CET and 06:17 under CEST; an hour of drift twice a year,
+    # which for a weekly radar is nothing. Pinning true local time would need a
+    # guard step that re-checks the hour and exits.
+    #
+    # :17 rather than :00 on purpose. Scheduled jobs queue, and every cron a
+    # human writes lands on the hour, so an off-minute usually starts sooner.
+    - cron: "17 4 * * 5"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "how many days back to report"
+        default: "10"
+      store:
+        description: "Qobuz storefront"
+        default: "gb-en"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  radar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run the radar
+        env:
+          DAYS: ${{ inputs.days || '10' }}
+          STORE: ${{ inputs.store || 'gb-en' }}
+        run: |
+          set -euo pipefail
+          python3 radars/qobuz.py --all --days "$DAYS" --store "$STORE" \
+            --json releases.json 2> warnings.txt || {
+              echo "::error::the radar exited non-zero"
+              cat warnings.txt
+              exit 1
+            }
+          cat warnings.txt
+
+      - name: Format it
+        # Per-artist warnings are the early sign of Qobuz refusing a datacenter
+        # IP, so they go into the issue rather than only the run log.
+        run: |
+          set -euo pipefail
+          python3 radars/report.py releases.json --warnings warnings.txt > body.md
+          cat body.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "New releases @$(date -u +%F)" \
+            --body-file body.md
