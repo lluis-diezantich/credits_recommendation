@@ -1,5 +1,5 @@
 """Exercise --review with no network and no touching data/favourites.json."""
-import io, sys, tempfile, types
+import io, sys, tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]

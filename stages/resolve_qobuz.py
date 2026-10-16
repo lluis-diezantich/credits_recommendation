@@ -29,18 +29,15 @@ import datetime as dt
 import json
 import sys
 import time
-import unicodedata
-import urllib.error
 import urllib.parse
-import urllib.request
 from pathlib import Path
 
 # Run directly (./stages/discover.py) or as a module (python -m stages.discover):
 # either way the project root has to be importable before core/policy resolve.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from core.paths import CACHE, DATA
-from core.qobuz import API, APP_ID, PAGE_LIMIT, PAUSE, STORE, UA
+from core.paths import DATA
+from core.qobuz import API, APP_ID, PAGE_LIMIT, PAUSE, STORE
 from core.qobuz import get as _get
 from core.qobuz import pick, search_artists, store_cookies
 from policy import WEAK_CLASSES, role_weight

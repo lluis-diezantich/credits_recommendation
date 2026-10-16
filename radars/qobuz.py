@@ -27,9 +27,7 @@ import datetime as dt
 import json
 import sys
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
 from pathlib import Path
 
 # Run directly (./radars/qobuz.py) or as a module (python -m radars.qobuz).
@@ -37,10 +35,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core import favourites
 from core.paths import DATA
-from core.qobuz import API, APP_ID, PAGE_LIMIT, PAUSE, SITE, STORE, UA
+from core.qobuz import API, APP_ID, PAGE_LIMIT, PAUSE, STORE
 from core.qobuz import get_json as _get_json
-from core.qobuz import get as _get
-from core.qobuz import message as _message
+from core.qobuz import search_artists
 from core.qobuz import store_cookies
 from core.state import load_seen as _load_seen
 from core.state import save_seen as _save_seen
@@ -68,18 +65,6 @@ KEEP_TYPES = {"Album", "EP", "Single"}
 # Only report releases this recent, so a first run records the back catalogue
 # silently instead of printing decades of it. 0 disables.
 RECENT_DAYS = 90
-
-
-def find_artists(name: str, store: str) -> list[dict]:
-    """Autosuggest search. Needs no app id and no cookies at all."""
-    url = f"{SITE}/v4/{store}/catalog/search/autosuggest?q={urllib.parse.quote(name)}"
-    status, body, _ = _get(url, {"x-requested-with": "XMLHttpRequest"})
-    if status != 200:
-        raise SystemExit(f"Qobuz search failed (HTTP {status}): {_message(body)}")
-    try:
-        return json.loads(body).get("artists") or []
-    except json.JSONDecodeError:
-        raise SystemExit("Qobuz search returned a non-JSON body")
 
 
 def artist_releases(artist_id: int, store: str, cookies: str) -> tuple[str, list[dict], bool]:
@@ -193,11 +178,17 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.find:
-        found = find_artists(args.find, args.store)
+        # core.qobuz.search_artists, not a local copy: this was the project's
+        # THIRD autosuggest. It warns and returns [] where the local version
+        # exited, so a failed request now prints its own reason above the "no
+        # match" line instead of in place of it.
+        found = search_artists(args.find, args.store)
         if not found:
             print(f"No Qobuz artist matched {args.find!r}.")
             return 0
-        print(f"Qobuz artists matching {args.find!r} - add one to WATCHED_ARTISTS:\n")
+        print(f"Qobuz artists matching {args.find!r} - put one in "
+              f"data/favourites.json as qobuz_id, or run:\n"
+              f"  ./stages/favourites.py --review\n")
         for artist in found[:15]:
             print(f"  {str(artist.get('id')):>10}  {artist.get('name')}"
                   f"   ({artist.get('albumsCount') or 0} albums)")
