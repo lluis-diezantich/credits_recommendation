@@ -1,10 +1,11 @@
-# Weekly new releases from the artists you already listen to, as an issue.
+# New releases from artists you already know, weekly, as an issue.
 #
 # Scoped in the name on purpose: this one only ever reports artists already in
-# data/favourites.json. Finding artists you do NOT know is a different job with
-# a different precision/recall trade -- the credits pools, the Remezcla picks,
-# the fresh-releases feed -- and belongs in its own workflow writing its own
-# issues, so one can be noisy without making the other untrustworthy.
+# data/favourites.json. Releases from artists you do NOT know is a different
+# job with a different precision/recall trade -- the credits pools, the
+# Remezcla picks, the fresh-releases feed -- and belongs in its own workflow
+# writing its own issues, so one can be noisy without making the other
+# untrustworthy.
 #
 # Stateless on purpose. data/qobuz_seen.json is gitignored and a runner has no
 # disk between runs, so the two alternatives were committing 136 KB of ids back
@@ -16,7 +17,7 @@
 #
 # Needs nothing but the repo: no secrets, no dependencies, and the watchlist
 # (data/favourites.json) is committed.
-name: "releases: watched artists"
+name: new releases from known artists
 
 on:
   schedule:
@@ -77,5 +78,5 @@ jobs:
           set -euo pipefail
           gh issue create \
             --repo "$GITHUB_REPOSITORY" \
-            --title "Watched artists @$(date -u +%F)" \
+            --title "New releases from known artists @$(date -u +%F)" \
             --body-file body.md
