@@ -164,9 +164,11 @@ def describe(release: dict, today: dt.date) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Report new releases from watched artists via iTunes.")
+    parser = argparse.ArgumentParser(
+        description="Report new releases from watched artists via iTunes.")
     parser.add_argument("--days", type=int, default=RECENT_DAYS,
-                        help=f"only report releases this recent; 0 disables (default: {RECENT_DAYS})")
+                        help="only report releases this recent; 0 disables "
+                             f"(default: {RECENT_DAYS})")
     parser.add_argument("--all", action="store_true",
                         help="report everything, including already-seen releases")
     parser.add_argument("--dry-run", action="store_true",

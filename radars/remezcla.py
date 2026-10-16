@@ -255,11 +255,13 @@ def collect(pages: int) -> tuple[list[tuple[str, str]], list[dict], list[dict]]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Report new picks from the Remezcla weekly roundups.")
+    parser = argparse.ArgumentParser(
+        description="Report new picks from the Remezcla weekly roundups.")
     parser.add_argument("--pages", type=int, default=DEFAULT_PAGES,
                         help=f"index pages of 100 Lists to scan (default: {DEFAULT_PAGES})")
     parser.add_argument("--backfill", action="store_true",
-                        help=f"scan the whole archive ({BACKFILL_PAGES} pages) and write {PICKS_FILE.name}")
+                        help=f"scan the whole archive ({BACKFILL_PAGES} pages) "
+                             f"and write {PICKS_FILE.name}")
     parser.add_argument("--curator", metavar="NAME",
                         help="report only this writer's picks (substring, case-insensitive)")
     parser.add_argument("--all", action="store_true",

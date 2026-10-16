@@ -114,7 +114,8 @@ def describe(release: dict, names: list[str], today: dt.date) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Report new releases from watched artists.")
     parser.add_argument("--days", type=int, default=LOOKBACK_DAYS,
-                        help=f"half-width of the feed window in days (default: {LOOKBACK_DAYS})")
+                        help="half-width of the feed window in days "
+                             f"(default: {LOOKBACK_DAYS})")
     parser.add_argument("--all", action="store_true",
                         help="report everything in the window, including already-seen releases")
     parser.add_argument("--dry-run", action="store_true",
@@ -139,7 +140,9 @@ def main() -> int:
         # or a synthetic key for the rare row that carries neither.
         key = (release.get("release_mbid")
                or release.get("release_group_mbid")
-               or f"{release.get('artist_credit_name')}|{release.get('release_name')}|{release.get('release_date')}")
+               or "|".join([str(release.get("artist_credit_name")),
+                            str(release.get("release_name")),
+                            str(release.get("release_date"))]))
         if key in seen:
             continue
         hits.append((key, release, names))

@@ -37,12 +37,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core.paths import DATA
-from core.qobuz import API, APP_ID, PAGE_LIMIT, PAUSE, STORE
+from core.qobuz import (
+    API,
+    APP_ID,
+    PAGE_LIMIT,
+    PAUSE,
+    STORE,
+    pick,
+    search_artists,
+    store_cookies,
+)
 from core.qobuz import get as _get
-from core.qobuz import pick, search_artists, store_cookies
 from policy import WEAK_CLASSES, role_weight
-
-
 
 
 def signal_for(artist: dict) -> dict:
@@ -87,7 +93,8 @@ def artist_releases(artist_id: int, store: str, cookies: str) -> list[dict]:
             return collected
         page = (data.get("albums_without_last_release") or {}).get("items") or []
         collected += [a for a in page
-                      if any(str(x.get("id")) == str(artist_id) for x in (a.get("artists") or []))]
+                      if any(str(x.get("id")) == str(artist_id)
+                             for x in (a.get("artists") or []))]
         if len(page) < PAGE_LIMIT:
             return collected
         offset += PAGE_LIMIT
@@ -107,14 +114,16 @@ def load_mutes(path: Path) -> set[int]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Resolve discovered people to Qobuz artists.")
-    parser.add_argument("--in", dest="infile", help="discovery json (default: newest discovery_*.json)")
+    parser.add_argument("--in", dest="infile",
+                        help="discovery json (default: newest discovery_*.json)")
     parser.add_argument("--out", default="watchlist.json", help="watchlist output")
     parser.add_argument("--pool-out", default="pool.json", help="pool output")
     parser.add_argument("--store", default=STORE)
     parser.add_argument("--min-albums", type=int, default=2,
                         help="only resolve people on at least this many of the seed's albums")
     parser.add_argument("--no-cover-sources", action="store_true",
-                        help="skip people whose only link is having written a song the seed covered")
+                        help="skip people whose only link is having written a song "
+                             "the seed covered")
     parser.add_argument("--keep-weak", action="store_true",
                         help="keep referrals credited only as writer/composer or main/featured "
                              "artist (dropped by default; they were 45%% of the pool)")
@@ -125,7 +134,8 @@ def main() -> int:
                              "--keep-weak already governs. The gate that pays is the one in "
                              "discogs_resolve.py, where one person fans out into dozens of "
                              "Qobuz fetches")
-    parser.add_argument("--no-pool", action="store_true", help="resolve ids only, do not fetch releases")
+    parser.add_argument("--no-pool", action="store_true",
+                        help="resolve ids only, do not fetch releases")
     args = parser.parse_args()
 
     if args.infile:
@@ -145,7 +155,8 @@ def main() -> int:
     if args.min_role_weight > 0:
         before = len(people)
         people = [p for p in people
-                  if role_weight((p.get("stats") or {}).get("top_role")) >= args.min_role_weight]
+                  if role_weight((p.get("stats") or {}).get("top_role"))
+                  >= args.min_role_weight]
         print(f"--min-role-weight {args.min_role_weight} kept {len(people)} of {before}",
               file=sys.stderr)
     print(f"resolving {len(people)} of {len(discovery['people'])} people "
@@ -167,7 +178,8 @@ def main() -> int:
                 "names": person["names"], "classes": person.get("classes"),
                 "roles": list(person["roles"])[:4],
                 "albums": person["stats"]["albums"], "reason": how,
-                "candidates": [{"id": c.get("id"), "name": c.get("name")} for c in candidates[:3]],
+                "candidates": [{"id": c.get("id"), "name": c.get("name")}
+                               for c in candidates[:3]],
             })
         else:
             qid = int(choice["id"])

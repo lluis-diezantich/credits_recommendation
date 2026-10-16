@@ -32,29 +32,32 @@ import collections
 import datetime as dt
 import json
 import os
-import re
 import sys
 import time
-import unicodedata
 import urllib.parse
-from collections.abc import Callable
 from pathlib import Path
 
 # Run directly (./stages/discover.py) or as a module (python -m stages.discover):
 # either way the project root has to be importable before core/policy resolve.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from core.paths import CACHE, DATA
-from core.discogs import (NOT_A_CREDIT, Throttle, discogs_credits, discogs_get,
-                          find_discogs_artist)
+from core.discogs import Throttle, discogs_credits, find_discogs_artist
 from core.names import normalise, strip_discogs_suffix
-from core.qobuz import API, APP_ID, PAGE_LIMIT, SITE, STORE
+from core.paths import DATA
+from core.qobuz import API, APP_ID, PAGE_LIMIT, SITE, STORE, store_cookies
 from core.qobuz import PAUSE as QOBUZ_PAUSE
-from core.qobuz import UA as QOBUZ_UA
 from core.qobuz import get as _qobuz_get
-from core.qobuz import store_cookies
-from policy import (CLASS_NAMES, MIN_ROLE_WEIGHT, MIN_SIGNAL, person_role_weight,
-                    person_roles, role_class, role_key, role_weight, selectivity)
+from policy import (
+    CLASS_NAMES,
+    MIN_ROLE_WEIGHT,
+    MIN_SIGNAL,
+    person_role_weight,
+    person_roles,
+    role_class,
+    role_key,
+    role_weight,
+    selectivity,
+)
 
 
 def parse_role_selection(raw: str) -> tuple[set[str], set[str]]:
@@ -140,7 +143,8 @@ def qobuz_releases(artist_id: int, store: str, cookies: str) -> list[dict]:
             return collected
         page = (data.get("albums_without_last_release") or {}).get("items") or []
         collected += [a for a in page
-                      if any(str(x.get("id")) == str(artist_id) for x in (a.get("artists") or []))]
+                      if any(str(x.get("id")) == str(artist_id)
+                             for x in (a.get("artists") or []))]
         if len(page) < PAGE_LIMIT:
             return collected
         offset += PAGE_LIMIT
@@ -229,7 +233,7 @@ def main() -> int:
                   f"weight={role_weight(role)}")
         by_class = collections.Counter(role_class(r) for u in unresolved
                                       for r in person_roles(u)[:1])
-        print(f"\nby class: " + ", ".join(f"{k} {v}" for k, v in by_class.most_common()))
+        print("\nby class: " + ", ".join(f"{k} {v}" for k, v in by_class.most_common()))
         return 0
 
     if args.explain_gate:
@@ -314,14 +318,15 @@ def main() -> int:
         artist, how = find_discogs_artist(names, throttle, token)
         if artist is None:
             misses.append({"names": names, "albums": person.get("albums"), "reason": how})
-            print(f"  [{index}/{len(targets)}] {names[0][:28]:<28} MISS ({how})", file=sys.stderr)
+            print(f"  [{index}/{len(targets)}] {names[0][:28]:<28} MISS ({how})",
+                  file=sys.stderr)
             continue
 
         did = int(artist["id"])
         weight = person_role_weight(person)
         credits, own, total, gated = discogs_credits(
             did, throttle, token, args.max_pages,
-            gate=lambda t: weight * selectivity(t)[0] >= args.min_signal)
+            gate=lambda t, w=weight: w * selectivity(t)[0] >= args.min_signal)
         select_score, select_label = selectivity(total)
 
         if gated:
@@ -471,7 +476,8 @@ def build_pool(args, seed, known_qobuz, collaborators) -> int:
             pool.append({
                 "album_id": rid,
                 "title": release.get("title"),
-                "artists": [x.get("name") for x in (release.get("artists") or []) if x.get("name")],
+                "artists": [x.get("name") for x in (release.get("artists") or [])
+                            if x.get("name")],
                 "date": (release.get("release_date_original") or "")[:10],
                 "tracks": release.get("tracks_count") or 0,
                 "hires": bool(release.get("hires")),

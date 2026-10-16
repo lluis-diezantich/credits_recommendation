@@ -106,8 +106,9 @@ def resolve_engine(engine: str) -> str:
         try:
             import duckdb  # noqa: F401
         except ImportError:
+            # from None: the ImportError adds nothing the message does not say.
             raise SystemExit("duckdb not installed - `pip install duckdb`, or use "
-                             "--engine sqlite (stdlib, no install)")
+                             "--engine sqlite (no extra install)") from None
     return engine
 
 
@@ -338,7 +339,8 @@ def load_people(ld: Loader) -> None:
                 wl.get("generated"))
 
     # discogs_watchlist.json - the people Qobuz cannot see, plus their edges
-    dw = load_json(DATA / "discogs_watchlist.json") if (DATA / "discogs_watchlist.json").exists() else None
+    discogs_file = DATA / "discogs_watchlist.json"
+    dw = load_json(discogs_file) if discogs_file.exists() else None
     if dw:
         for person in dw.get("recovered") or []:
             key = normalise((person.get("names") or [""])[0])
@@ -594,7 +596,7 @@ def load_listens(ld: Loader, path: Path) -> None:
                     md = listen.get("track_metadata") or {}
                     mapping = md.get("mbid_mapping") or {}
                     ts = listen.get("listened_at")
-                    date = (dt.datetime.fromtimestamp(ts, dt.timezone.utc).date().isoformat()
+                    date = (dt.datetime.fromtimestamp(ts, dt.UTC).date().isoformat()
                             if isinstance(ts, (int, float)) else None)
                     artist = md.get("artist_name") or ""
                     rows.append((ts, date, year, md.get("track_name"), artist,

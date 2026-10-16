@@ -164,13 +164,18 @@ def describe(release: dict, today: dt.date) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Report new releases from watched artists via Qobuz.")
-    parser.add_argument("--find", metavar="NAME", help="look up Qobuz artist ids by name and exit")
+    parser = argparse.ArgumentParser(
+        description="Report new releases from watched artists via Qobuz.")
+    parser.add_argument("--find", metavar="NAME",
+                        help="look up Qobuz artist ids by name and exit")
     parser.add_argument("--store", default=STORE, help=f"storefront code (default: {STORE})")
     parser.add_argument("--days", type=int, default=RECENT_DAYS,
-                        help=f"only report releases this recent; 0 disables (default: {RECENT_DAYS})")
-    parser.add_argument("--all", action="store_true", help="report everything, ignoring the state file")
-    parser.add_argument("--dry-run", action="store_true", help="report without recording anything")
+                        help="only report releases this recent; 0 disables "
+                             f"(default: {RECENT_DAYS})")
+    parser.add_argument("--all", action="store_true",
+                        help="report everything, ignoring the state file")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="report without recording anything")
     parser.add_argument("--json", metavar="PATH",
                         help="also write the report as JSON, for radars/report.py to format")
     args = parser.parse_args()

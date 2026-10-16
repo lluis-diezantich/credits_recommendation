@@ -64,10 +64,17 @@ from core.paths import CACHE, DATA
 from core.qobuz import API, APP_ID, PAUSE, STORE
 from core.qobuz import get as _get
 from core.qobuz import message as _message
-from policy import (ADAPTATION_ROLES, COMPOSER_ROLES, COVERS_MILL_HINTS,
-                    LYRIC_ROLES, MIN_WRITING_SHARE, PERFORMANCE_ROLES,
-                    TITLE_ALIASES, TITLE_SIMILARITY, WRITING_ROLES, role_key,
-                    writing_tier)
+from policy import (
+    COMPOSER_ROLES,
+    COVERS_MILL_HINTS,
+    MIN_WRITING_SHARE,
+    PERFORMANCE_ROLES,
+    TITLE_ALIASES,
+    TITLE_SIMILARITY,
+    WRITING_ROLES,
+    role_key,
+    writing_tier,
+)
 
 SEARCH_PAGE = 100            # track/search caps at 100 per call
 MAX_PAGES = 25               # 2,500 rows; Drexler needed 10
@@ -439,7 +446,8 @@ def run_one(args, artist: str, extra_aliases: list[str]) -> int:
         out_songs = [s for s in out_songs if s["performers"]]
     # Most independent recordings first; mills excluded from the sort so a
     # karaoke pile cannot outrank a Mercedes Sosa cover.
-    out_songs.sort(key=lambda s: (-s["performer_count_excl_mills"], -s["performer_count"], s["song"]))
+    out_songs.sort(key=lambda s: (-s["performer_count_excl_mills"],
+                                  -s["performer_count"], s["song"]))
 
     out = Path(args.out) if args.out else DATA / f"writing_{slug(artist)}.json"
     out.write_text(json.dumps({
@@ -470,7 +478,7 @@ def run_one(args, artist: str, extra_aliases: list[str]) -> int:
     if split:
         print(f"  {len(split)} song(s) where recordings DISAGREE on the tier "
               f"- read co_composers")
-    print(f"\ntop songs recorded by others:")
+    print("\ntop songs recorded by others:")
     for song in others[:12]:
         names = ", ".join(p["name"] for p in song["performers"] if not p["covers_mill"])
         mark = "?" if song["tier_disagreement"] else " "

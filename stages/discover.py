@@ -29,7 +29,6 @@ import datetime as dt
 import json
 import sys
 import time
-import unicodedata
 import urllib.parse
 from pathlib import Path
 
@@ -38,12 +37,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core.credits import parse_performers
-from core.paths import CACHE, DATA
 from core.names import normalise
-from core.qobuz import API, APP_ID, PAGE_LIMIT, PAUSE, SITE, STORE, UA
+from core.paths import CACHE, DATA
+from core.qobuz import API, APP_ID, PAGE_LIMIT, PAUSE, STORE, store_cookies
 from core.qobuz import get as _get
 from core.qobuz import message as _message
-from core.qobuz import store_cookies
 from policy import MUSICAL_ROLES, classify_roles
 
 CACHE_DIR = CACHE / "credits"
@@ -67,7 +65,8 @@ def seed_releases(artist_id: int, store: str, cookies: str) -> tuple[str, list[d
         name = data.get("name") or name
         page = (data.get("albums_without_last_release") or {}).get("items") or []
         collected += [a for a in page
-                      if any(str(x.get("id")) == str(artist_id) for x in (a.get("artists") or []))]
+                      if any(str(x.get("id")) == str(artist_id)
+                             for x in (a.get("artists") or []))]
         if len(page) < PAGE_LIMIT:
             return name, collected
         offset += PAGE_LIMIT
@@ -211,10 +210,11 @@ def main() -> int:
     print("by class: " + ", ".join(f"{k} {v}" for k, v in by_class.most_common()))
     print(f"{len(covers)} are cover sources only (wrote a song the seed recorded, "
           "never worked with them)")
-    print(f"\ntop 10:")
+    print("\ntop 10:")
     for person in kept[:10]:
         s = person["stats"]
-        print(f"  {s['albums']:>2} alb {s['tracks']:>3} tr  {person['names'][0][:30]:<30} {s['top_role']}")
+        print(f"  {s['albums']:>2} alb {s['tracks']:>3} tr  "
+              f"{person['names'][0][:30]:<30} {s['top_role']}")
     print(f"\nwrote {out.name}")
     return 0
 
