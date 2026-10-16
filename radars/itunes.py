@@ -34,6 +34,7 @@ from pathlib import Path
 # Run directly (./radars/qobuz.py) or as a module (python -m radars.qobuz).
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from core import favourites
 from core.paths import DATA
 from core.state import load_seen as _load_seen
 from core.state import save_seen as _save_seen
@@ -57,9 +58,11 @@ def save_seen(seen: set[str]) -> None:
 #   curl -s "https://itunes.apple.com/search?term=Jorge+Drexler&entity=musicArtist&limit=3" \
 #     | python3 -m json.tool
 # and take `artistId`.
-WATCHED_ARTISTS: dict[int, str] = {
+# This literal is now only the FALLBACK, used when data/favourites.json
+# carries no itunes_id. Generate that file with ./stages/favourites.py.
+WATCHED_ARTISTS: dict[int, str] = favourites.ids_for("itunes_id", {
     16421943: "Jorge Drexler",
-}
+})
 
 # Apple's catalogue is territory-specific: the same artist returned 69 releases
 # in the US store, 66 in ES, 69 in UY. If a release you expect is missing, try

@@ -20,15 +20,17 @@ produce byte-identical output.
       qobuz.py           storefront cookies, app id, endpoints (was in four)
       discogs.py         throttle, artist lookup, credit paging
       state.py           the *_seen.json contract each radar re-invented
+      favourites.py      the artists YOU play, one id per source, one list
       paths.py           ROOT / DATA / CACHE
     stages/            the pipeline, in order
+      favourites.py      your LB top artists -> Qobuz ids -> favourites.json
       discover.py        seed artist -> credits -> people          [EXACT]
       resolve_qobuz.py   people -> Qobuz artist ids -> pool.json   [LOSSY]
       resolve_discogs.py the ones Qobuz cannot see -> pool_discogs  [LOSSY]
       writing.py         one person -> what they WROTE, anywhere   [CACHED]
       load.py            all of the above -> data/music.db         [DERIVED]
     radars/            new-release watchers, independent, own state each
-      listenbrainz.py  itunes.py  qobuz.py
+      listenbrainz.py  itunes.py  qobuz.py  remezcla.py
     data/              generated JSON - gitignored
     cache/credits/     Qobuz credit responses, keyed store_albumid
     cache/search/      Qobuz track/search pages, keyed store_query_offset
@@ -37,6 +39,7 @@ produce byte-identical output.
     docs/duckdb.md     optional query layer over the store - measured, not quoted
     docs/disco-bahia.md one recommendation this project could not have made
     docs/sources.md    additional sources of discovery signals - a running list
+    docs/architecture.md the module map, and the one module the rest waits on
     contrib/           qobuz_keys.py - vendored gist, not ours
 
 ## Running it

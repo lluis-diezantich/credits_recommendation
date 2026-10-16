@@ -34,6 +34,7 @@ from pathlib import Path
 # Run directly (./radars/qobuz.py) or as a module (python -m radars.qobuz).
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from core import favourites
 from core.paths import DATA
 from core.qobuz import API, APP_ID, PAGE_LIMIT, SITE, STORE, UA
 from core.qobuz import get as _get
@@ -51,9 +52,11 @@ def load_seen() -> set[str]:
 # --- what you watch -------------------------------------------------------
 # Qobuz artist IDs -- a third namespace, unrelated to MusicBrainz MBIDs and
 # Apple artist IDs. Find one with:  ./qobuz_releases.py --find "Name"
-WATCHED_ARTISTS: dict[int, str] = {
+# This literal is now only the FALLBACK, used when data/favourites.json
+# carries no qobuz_id. Generate that file with ./stages/favourites.py.
+WATCHED_ARTISTS: dict[int, str] = favourites.ids_for("qobuz_id", {
     41620: "Jorge Drexler",
-}
+})
 
 
 # Qobuz does NOT return release_type on this endpoint, so the type is inferred

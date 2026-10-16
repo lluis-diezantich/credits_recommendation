@@ -27,6 +27,7 @@ from pathlib import Path
 # Run directly (./radars/qobuz.py) or as a module (python -m radars.qobuz).
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from core import favourites
 from core.paths import DATA
 from core.state import load_seen as _load_seen
 from core.state import save_seen as _save_seen
@@ -48,9 +49,11 @@ def save_seen(seen: set[str]) -> None:
 #
 # To find an MBID: search the artist on musicbrainz.org and take the UUID out
 # of the /artist/<uuid> URL.
-WATCHED_ARTISTS: dict[str, str] = {
+# This literal is now only the FALLBACK, used when data/favourites.json
+# carries no mbid. Generate that file with ./stages/favourites.py.
+WATCHED_ARTISTS: dict[str, str] = favourites.ids_for("mbid", {
     "abb91078-f7db-41f2-8f07-7f37bb739143": "Jorge Drexler",
-}
+})
 
 # Release types to report. The feed also carries "Broadcast", "Other", and
 # None (untyped); those are noise for this purpose.

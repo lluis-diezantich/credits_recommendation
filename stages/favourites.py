@@ -1,0 +1,223 @@
+#!/usr/bin/env python3
+"""Your top artists from ListenBrainz, resolved to Qobuz ids.
+
+One GET per stats window for who you actually play, then one Qobuz autosuggest
+per artist to turn each name into a Qobuz artist id. Writes
+data/favourites.json, which the radars read instead of their own hardcoded
+WATCHED_ARTISTS dicts.
+
+By default it asks for EVERY window and unions the results, because the windows
+answer different questions: all_time is who you are, this_week is what you are
+on right now, and an artist you played 400 times in 2019 and never since should
+not share a list with one you discovered on Tuesday without that being visible.
+Each entry records its rank in every window it charted in, so the file says
+which kind of favourite each artist is.
+
+Run this monthly, not weekly. The windows move slowly, the resolve spends one
+request per NEW name, and a wrong match nobody looked at poisons a radar
+quietly -- exactly the failure mode stages/resolve_qobuz.py is split out to
+contain. The radars are the cheap, schedulable half.
+
+Live stats rather than the listenbrainz_top parquet export on purpose: the
+export is a point-in-time ZIP, and reading it needs pandas, which would end this
+project's no-dependencies property. What it loses is aliases.yml name merging,
+so two spellings of one artist can both appear -- mute one with "watch": false.
+
+    ./stages/favourites.py --user lluisdiezantich
+    ./stages/favourites.py --user X --dry-run             # print, write nothing
+    ./stages/favourites.py --user X --range all_time      # one window only
+    ./stages/favourites.py --user X --range week,month    # some of them
+    ./stages/favourites.py --user X --count 20            # per window, not total
+    ./stages/favourites.py --user X --refresh             # re-ask about ids we have
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import sys
+import time
+from pathlib import Path
+
+# Run directly (./stages/favourites.py) or as a module (python -m stages.favourites).
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from core import favourites
+from core.http import get as _http_get
+from core.names import normalise
+
+# pick() refuses fuzzy matches on purpose, which is why unresolved names are
+# reported for hand-filling instead of being guessed at.
+from core.qobuz import PAUSE, STORE, pick, search_artists
+
+STATS_URL = "https://api.listenbrainz.org/1/stats/user/{user}/artists"
+USER_AGENT = "favourites-resolver/1.0 (personal use)"
+
+# Every window ListenBrainz calculates, widest first so that the all_time rank
+# is the one a tie falls back on. The this_* variants are calendar-to-date
+# ("this month so far"); the bare ones are trailing ("the last 30 days").
+RANGES = (
+    "all_time",
+    "year",
+    "half_yearly",
+    "quarter",
+    "month",
+    "week",
+    "this_year",
+    "this_month",
+    "this_week",
+)
+
+
+def fetch_top(user: str, period: str, count: int) -> list[dict]:
+    """Your most-played artists in one window, as ListenBrainz ranks them.
+
+    A window with no stats is NOT fatal: these are precomputed per range, so a
+    quiet week or a range LB has not got round to must not lose the other eight.
+    """
+    url = f"{STATS_URL.format(user=user)}?range={period}&count={count}"
+    status, body, _ = _http_get(url, user_agent=USER_AGENT, service="ListenBrainz")
+    if status == 204:
+        print(f"  {period:<11} no stats calculated", file=sys.stderr)
+        return []
+    if status == 404:
+        # User-level, not range-level, so this one really is fatal.
+        sys.exit(f"ListenBrainz does not know a user called {user!r}")
+    if status != 200:
+        print(f"  {period:<11} HTTP {status}", file=sys.stderr)
+        return []
+    try:
+        return json.loads(body).get("payload", {}).get("artists") or []
+    except json.JSONDecodeError:
+        print(f"  {period:<11} response was not JSON", file=sys.stderr)
+        return []
+
+
+def collect(user: str, periods: list[str], count: int) -> dict[str, dict]:
+    """Union the windows, keyed by normalised name, keeping each window's rank.
+
+    `plays` is the largest listen count any window reported, which is the
+    all_time one wherever all_time charted them -- the others are subsets of it.
+    """
+    merged: dict[str, dict] = {}
+    for period in periods:
+        rows = fetch_top(user, period, count)
+        print(f"  {period:<11} {len(rows)} artists", file=sys.stderr)
+        for rank, row in enumerate(rows, 1):
+            name = row.get("artist_name")
+            if not name:
+                continue
+            found = merged.setdefault(
+                normalise(name), {"name": name, "mbid": None, "plays": 0, "ranks": {}}
+            )
+            found["mbid"] = found["mbid"] or row.get("artist_mbid")
+            found["plays"] = max(found["plays"] or 0, row.get("listen_count") or 0)
+            found["ranks"][period] = rank
+    return merged
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Resolve your top ListenBrainz artists to Qobuz ids."
+    )
+    parser.add_argument("--user", required=True, help="ListenBrainz username")
+    parser.add_argument("--range", dest="period", default="all",
+                        help="stats windows, comma-separated, or 'all' for every one "
+                             f"(default: all). Valid: {', '.join(RANGES)}")
+    parser.add_argument("--count", type=int, default=40,
+                        help="top artists to ask for PER WINDOW, not in total (default: 40)")
+    parser.add_argument("--store", default=STORE, help=f"Qobuz storefront (default: {STORE})")
+    parser.add_argument("--refresh", action="store_true",
+                        help="re-resolve artists that already have a Qobuz id")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="report without writing data/favourites.json")
+    args = parser.parse_args()
+
+    if args.period == "all":
+        periods = list(RANGES)
+    else:
+        periods = [p.strip() for p in args.period.split(",") if p.strip()]
+        unknown = [p for p in periods if p not in RANGES]
+        if unknown:
+            parser.error(f"unknown range(s): {', '.join(unknown)}. Valid: {', '.join(RANGES)}")
+
+    print(f"asking ListenBrainz for the top {args.count} in "
+          f"{len(periods)} window{'s' if len(periods) != 1 else ''}:", file=sys.stderr)
+    merged = collect(args.user, periods, args.count)
+    if not merged:
+        sys.exit(f"ListenBrainz returned no artists for {args.user!r} in any of: "
+                 f"{', '.join(periods)}")
+
+    # Existing entries win on ids: a hand-corrected or hand-filled id has to
+    # survive every later run, which is the whole reason this file is merged
+    # rather than overwritten.
+    existing = {normalise(e["name"]): e for e in favourites.load() if e.get("name")}
+
+    needs_resolving = sum(
+        1 for key in merged
+        if args.refresh or not (existing.get(key) or {}).get("qobuz_id")
+    )
+    print(f"\n{len(merged)} unique artists across {len(periods)} windows, "
+          f"{needs_resolving} to resolve "
+          f"({needs_resolving} Qobuz request{'s' if needs_resolving != 1 else ''}).",
+          file=sys.stderr)
+
+    out: list[dict] = []
+    resolved = kept = unresolved = 0
+
+    for key, row in merged.items():
+        entry = existing.pop(key, {"name": row["name"]})
+        entry["mbid"] = entry.get("mbid") or row["mbid"]
+        entry["plays"] = row["plays"]
+        entry["ranks"] = row["ranks"]
+        # Best rank in any window, so the file can be sorted and skimmed.
+        entry["rank"] = min(row["ranks"].values()) if row["ranks"] else None
+        entry.setdefault("itunes_id", None)
+
+        if entry.get("qobuz_id") and not args.refresh:
+            kept += 1
+        else:
+            hit, how = pick([row["name"]], search_artists(row["name"], args.store))
+            entry["qobuz_match"] = how
+            if hit:
+                entry["qobuz_id"] = hit["id"]
+                resolved += 1
+            else:
+                entry.setdefault("qobuz_id", None)
+                unresolved += 1
+                print(f"  unresolved  {row['name']}  ({how})", file=sys.stderr)
+            time.sleep(PAUSE)
+
+        out.append(entry)
+
+    # Artists who dropped out of every window keep their entry: falling off a
+    # top-40 this quarter is not a reason to stop watching someone. Mute with
+    # "watch": false, or delete the line.
+    for leftover in existing.values():
+        leftover["rank"] = None
+        leftover["ranks"] = {}
+        out.append(leftover)
+
+    # Widest-window rank first, then play count; unranked leftovers at the end.
+    out.sort(key=lambda e: (e["rank"] is None, e["rank"] or 0, -(e.get("plays") or 0)))
+
+    print(f"\n{len(merged)} unique artists: {resolved} newly resolved, "
+          f"{kept} already had a Qobuz id, {unresolved} unresolved.")
+    if existing:
+        print(f"{len(existing)} kept from a previous run, no longer in any window.")
+    if unresolved:
+        print(f"Fill ids in by hand in {favourites.FILE.name}, or find one with:\n"
+              f"  ./radars/qobuz.py --find \"Artist Name\"")
+
+    if args.dry_run:
+        print("\n--dry-run: nothing written.")
+        return 0
+
+    favourites.save(out, dt.datetime.now(dt.UTC).isoformat(timespec="seconds"))
+    print(f"\nwrote {favourites.FILE} ({len(out)} artists)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
