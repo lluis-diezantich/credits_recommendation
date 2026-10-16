@@ -29,6 +29,11 @@ so two spellings of one artist can both appear -- mute one with "watch": false.
     ./stages/favourites.py --user X --range week,month    # some of them
     ./stages/favourites.py --user X --count 20            # per window, not total
     ./stages/favourites.py --user X --refresh             # re-ask about ids we have
+    ./stages/favourites.py --review                       # fix the doubtful ones
+
+--review needs no --user and makes no ListenBrainz call: it walks the entries
+that did not resolve cleanly, shows you Qobuz's candidates for each, and writes
+your choice back. One Qobuz request per row reviewed.
 """
 
 from __future__ import annotations
@@ -49,7 +54,7 @@ from core.names import normalise
 
 # pick() refuses fuzzy matches on purpose, which is why unresolved names are
 # reported for hand-filling instead of being guessed at.
-from core.qobuz import PAUSE, STORE, pick, search_artists
+from core.qobuz import PAUSE, STORE, artist_name, pick, search_artists, store_cookies
 
 STATS_URL = "https://api.listenbrainz.org/1/stats/user/{user}/artists"
 USER_AGENT = "favourites-resolver/1.0 (personal use)"
@@ -117,11 +122,129 @@ def collect(user: str, periods: list[str], count: int) -> dict[str, dict]:
     return merged
 
 
+def review(store: str, dry_run: bool) -> int:
+    """Walk the doubtful entries, show candidates, write the choice back.
+
+    Only rows that are still open: an `exact` match needs no second opinion and
+    a `manual` one has already had yours. A muted row is a decision too, so it
+    is not re-asked either.
+
+    Candidates are re-fetched rather than stored, because a stored candidate
+    list would be a second copy of Qobuz's catalogue going stale in data/.
+    """
+    entries = favourites.load()
+    if not entries:
+        sys.exit(f"no {favourites.FILE.name} yet - run without --review first")
+
+    pending = [
+        entry for entry in entries
+        if entry.get("watch", True) and entry.get("qobuz_match") not in ("exact", "manual")
+    ]
+    if not pending:
+        print(f"nothing to review: every artist in {favourites.FILE.name} is "
+              "an exact match, a manual pick, or muted.")
+        return 0
+
+    print(f"{len(pending)} artists to review. Numbers pick a candidate, "
+          "#<id> enters one by hand,\n/text searches again, s skips, m mutes, "
+          "q saves and quits. Ctrl-C aborts without writing.\n")
+
+    picked = muted = skipped = 0
+    # Fetched on the first #<id> only, so a review that never uses one pays
+    # nothing: autosuggest needs no cookies, artist/get does.
+    cookies: str | None = None
+    try:
+        for position, entry in enumerate(pending, 1):
+            query = entry["name"]
+            while True:
+                # 9 because the keys are 1-9; a tenth candidate is never the
+                # right answer for a name you actually listen to.
+                candidates = search_artists(query, store)[:9]
+                print(f"[{position}/{len(pending)}] {entry['name']}  "
+                      f"({entry.get('plays') or 0} plays, "
+                      f"{entry.get('qobuz_match') or 'no match'})")
+                if query != entry["name"]:
+                    print(f"  searching {query!r}")
+                if not candidates:
+                    print("  no candidates")
+                for number, candidate in enumerate(candidates, 1):
+                    # Mark the id the entry already holds, so an `ambiguous`
+                    # row shows what it would keep if you just skip it.
+                    current = str(candidate.get("id")) == str(entry.get("qobuz_id"))
+                    print(f"  {'*' if current else ' '}{number}. "
+                          f"{str(candidate.get('id')):>9}  {candidate.get('name')}"
+                          f"   ({candidate.get('albumsCount') or 0} albums)")
+
+                answer = input("  > ").strip()
+
+                if answer in ("", "s"):
+                    skipped += 1
+                    break
+                if answer == "q":
+                    print(f"\nstopped at {position} of {len(pending)}.")
+                    raise StopIteration
+                if answer == "m":
+                    entry["watch"] = False
+                    muted += 1
+                    print("  muted")
+                    break
+                if answer.startswith("#"):
+                    raw = answer[1:].strip()
+                    if not raw.isdigit():
+                        print("  ? #<id> wants a number, e.g. #41620")
+                        continue
+                    if cookies is None:
+                        try:
+                            cookies = store_cookies(store)
+                        except SystemExit as error:
+                            # store_cookies exits on a bad storefront, which
+                            # would throw away every decision made so far.
+                            print(f"  ? {error}")
+                            continue
+                    name, outcome = artist_name(int(raw), store, cookies)
+                    if outcome == "not_found":
+                        print(f"  ? Qobuz has no artist {raw}")
+                        continue
+                    if outcome == "error":
+                        print(f"  ? could not confirm {raw}, try again")
+                        continue
+                    entry["qobuz_id"] = int(raw)
+                    entry["qobuz_match"] = "manual"
+                    picked += 1
+                    print(f"  set {raw}  {name}")
+                    break
+                if answer.startswith("/"):
+                    query = answer[1:].strip() or entry["name"]
+                    continue
+                if answer.isdigit() and 1 <= int(answer) <= len(candidates):
+                    chosen = candidates[int(answer) - 1]
+                    entry["qobuz_id"] = chosen["id"]
+                    entry["qobuz_match"] = "manual"
+                    picked += 1
+                    print(f"  set {chosen['id']}  {chosen.get('name')}")
+                    break
+                print("  ? expected a number, #<id>, /text, s, m or q")
+    except StopIteration:
+        pass
+    except KeyboardInterrupt:
+        print("\naborted, nothing written.")
+        return 1
+
+    print(f"\n{picked} picked, {muted} muted, {skipped} left open.")
+    if dry_run:
+        print("--dry-run: nothing written.")
+        return 0
+
+    favourites.save(entries, dt.datetime.now(dt.UTC).isoformat(timespec="seconds"))
+    print(f"wrote {favourites.FILE}")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Resolve your top ListenBrainz artists to Qobuz ids."
     )
-    parser.add_argument("--user", required=True, help="ListenBrainz username")
+    parser.add_argument("--user", help="ListenBrainz username (not needed with --review)")
     parser.add_argument("--range", dest="period", default="all",
                         help="stats windows, comma-separated, or 'all' for every one "
                              f"(default: all). Valid: {', '.join(RANGES)}")
@@ -129,10 +252,18 @@ def main() -> int:
                         help="top artists to ask for PER WINDOW, not in total (default: 40)")
     parser.add_argument("--store", default=STORE, help=f"Qobuz storefront (default: {STORE})")
     parser.add_argument("--refresh", action="store_true",
-                        help="re-resolve artists that already have a Qobuz id")
+                        help="re-resolve artists that already have a Qobuz id, except the "
+                             "ones you picked by hand")
+    parser.add_argument("--review", action="store_true",
+                        help="walk the entries that did not resolve cleanly and pick by hand")
     parser.add_argument("--dry-run", action="store_true",
                         help="report without writing data/favourites.json")
     args = parser.parse_args()
+
+    if args.review:
+        return review(args.store, args.dry_run)
+    if not args.user:
+        parser.error("--user is required (or use --review)")
 
     if args.period == "all":
         periods = list(RANGES)
@@ -154,10 +285,17 @@ def main() -> int:
     # rather than overwritten.
     existing = {normalise(e["name"]): e for e in favourites.load() if e.get("name")}
 
-    needs_resolving = sum(
-        1 for key in merged
-        if args.refresh or not (existing.get(key) or {}).get("qobuz_id")
-    )
+    def still_open(entry: dict) -> bool:
+        """Whether this entry wants a (re-)resolve.
+
+        A hand-picked id is never re-resolved: --refresh exists to re-ask
+        autosuggest, not to overrule you.
+        """
+        if not entry.get("qobuz_id"):
+            return True
+        return args.refresh and entry.get("qobuz_match") != "manual"
+
+    needs_resolving = sum(1 for key in merged if still_open(existing.get(key) or {}))
     print(f"\n{len(merged)} unique artists across {len(periods)} windows, "
           f"{needs_resolving} to resolve "
           f"({needs_resolving} Qobuz request{'s' if needs_resolving != 1 else ''}).",
@@ -175,7 +313,7 @@ def main() -> int:
         entry["rank"] = min(row["ranks"].values()) if row["ranks"] else None
         entry.setdefault("itunes_id", None)
 
-        if entry.get("qobuz_id") and not args.refresh:
+        if not still_open(entry):
             kept += 1
         else:
             hit, how = pick([row["name"]], search_artists(row["name"], args.store))
