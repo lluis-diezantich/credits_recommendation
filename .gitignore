@@ -3,6 +3,12 @@
 data/*.json
 !data/.gitkeep
 
+# ...except the favourites list, which is the one file in data/ that is
+# generated AND hand-edited: the manual Qobuz ids and the `watch: false`
+# mutes exist nowhere else, so regenerating it loses work rather than time.
+# Small (under 100 KB), slow-moving, and worth a diff.
+!data/favourites.json
+
 # The store. Derived from data/ and cache/, rebuilt by stages/load.py in
 # seconds, and 42 MB of it is the listen export. Never commit a derived DB.
 data/music.db
