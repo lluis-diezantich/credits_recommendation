@@ -220,7 +220,7 @@ def main() -> int:
     shared = 0
     scanned = 0
 
-    failed = 0
+    failed = empty = 0
     for index, (artist_id, label) in enumerate(WATCHED_ARTISTS.items()):
         # Unhurried between artists, like radars/itunes.py: a few hundred
         # back-to-back requests is what provokes the 5xx in the first place.
@@ -233,6 +233,7 @@ def main() -> int:
             print(f"warning: {label} ({artist_id}) lookup failed, skipped - "
                   "anything missed is reported next run", file=sys.stderr)
         elif not albums:
+            empty += 1
             print(f"warning: {label} ({artist_id}) returned no releases in the "
                   f"{args.store} store", file=sys.stderr)
         for album in albums:
@@ -255,12 +256,17 @@ def main() -> int:
     watching = len(WATCHED_ARTISTS)
     window = f"last {args.days} days" if args.days > 0 else "all dates"
 
-    # Every artist failing is not an empty week, it is a broken run -- most
-    # likely Qobuz refusing the caller. Saying "nothing new" there would make a
-    # block indistinguishable from a quiet week, so exit non-zero instead.
-    if failed and failed == watching:
-        print(f"every one of {watching} artists failed to fetch - treating this as a "
-              "broken run, not an empty one.", file=sys.stderr)
+    # Nothing at all from anybody is a broken run, not a quiet week, and it
+    # arrives two ways: Qobuz refusing the caller outright, or answering 200
+    # with an empty discography for everyone. The second is the dangerous one,
+    # because every artist "succeeds" -- the report would say "nothing new"
+    # with the warnings folded into a block nobody opens, and it would say it
+    # every week. A real quiet week still returns catalogue; it is the DATE
+    # FILTER that empties the list, not the fetch, so this cannot fire on one.
+    if watching and failed + empty == watching:
+        print(f"nothing came back from any of {watching} artists ({failed} failed, "
+              f"{empty} returned an empty discography) - treating this as a broken "
+              "run, not an empty one.", file=sys.stderr)
         return 1
 
     if args.json:
