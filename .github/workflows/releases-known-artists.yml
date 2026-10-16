@@ -78,5 +78,5 @@ jobs:
           set -euo pipefail
           gh issue create \
             --repo "$GITHUB_REPOSITORY" \
-            --title "New releases from known artists @$(date -u +%F)" \
+            --title "releases: known artists @$(date -u +%F)" \
             --body-file body.md
