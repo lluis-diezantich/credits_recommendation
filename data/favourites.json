@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-16T16:14:06+00:00",
+  "generated": "2026-10-16T16:23:59+00:00",
   "note": "hand-edits are kept: set \"watch\": false to stop watching an artist (or run stages/favourites.py --mute \"Name\"), and a qobuz_id you fix by hand is never re-resolved.",
   "artists": [
     {
@@ -634,7 +634,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 462118
+      "qobuz_id": 462118,
+      "watch": false
     },
     {
       "name": "NAPA",
