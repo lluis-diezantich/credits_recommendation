@@ -14,6 +14,7 @@ description = "Credits-based music discovery: who made the records you like, and
 requires-python = ">=3.11"        # uses `X | None` at runtime and Self-less generics
 dependencies = [
     "requests>=2.32",             # core/http.py: pooling, and urllib3's Retry
+    "beautifulsoup4>=4.12",       # radars/remezcla.py: the only HTML here
 ]
 
 [project.optional-dependencies]

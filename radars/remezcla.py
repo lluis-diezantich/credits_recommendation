@@ -25,8 +25,12 @@ the same reason: a human wrote the row. Crosswalking to MBIDs is the caller's
 problem, and an expensive one (~75% hit rate, ~15% wrong-entity on naive name
 matching, and Puerto Rican urbano is missing almost entirely).
 
-No API key and no auth. Still parses the HTML with the standard library,
-which is the next thing a dependency would earn its place in.
+No API key and no auth. The HTML is read with BeautifulSoup: selecting
+`section.story__item` and taking its text is what a parser is for, and the
+regexes that did it before could not tell `</section>` inside a comment or a
+nested section from the real end of one. What stays regex is the text parsing
+proper -- splitting "Artist - Track", finding the byline dash, stripping the
+layout number -- because that is prose, not markup.
 
     ./radars/remezcla.py                      # picks new since last run
     ./radars/remezcla.py --curator "Cheky"    # one beat only
@@ -52,6 +56,8 @@ from pathlib import Path
 
 # Run directly (./radars/remezcla.py) or as a module (python -m radars.remezcla).
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from bs4 import BeautifulSoup
 
 from core.http import get
 from core.names import normalise
@@ -83,8 +89,8 @@ SERIES_TITLES = (
 DEFAULT_PAGES = 2
 BACKFILL_PAGES = 14
 
-SECTION_RE = re.compile(r'<section class="story__item">(.*?)</section>', re.S)
-TITLE_RE = re.compile(r'story__item-title[^>]*>(.*?)</h3>', re.S)
+# datePublished lives in the page's JSON-LD, so this one stays a regex: it is
+# reading embedded JSON, not markup.
 DATE_RE = re.compile(r'"datePublished":"(\d{4}-\d{2}-\d{2})')
 # The byline is the last dash-introduced name in the blurb. Hyphens are not
 # accepted as the dash: they appear inside artist names, en/em dashes do not.
@@ -193,18 +199,19 @@ def parse_issue(page: str, url: str, fallback_date: str) -> tuple[list[dict], li
     date = date_match.group(1) if date_match else fallback_date
     picks = []
     untitled: list[dict] = []
-    for section in SECTION_RE.findall(page):
-        title_match = TITLE_RE.search(section)
-        title = ""
-        if title_match:
-            title = html.unescape(re.sub(r"<[^>]+>", "", title_match.group(1))).strip()
+    soup = BeautifulSoup(page, "html.parser")
+    for section in soup.find_all("section", class_="story__item"):
+        title_element = section.find(class_="story__item-title")
+        # get_text() with no separator, to match the markup it replaces: a
+        # title split across tags ("<h3>A<em>B</em></h3>") is one name.
+        title = title_element.get_text().strip() if title_element else ""
         # The trailing item number ("Boza - "En La Luna" \n15") is layout, not name.
         title = re.sub(r"\s*\d{1,2}\s*$", "", title).strip()
-        blurb_all = html.unescape(re.sub(r"<[^>]+>", " ", section)).strip()
+        blurb_all = section.get_text(" ").strip()
         if not title:
             byline_only = BYLINE_RE.search(blurb_all)
-            embed = re.search(r'title="([^"]{5,90})"', section)
-            hint = embed.group(1) if embed else ""
+            embed = section.find(attrs={"title": True})
+            hint = embed["title"] if embed and 5 <= len(embed["title"]) <= 90 else ""
             # "Spotify Embed: X" gives the track and no artist; a YouTube title
             # gives both but reversed and shouted. Neither is parsed here.
             untitled.append({

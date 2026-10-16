@@ -193,3 +193,24 @@ The README says "7,860 releases across the two pools". Still true: 1,470 +
 parity run their top-level keys are identical, so the divergence has moved down
 into `via` and `via.signal`, where it is harder to see and more expensive to
 merge.
+
+## Why policy.py is not in core/
+
+`core/` is plumbing: if it changes, behaviour should not. `policy.py` is the
+opposite — nothing but contestable numbers (a producer credit is worth 1.0, a
+mastering credit 0.15) — so it belongs somewhere you trip over it.
+
+Merging the two copies that used to live in the resolve stages surfaced a real
+bug. They never disagreed on a shared key, but each lacked keys the other had,
+and a missing key falls back silently to `INSTRUMENT_WEIGHT` (0.8). Nine
+spellings diverged that way, always upward, always for the credits deserving
+least weight: `mastered by` scored 0.15 in one file and 0.8 in the other.
+
+## One open decision
+
+**The role-class vocabularies still differ, deliberately.** `discover.py` folds
+every engineering role into `production`; `resolve_discogs.py` splits
+`engineering` out. That is why `discovery_41620.json` carries no `engineering`
+class while `--list-roles` reports 16 engineers. Both live in `policy.py`
+(`DISCOVERY_ROLE_CLASSES` vs `ROLE_CLASS`), unchanged because unifying them
+rewrites `classes` in existing data. Worth deciding on purpose.
