@@ -41,6 +41,7 @@ produce byte-identical output.
     docs/disco-bahia.md one recommendation this project could not have made
     docs/sources.md    additional sources of discovery signals - a running list
     docs/architecture.md the module map, and the one module the rest waits on
+    tests/             ./tests/run.py - stdlib asserts, no pytest, no network
     contrib/           qobuz_keys.py - vendored gist, not ours
 
 ## Running it
@@ -55,6 +56,13 @@ directly:
 `python -m stages.resolve_discogs` works too. Each stage reads and writes JSON in
 `data/`, so any stage can be rerun alone and `--pool-only` can resume a run that
 died halfway through the Qobuz fan-out.
+
+    ./tests/run.py                  # 7 files, ~40 cases, a few seconds
+
+No pytest, for the same reason there are no runtime dependencies. Every test is
+a plain script that stubs the network and writes only to a temp directory, so
+the suite cannot reach Qobuz or damage `data/` — verified by hashing `data/`
+before and after. `./tests/run.py dedup` runs a subset.
 
 ## The store
 
