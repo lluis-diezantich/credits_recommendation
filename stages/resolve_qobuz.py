@@ -40,10 +40,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core.paths import CACHE, DATA
-from core.names import normalise
-from core.qobuz import API, APP_ID, PAGE_LIMIT, PAUSE, SITE, STORE, UA
+from core.qobuz import API, APP_ID, PAGE_LIMIT, PAUSE, STORE, UA
 from core.qobuz import get as _get
-from core.qobuz import store_cookies
+from core.qobuz import pick, search_artists, store_cookies
 from policy import WEAK_CLASSES, role_weight
 
 
@@ -71,44 +70,6 @@ def signal_for(artist: dict) -> dict:
     return {"role_weight": round(weight, 3), "seed_albums": seed_albums,
             "embedded": round(embedded, 3),
             "score": round(weight * embedded, 4), "flags": flags}
-
-
-def search_artists(name: str, store: str) -> list[dict]:
-    """Autosuggest. Needs no app id and no cookies, and folds case and accents."""
-    url = f"{SITE}/v4/{store}/catalog/search/autosuggest?q={urllib.parse.quote(name)}"
-    # Qobuz returns intermittent HTTP 500 under sustained load; without a retry
-    # a transient failure becomes a permanent "not_found" for that person.
-    for attempt in range(3):
-        status, body, _ = _get(url, {"x-requested-with": "XMLHttpRequest"})
-        if status == 200:
-            try:
-                return json.loads(body).get("artists") or []
-            except json.JSONDecodeError:
-                return []
-        if status < 500:
-            print(f"warning: search for {name!r} HTTP {status}", file=sys.stderr)
-            return []
-        time.sleep(0.8 * (attempt + 1))
-    print(f"warning: search for {name!r} failed with 5xx after 3 tries", file=sys.stderr)
-    return []
-
-
-def pick(person: dict, candidates: list[dict]) -> tuple[dict | None, str]:
-    """Choose a candidate, and say how confident that choice is.
-
-    "exact"     one candidate whose normalised name matches a credited spelling
-    "ambiguous" several exact matches -- picked the one with most albums
-    "none"      no exact match; a fuzzy pick is NOT made, because a wrong artist
-                silently poisons the pool and is very hard to notice later
-    """
-    if not candidates:
-        return None, "not_found"
-    wanted = {normalise(n) for n in person["names"]}
-    exact = [c for c in candidates if normalise(c.get("name") or "") in wanted]
-    if not exact:
-        return None, "no_exact_match"
-    exact.sort(key=lambda c: -(c.get("albumsCount") or 0))
-    return exact[0], ("exact" if len(exact) == 1 else "ambiguous")
 
 
 def artist_releases(artist_id: int, store: str, cookies: str) -> list[dict]:
@@ -202,7 +163,7 @@ def main() -> int:
 
     for index, person in enumerate(people, 1):
         candidates = search_artists(person["names"][0], args.store)
-        choice, how = pick(person, candidates)
+        choice, how = pick(person["names"], candidates)
         outcomes[how] += 1
         if choice is None:
             unresolved.append({
