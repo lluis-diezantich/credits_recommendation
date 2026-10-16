@@ -88,3 +88,37 @@ def pick(names: Iterable[str], candidates: list[dict]) -> tuple[dict | None, str
         return None, "no_exact_match"
     exact.sort(key=lambda c: -(c.get("albumsCount") or 0))
     return exact[0], ("exact" if len(exact) == 1 else "ambiguous")
+
+
+def artist_name(artist_id: int, store: str = STORE,
+                cookies: str | None = None) -> tuple[str | None, str]:
+    """(name, outcome) for one artist id: "ok", "not_found" or "error".
+
+    Three outcomes rather than two, because "Qobuz has no such artist" and "the
+    request failed" must not look the same to a caller confirming a hand-typed
+    id: one means the id is wrong, the other means try again.
+
+    limit=1 because the caller wants the name as proof the id is real, not the
+    discography -- radars/qobuz.py:artist_releases is the paging version.
+    """
+    query = urllib.parse.urlencode({
+        "artist_id": artist_id,
+        "limit": 1,
+        "offset": 0,
+        "zone": store.split("-")[0].upper(),
+        "store": store,
+    })
+    headers = {"x-app-id": APP_ID,
+               "cookie": cookies if cookies is not None else store_cookies(store)}
+    status, body, _ = get(f"{API}/artist/get?{query}", headers)
+    if status == 404:
+        return None, "not_found"
+    if status != 200:
+        print(f"warning: artist/get {artist_id} HTTP {status}: {message(body)}", file=sys.stderr)
+        return None, "error"
+    try:
+        name = json.loads(body).get("name")
+    except json.JSONDecodeError:
+        return None, "error"
+    # A 200 with no name is Qobuz's other way of saying the id is unknown.
+    return (name, "ok") if name else (None, "not_found")
