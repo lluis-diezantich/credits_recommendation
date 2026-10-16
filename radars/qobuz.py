@@ -26,6 +26,7 @@ import argparse
 import datetime as dt
 import json
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -36,7 +37,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core import favourites
 from core.paths import DATA
-from core.qobuz import API, APP_ID, PAGE_LIMIT, SITE, STORE, UA
+from core.qobuz import API, APP_ID, PAGE_LIMIT, PAUSE, SITE, STORE, UA
+from core.qobuz import get_json as _get_json
 from core.qobuz import get as _get
 from core.qobuz import message as _message
 from core.qobuz import store_cookies
@@ -80,12 +82,21 @@ def find_artists(name: str, store: str) -> list[dict]:
         raise SystemExit("Qobuz search returned a non-JSON body")
 
 
-def artist_releases(artist_id: int, store: str, cookies: str) -> tuple[str, list[dict]]:
-    """(artist name, every release where they are a primary artist).
+def artist_releases(artist_id: int, store: str, cookies: str) -> tuple[str, list[dict], bool]:
+    """(artist name, every release where they are a primary artist, succeeded).
 
     `extra=albums_with_last_release` puts the discography under
     `albums_without_last_release`. Paginated because prolific artists exceed
     one page.
+
+    Never raises. One artist failing used to abort the whole run via
+    SystemExit, and because the state file is written at the end, that threw
+    away every release found before it -- fine when the watchlist held one
+    artist, ruinous at a few hundred, where an intermittent 5xx is expected
+    rather than unlucky. core.qobuz.get_json retries those; anything still
+    failing returns succeeded=False and whatever pages did arrive. Partial
+    results are safe: what was not seen is simply not recorded as seen, so it
+    is reported next run.
     """
     zone = store.split("-")[0].upper()
     headers = {"x-app-id": APP_ID, "cookie": cookies}
@@ -102,13 +113,10 @@ def artist_releases(artist_id: int, store: str, cookies: str) -> tuple[str, list
             "zone": zone,
             "store": store,
         })
-        status, body, _ = _get(f"{API}/artist/get?{query}", headers)
-        if status != 200:
-            raise SystemExit(f"Qobuz artist/get failed (HTTP {status}): {_message(body)}")
-        try:
-            data = json.loads(body)
-        except json.JSONDecodeError:
-            raise SystemExit("Qobuz artist/get returned a non-JSON body")
+        data, outcome = _get_json(f"{API}/artist/get?{query}", headers,
+                                  f"artist/get {artist_id}")
+        if outcome != "ok" or not isinstance(data, dict):
+            return name, collected, False
 
         name = data.get("name") or name
         page = (data.get("albums_without_last_release") or {}).get("items") or []
@@ -121,7 +129,7 @@ def artist_releases(artist_id: int, store: str, cookies: str) -> tuple[str, list
             break
         offset += PAGE_LIMIT
 
-    return name, collected
+    return name, collected, True
 
 
 def classify(album: dict) -> str:
@@ -205,10 +213,19 @@ def main() -> int:
     everything: set[str] = set()
     scanned = 0
 
-    for artist_id, label in WATCHED_ARTISTS.items():
-        name, albums = artist_releases(artist_id, args.store, cookies)
+    failed = 0
+    for index, (artist_id, label) in enumerate(WATCHED_ARTISTS.items()):
+        # Unhurried between artists, like radars/itunes.py: a few hundred
+        # back-to-back requests is what provokes the 5xx in the first place.
+        if index:
+            time.sleep(PAUSE)
+        name, albums, ok = artist_releases(artist_id, args.store, cookies)
         scanned += len(albums)
-        if not albums:
+        if not ok:
+            failed += 1
+            print(f"warning: {label} ({artist_id}) lookup failed, skipped - "
+                  "anything missed is reported next run", file=sys.stderr)
+        elif not albums:
             print(f"warning: {label} ({artist_id}) returned no releases in the "
                   f"{args.store} store", file=sys.stderr)
         for album in albums:
@@ -226,8 +243,11 @@ def main() -> int:
 
     watching = len(WATCHED_ARTISTS)
     window = f"last {args.days} days" if args.days > 0 else "all dates"
-    print(f"Scanned {scanned} releases from {watching} "
+    print(f"Scanned {scanned} releases from {watching - failed} of {watching} "
           f"artist{'s' if watching != 1 else ''} in the {args.store} store ({window}).")
+    if failed:
+        print(f"{failed} artist{'s' if failed != 1 else ''} could not be fetched; "
+              "their releases are not recorded as seen, so a later run will report them.")
 
     if not found:
         print("Nothing new.")

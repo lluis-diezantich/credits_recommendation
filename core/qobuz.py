@@ -28,6 +28,7 @@ UA = "Mozilla/5.0"
 STORE = "gb-en"
 PAGE_LIMIT = 500
 PAUSE = 0.22                 # Qobuz publishes no rate limit; be unhurried
+RETRIES = 3                  # see get_json: 5xx under load is routine, not fatal
 
 
 def get(url: str, headers: dict[str, str] | None = None, timeout: int = 40):
@@ -50,24 +51,44 @@ def store_cookies(store: str = STORE) -> str:
     return "; ".join(pairs)
 
 
+def get_json(url: str, headers: dict[str, str] | None = None,
+             what: str = "Qobuz") -> tuple[dict | list | None, str]:
+    """(parsed body, outcome) for a Qobuz GET: "ok", "not_found" or "error".
+
+    5xx is retried, because Qobuz returns intermittent HTTP 500 under sustained
+    load and a single attempt turns a busy minute into a permanent failure. One
+    watched artist that was tolerable; at a few hundred it is most runs.
+
+    `what` names the thing being fetched, for the warning. Nothing here raises:
+    a caller looping over hundreds of artists must be able to skip one.
+    """
+    for attempt in range(RETRIES):
+        status, body, _ = get(url, headers)
+        if status == 200:
+            try:
+                return json.loads(body), "ok"
+            except json.JSONDecodeError:
+                print(f"warning: {what} returned a non-JSON body", file=sys.stderr)
+                return None, "error"
+        if status == 404:
+            return None, "not_found"
+        if status < 500:
+            print(f"warning: {what} HTTP {status}: {message(body)}", file=sys.stderr)
+            return None, "error"
+        if attempt < RETRIES - 1:
+            time.sleep(0.8 * (attempt + 1))
+    print(f"warning: {what} failed with 5xx after {RETRIES} tries", file=sys.stderr)
+    return None, "error"
+
+
 def search_artists(name: str, store: str = STORE) -> list[dict]:
     """Autosuggest. Needs no app id and no cookies, and folds case and accents."""
     url = f"{SITE}/v4/{store}/catalog/search/autosuggest?q={urllib.parse.quote(name)}"
-    # Qobuz returns intermittent HTTP 500 under sustained load; without a retry
-    # a transient failure becomes a permanent "not_found" for that person.
-    for attempt in range(3):
-        status, body, _ = get(url, {"x-requested-with": "XMLHttpRequest"})
-        if status == 200:
-            try:
-                return json.loads(body).get("artists") or []
-            except json.JSONDecodeError:
-                return []
-        if status < 500:
-            print(f"warning: search for {name!r} HTTP {status}", file=sys.stderr)
-            return []
-        time.sleep(0.8 * (attempt + 1))
-    print(f"warning: search for {name!r} failed with 5xx after 3 tries", file=sys.stderr)
-    return []
+    data, outcome = get_json(url, {"x-requested-with": "XMLHttpRequest"},
+                             f"search for {name!r}")
+    if outcome != "ok" or not isinstance(data, dict):
+        return []
+    return data.get("artists") or []
 
 
 def pick(names: Iterable[str], candidates: list[dict]) -> tuple[dict | None, str]:
@@ -110,15 +131,9 @@ def artist_name(artist_id: int, store: str = STORE,
     })
     headers = {"x-app-id": APP_ID,
                "cookie": cookies if cookies is not None else store_cookies(store)}
-    status, body, _ = get(f"{API}/artist/get?{query}", headers)
-    if status == 404:
-        return None, "not_found"
-    if status != 200:
-        print(f"warning: artist/get {artist_id} HTTP {status}: {message(body)}", file=sys.stderr)
-        return None, "error"
-    try:
-        name = json.loads(body).get("name")
-    except json.JSONDecodeError:
-        return None, "error"
+    data, outcome = get_json(f"{API}/artist/get?{query}", headers, f"artist/get {artist_id}")
+    if outcome != "ok" or not isinstance(data, dict):
+        return None, outcome
     # A 200 with no name is Qobuz's other way of saying the id is unknown.
+    name = data.get("name")
     return (name, "ok") if name else (None, "not_found")
