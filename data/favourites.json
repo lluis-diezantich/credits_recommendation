@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-16T16:23:59+00:00",
+  "generated": "2026-10-16T16:27:19+00:00",
   "note": "hand-edits are kept: set \"watch\": false to stop watching an artist (or run stages/favourites.py --mute \"Name\"), and a qobuz_id you fix by hand is never re-resolved.",
   "artists": [
     {
@@ -494,7 +494,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 570144
+      "qobuz_id": 570144,
+      "watch": false
     },
     {
       "name": "Sonora Ponceña",
@@ -614,7 +615,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 665881
+      "qobuz_id": 665881,
+      "watch": false
     },
     {
       "name": "Nico Roig",
@@ -1011,7 +1013,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 25043
+      "qobuz_id": 25043,
+      "watch": false
     },
     {
       "name": "Björk",
