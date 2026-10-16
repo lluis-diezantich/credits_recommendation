@@ -17,7 +17,7 @@
 #
 # Needs nothing but the repo: no secrets, no dependencies, and the watchlist
 # (data/favourites.json) is committed.
-name: new releases from known artists
+name: "releases: known artists"
 
 on:
   schedule:
