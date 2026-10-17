@@ -61,7 +61,7 @@ nothing about the others.
     report/
     eval/
     store/         load
-    data/ cache/ docs/ notebooks/ contrib/
+    data/ cache/ docs/ notebooks/
 
 ## core/model.py — the keystone
 
