@@ -6,16 +6,80 @@ the README so the entry point stays an orientation rather than a backlog.
 Not the same thing as [roadmap.md](docs/roadmap.md), which assesses this
 project *as a recommender*, stage by stage. This file is work items.
 
+## Where this is going (decided 2026-10-17)
+
+**One pipeline for now.** The Friday known-artist radar is the whole product
+and stays that way for a while, to see how it behaves in use. Features get
+added afterwards one at a time, and small — not a stage at a time.
+
+That is a deliberate narrowing, so the backlog below is a backlog and not a
+plan. Two things settle how the rest of it is ordered, and both were measured
+rather than guessed:
+
+**Growing the credit graph is expensive; using it is nearly free.** One
+`discover` run on one seed produced 278 people and 7,860 candidate releases,
+and that fan-out — credits per album, then a resolve per person, then a
+discography per person — is the part that multiplies. Adding a second seed
+means paying it again. But querying what is already on disk costs nothing, and
+a radar over the people already resolved would be **68 `artist/get` per run**,
+which is SMALLER than the 91 the Friday job already makes without complaint.
+So the thing to avoid is more seeds, not more features over the one graph.
+
+**The pool is not trustworthy yet, and that is the real blocker** — not API
+cost. See the entry under Correctness. Nothing credits-based is worth building
+on top of it until that is fixed, and fixing it costs no requests.
+
 ## The product
 
 The gap between "a credits database" and "recommends music".
+
+- **Profile the watchlist, instead of trusting a play count.** The best next
+  thing to build: free, small, and it improves the one pipeline being kept
+  rather than adding another. `data/favourites.json` is 108 entries with 15
+  muted, admitted by ListenBrainz rank, and there is no stated rule for who
+  qualifies.
+
+  It also has two answers to "how many artists do I watch". 93 entries are
+  un-muted but the radar watches **91**, because `favourites.ids_for` keys on
+  `qobuz_id` and two pairs share one: `j milo`/`Milo j`, and `Rita Indiana`/
+  `Rita Indiana y Los Misterios`. Harmless today — the collapse is silent and
+  correct — but a profile that reports per-artist numbers has to pick which
+  grain it means, and duplicate spellings are the first thing it should surface.
+
+  [roadmap.md](docs/roadmap.md) already names the trap — `MIN_PLAYS = 50` is
+  "a confidence-weighting bug rather than a threshold", because play count and
+  usefulness are not one number. The fix is to measure PERSISTENCE, which the
+  listens already carry: plays, distinct months, year span, distinct tracks,
+  last played. From the export:
+
+        Bad Bunny    43 plays   13 months   2024-2026
+        Tom Waits    34 plays   23 months   2013-2024
+
+  Bad Bunny wins on plays and Waits is plainly the more settled taste — eleven
+  years against two. Tracks against plays separates them further: Drexler is 56
+  tracks over 68 plays, a catalogue, while 50 plays of 2 tracks is a song
+  somebody liked. A `--profile` mode printing those columns with a proposed
+  verdict, and the thresholds in `policy.py` where they can be argued with, is
+  the shape. Costs no requests.
 
 - **A radar for people, not artists.** The thesis, and the one thing this cannot
   do: alert on records made by *people* you follow. The pools hold 7,860
   candidate releases and nothing consumes them. One `album/get` per fresh
   release, cached.
+
+  Costed since: **68 `artist/get` per run** for the 68 people in the graph
+  carrying a Qobuz id, against the 91 the Friday radar already makes. Cheap.
+  Blocked on the pool being trustworthy, not on the budget — see Correctness.
+  It also lags by construction, because credits are often registered days
+  after a release.
+
 - **A ranker.** 7,860 candidates, each with an explainable `via.signal.score`,
   and no order.
+
+  Do not build this yet. `sig_score` currently ranks the name collisions
+  FIRST: "Morgan" carries 323 releases at a score of 1.0, the maximum. Ordering
+  a list whose top is wrong makes the wrongness more prominent, not less.
+  Filtering comes first.
 - **Album identity.** `core/radar.Release` now normalises what the radars
   report, but it is a *reporting* record keyed on each store's own id: two
   editions of one album are still two rows, and nothing reconciles a Qobuz id
@@ -31,6 +95,56 @@ The gap between "a credits database" and "recommends music".
 ## Correctness
 
 Where the code can be wrong without anything noticing.
+
+- **Nearly half the candidate pool is name collisions, and the score promotes
+  them.** The most important open defect, and the reason nothing credits-based
+  should be built yet. Measured 2026-10-17 on the committed pools:
+
+  | | |
+  |---|---|
+  | `single_token_name` flagged | **3,673 of 7,860 rows (47%)** |
+  | top 6 contributors | 1,887 rows (24% of the pool) |
+
+  | via | rows | score | how it got in |
+  |---|---|---|---|
+  | Henry Mancini | 459 | 0.105 | via José María Rosillo |
+  | Morgan | 323 | **1.00** | via Carles Campi Campón |
+  | Arcángel | 309 | 0.18 | via Bori Alarcón |
+  | Mama | 291 | 0.105 | via José María Rosillo |
+  | Cooper | 261 | 0.21 | via José María Rosillo |
+  | Francisco | 244 | 0.18 | via Bori Alarcón |
+
+  Henry Mancini is the clearest: the releases reached through him are the
+  *Peter Gunn* soundtracks, 1958-60. Rosillo is a Spanish engineer who worked
+  on Drexler records and did not work on Peter Gunn. The others — "Morgan",
+  "Mama", "Cooper", "Francisco" — are generic single tokens.
+
+  The mechanism is `build_pool` in `stages/resolve_discogs.py`: it takes a
+  collaborator NAME off a Discogs credit row and exact-matches it in Qobuz.
+  "Cooper" exact-matches a real Qobuz artist — just not the right one — and
+  that artist's whole discography enters the pool. `find_artist` refuses fuzzy
+  matches precisely to avoid this, but an exact match on one common token is
+  indistinguishable from a correct one at that layer: the name is all the
+  evidence there is.
+
+  Worse than the volume is the SCORE. "Morgan" sits at 1.0, the maximum,
+  because the referring person is a selective producer and the signal is
+  computed from the REFERRER, never from how plausible the match itself is.
+  So the junk is not merely present, it is ranked first.
+
+  What would fix it, in rough order of how much it buys:
+
+  - drop or heavily penalise `single_token_name` — 47% of rows, and the flag
+    already exists and is already stored. One judgement call in `policy.py`.
+  - require more than a bare exact match for a single-token name: an album
+    count, an overlap with the referrer's own catalogue, or a genre that is not
+    a mid-century film score.
+  - fold match plausibility into `sig_score`, so a shaky resolve cannot
+    inherit a strong referrer's weight.
+
+  All free — no requests. This is the "filters instead of ranking" row in
+  [roadmap.md](docs/roadmap.md), and it reads as a nice-to-have there; the
+  numbers above make it the prerequisite.
 
 - **~~`policy.py` and `core/credits.py` are untested.~~** Done: both at 100%,
   94 cases in `tests/test_policy.py` and `tests/test_credits.py`. The three
@@ -256,6 +370,12 @@ both still under an hour.
 - **Cross-check coverage.** `./radars/listenbrainz.py --days 20 --dry-run` reads
   a second source for the same 89 artists; anything it names that Qobuz missed
   is a gap nothing else would reveal.
+- **"Who else recorded this song" is thinner than it sounds.**
+  [roadmap.md](docs/roadmap.md) lists it as working exactly, today, and the
+  lookup does work — but only **26 of 257 songs (10%)** have two or more other
+  non-mill recordings. One song has 19 performers and one has 16; the long tail
+  has one each. Worth building as a lookup, not as a feature anyone would
+  notice. Measured 2026-10-17.
 - **`--review` cannot re-ask about a row that resolved `exact`.** A wrong id
   that looked confident can only be fixed by editing the JSON.
 - **~~`README.md` says `65 cases`.~~** It says 493, which is what it is. Worth
