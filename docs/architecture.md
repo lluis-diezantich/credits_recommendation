@@ -77,6 +77,7 @@ thing**, and every empty box above needs them to be one.
 | `pool_discogs.json` | 6,390 | `album_id` (Qobuz store id) | album | identical 10 keys — feature parity, done 2026-09-02 |
 | `remezcla_picks.json` | 3,779 | none at all | **track** | `date curator artist track issue` |
 | `radars/listenbrainz.py` | — | `release_mbid` | album | **persists no rows** — only `seen.json` keys |
+| `core/radar.Release` | — | each store's own id | album | `id date kind artist title source tracks hires streamable url` — a REPORTING record, shared by the three id-based radars since 2026-10. Not album identity: it normalises the shape, not the entity, so two editions are still two rows and no Qobuz id is reconciled with an MBID |
 
 Three things follow immediately.
 

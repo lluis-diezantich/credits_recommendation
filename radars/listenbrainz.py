@@ -1,46 +1,38 @@
 #!/usr/bin/env python3
-"""A personal new-release radar.
+"""A personal new-release radar, backed by the ListenBrainz fresh-releases feed.
 
-One GET to the ListenBrainz fresh-releases feed returns every release
-MusicBrainz knows about in a window around today. We intersect that against
-WATCHED_ARTISTS locally, then subtract whatever we already reported on a
-previous run, so each run shows only what is new to you.
+One GET returns every release MusicBrainz knows about in a window around today.
+We intersect that against WATCHED_ARTISTS locally, then subtract whatever we
+already reported on a previous run, so each run shows only what is new to you.
+
+The odd one of the three. itunes.py and qobuz.py ask per artist and read a
+catalogue; this reads a WINDOW, and two settings in core/radar.py exist to say
+so: `record_scanned` is off, because recording a release that matched nobody
+would hide it for good if you later started watching that artist, and
+`guard_empty_run` is off, because a feed answering with zero rows is a
+legitimate quiet window and nothing distinguishes it from an outage.
 
 No API key and no auth. `requests` via core/http.py for the pooling and the
 retry policy.
 
-    ./fresh_releases.py              # what is new since last run
-    ./fresh_releases.py --all        # everything in the window, ignore state
-    ./fresh_releases.py --days 60    # widen the window
-    ./fresh_releases.py --dry-run    # report without recording anything
+    ./radars/listenbrainz.py              # what is new since last run
+    ./radars/listenbrainz.py --all        # everything in the window, ignore state
+    ./radars/listenbrainz.py --days 60    # widen the window
+    ./radars/listenbrainz.py --dry-run    # report without recording anything
 """
 
 from __future__ import annotations
 
-import argparse
 import datetime as dt
 import json
 import sys
+from collections.abc import Iterator
 from pathlib import Path
-
-# Run directly (./radars/qobuz.py) or as a module (python -m radars.qobuz).
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core import favourites
 from core.http import get as http_get
 from core.paths import DATA
-from core.state import load_seen as _load_seen
-from core.state import save_seen as _save_seen
-
-STATE_FILE = DATA / "seen.json"
-
-
-def load_seen() -> set[str]:
-    return _load_seen(STATE_FILE)
-
-
-def save_seen(seen: set[str]) -> None:
-    _save_seen(STATE_FILE, seen)
+from core.radar import Batch, Radar, Release, execute, parser
 
 # --- what you watch -------------------------------------------------------
 # MusicBrainz artist MBIDs. The name is only a label for the output; matching
@@ -55,13 +47,6 @@ WATCHED_ARTISTS: dict[str, str] = favourites.ids_for("mbid", {
     "abb91078-f7db-41f2-8f07-7f37bb739143": "Jorge Drexler",
 })
 
-# Release types to report. The feed also carries "Broadcast", "Other", and
-# None (untyped); those are noise for this purpose.
-KEEP_TYPES = {"Album", "EP", "Single"}
-
-# The feed window is +/- this many days around today, so this is both how far
-# back we look and how far ahead we see announced releases.
-#
 # Keep this comfortably LARGER than how often you run the script. MusicBrainz
 # entries are often registered days after the release date, so a 1-day window
 # run daily would permanently miss anything registered late. The state file
@@ -73,7 +58,12 @@ USER_AGENT = "fresh-releases-radar/1.0 (personal use)"
 
 
 def fetch_feed(anchor: dt.date, days: int) -> list[dict]:
-    """Return every release in the feed window around `anchor`."""
+    """Every release in the feed window around `anchor`.
+
+    Exits rather than degrading: there is exactly one call in this radar, so a
+    failure leaves nothing to salvage and nothing to report. The per-artist
+    radars can lose one lookup of ninety and still be useful; this cannot.
+    """
     url = f"{FEED_URL}?release_date={anchor.isoformat()}&days={days}"
     status, body, _ = http_get(url, timeout=60, user_agent=USER_AGENT,
                                service="ListenBrainz")
@@ -87,85 +77,92 @@ def fetch_feed(anchor: dt.date, days: int) -> list[dict]:
     return payload.get("payload", {}).get("releases", [])
 
 
-def matches_watchlist(release: dict) -> list[str]:
-    """Names of watched artists credited on this release."""
-    mbids = release.get("artist_mbids") or []
-    return [WATCHED_ARTISTS[mbid] for mbid in mbids if mbid in WATCHED_ARTISTS]
+def dedup_key(release: dict) -> str:
+    """The stable identity of a feed row.
+
+    release_mbid normally; the release-group or a synthetic key for the rare
+    row carrying neither, which would otherwise be reported every single run.
+    """
+    return (release.get("release_mbid")
+            or release.get("release_group_mbid")
+            or "|".join([str(release.get("artist_credit_name")),
+                         str(release.get("release_name")),
+                         str(release.get("release_date"))]))
 
 
-def describe(release: dict, names: list[str], today: dt.date) -> str:
-    date = release.get("release_date", "????-??-??")
-    kind = release.get("release_group_primary_type") or "Release"
-    title = release.get("release_name", "(untitled)")
+def normalize(release: dict, names: list[str]) -> Release:
+    """One feed row as a Release, attributed to whoever is actually credited.
+
+    Show the full credit when it differs from the watched artist, so a
+    collaboration or a compilation appearance is obvious rather than looking
+    like a record you did not know they made.
+    """
     credit = release.get("artist_credit_name", "")
-
-    # The feed reaches into the future, so an unreleased album would otherwise
-    # look like something you had somehow missed.
-    upcoming = " [upcoming]" if date > today.isoformat() else ""
-
-    # Show the full credit when it differs from the watched artist, so a
-    # collaboration or a compilation appearance is obvious.
     watched = ", ".join(names)
-    attribution = credit if credit and credit != watched else watched
+    return Release(
+        id=dedup_key(release),
+        date=release.get("release_date") or "????-??-??",
+        kind=release.get("release_group_primary_type") or "Release",
+        artist=credit if credit and credit != watched else watched,
+        title=release.get("release_name") or "(untitled)",
+        source="listenbrainz",
+    )
 
-    return f"{date}  {kind:<7}{upcoming:<11} {attribution} - {title}"
+
+class ListenbrainzRadar(Radar):
+    name = "listenbrainz"
+    # The feed also carries "Broadcast", "Other", and None (untyped); those are
+    # noise for this purpose. None arrives here as "Release" -- see normalize.
+    keep_types = {"Album", "EP", "Single"}
+    default_days = LOOKBACK_DAYS
+    days_help = "half-width of the feed window in days"
+    record_scanned = False
+    guard_empty_run = False
+
+    @property
+    def state_file(self) -> Path:
+        # Not listenbrainz_seen.json: this radar was the project's first, its
+        # state file predates the naming convention, and renaming it would
+        # silently re-report everything in the window once.
+        return DATA / "seen.json"
+
+    def watching(self) -> dict:
+        return WATCHED_ARTISTS
+
+    def empty_message(self) -> str:
+        return "WATCHED_ARTISTS is empty - add at least one MusicBrainz artist MBID."
+
+    def window(self, args) -> str:
+        return f"+/-{args.days} days around {dt.date.today().isoformat()}"
+
+    def cutoff(self, args, today: dt.date) -> str:
+        # The server already applied the window; filtering again here would
+        # halve it, because --days is a half-width, not a lookback.
+        return ""
+
+    def batches(self, args, watching: dict) -> Iterator[Batch]:
+        rows = fetch_feed(dt.date.today(), args.days)
+        matched = []
+        for row in rows:
+            names = [watching[mbid] for mbid in (row.get("artist_mbids") or [])
+                     if mbid in watching]
+            if names:
+                matched.append(normalize(row, names))
+        # scanned is the whole feed, not the matches: "scanned 3 releases"
+        # would describe the intersection, not the work.
+        yield Batch(releases=matched, scanned=len(rows))
+
+    def summary(self, args, run) -> str:
+        plural = "s" if run.watching != 1 else ""
+        return (f"Scanned {run.scanned} releases in a +/-{args.days} day window "
+                f"around {dt.date.today().isoformat()}, watching "
+                f"{run.watching} artist{plural}.")
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Report new releases from watched artists.")
-    parser.add_argument("--days", type=int, default=LOOKBACK_DAYS,
-                        help="half-width of the feed window in days "
-                             f"(default: {LOOKBACK_DAYS})")
-    parser.add_argument("--all", action="store_true",
-                        help="report everything in the window, including already-seen releases")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="report without recording anything to the state file")
-    args = parser.parse_args()
-
-    if not WATCHED_ARTISTS:
-        sys.exit("WATCHED_ARTISTS is empty - add at least one MusicBrainz artist MBID.")
-
-    today = dt.date.today()
-    releases = fetch_feed(today, args.days)
-    seen = set() if args.all else load_seen()
-
-    hits = []
-    for release in releases:
-        names = matches_watchlist(release)
-        if not names:
-            continue
-        if release.get("release_group_primary_type") not in KEEP_TYPES:
-            continue
-        # release_mbid is the stable dedup key; fall back to the release-group
-        # or a synthetic key for the rare row that carries neither.
-        key = (release.get("release_mbid")
-               or release.get("release_group_mbid")
-               or "|".join([str(release.get("artist_credit_name")),
-                            str(release.get("release_name")),
-                            str(release.get("release_date"))]))
-        if key in seen:
-            continue
-        hits.append((key, release, names))
-
-    watching = len(WATCHED_ARTISTS)
-    print(f"Scanned {len(releases)} releases in a +/-{args.days} day window "
-          f"around {today.isoformat()}, watching {watching} "
-          f"artist{'s' if watching != 1 else ''}.")
-
-    if not hits:
-        print("Nothing new.")
-        return 0
-
-    print()
-    for _, release, names in sorted(hits, key=lambda h: h[1].get("release_date", "")):
-        print(f"  {describe(release, names, today)}")
-    print()
-    print(f"{len(hits)} new release{'s' if len(hits) != 1 else ''}.")
-
-    if not args.dry_run and not args.all:
-        save_seen(seen | {key for key, _, _ in hits})
-
-    return 0
+    radar = ListenbrainzRadar()
+    args = parser(radar, "Report new releases from watched artists.").parse_args()
+    return execute(radar, args)
 
 
 if __name__ == "__main__":

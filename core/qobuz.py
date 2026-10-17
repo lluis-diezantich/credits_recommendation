@@ -136,3 +136,61 @@ def artist_name(artist_id: int, store: str = STORE,
     # A 200 with no name is Qobuz's other way of saying the id is unknown.
     name = data.get("name")
     return (name, "ok") if name else (None, "not_found")
+
+
+def artist_releases(artist_id: int, store: str,
+                    cookies: str) -> tuple[str, list[dict], bool]:
+    """(artist name, every release where they are a primary artist, succeeded).
+
+    `extra=albums_with_last_release` puts the discography under
+    `albums_without_last_release`. Paginated because prolific artists exceed
+    one page.
+
+    This was the same loop in four files -- radars/qobuz.py, stages/discover.py,
+    stages/resolve_qobuz.py and stages/resolve_discogs.py -- and they had
+    already drifted on the only interesting question, which is what to do when
+    a page fails: one raised SystemExit, one warned and returned what it had,
+    one returned silently, one handed back a flag. The flag is the shape that
+    keeps every option open, so it is the one that moved here. get_json has
+    already retried and warned by this point; the caller decides whether a
+    partial discography is fatal.
+
+    Never raises. One artist failing used to abort radars/qobuz.py's whole run,
+    and because the state file is written at the end, that threw away every
+    release found before it -- fine when the watchlist held one artist, ruinous
+    at a few hundred, where an intermittent 5xx is expected rather than
+    unlucky. Partial results are safe there: what was not seen is simply not
+    recorded as seen, so it is reported next run.
+    """
+    zone = store.split("-")[0].upper()
+    headers = {"x-app-id": APP_ID, "cookie": cookies}
+    name = "?"
+    collected: list[dict] = []
+    offset = 0
+
+    while True:
+        query = urllib.parse.urlencode({
+            "artist_id": artist_id,
+            "extra": "albums_with_last_release",
+            "limit": PAGE_LIMIT,
+            "offset": offset,
+            "zone": zone,
+            "store": store,
+        })
+        data, outcome = get_json(f"{API}/artist/get?{query}", headers,
+                                 f"artist/get {artist_id}")
+        if outcome != "ok" or not isinstance(data, dict):
+            return name, collected, False
+
+        name = data.get("name") or name
+        page = (data.get("albums_without_last_release") or {}).get("items") or []
+        # Skip releases where this artist is only a composer or a guest: the
+        # discography otherwise fills up with other people's records.
+        collected += [album for album in page
+                      if any(str(a.get("id")) == str(artist_id)
+                             for a in (album.get("artists") or []))]
+        if len(page) < PAGE_LIMIT:
+            break
+        offset += PAGE_LIMIT
+
+    return name, collected, True

@@ -52,10 +52,6 @@ import json
 import re
 import sys
 import time
-from pathlib import Path
-
-# Run directly (./radars/remezcla.py) or as a module (python -m radars.remezcla).
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bs4 import BeautifulSoup
 

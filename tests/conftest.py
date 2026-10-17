@@ -48,6 +48,8 @@ def qobuz(monkeypatch):
     callable for per-artist outcomes, then call `.run(args)`. `.saved` holds
     what would have been written to the state file, or None if nothing was.
     """
+    import core.qobuz as client
+    import core.radar as runner
     import radars.qobuz as radar
 
     class Handle:
@@ -68,12 +70,15 @@ def qobuz(monkeypatch):
 
         def run(self, args, watching=None, seen=()):
             import sys
-            monkeypatch.setattr(radar, "_get_json", self._get_json)
+            # Two seams, in two modules, because the radar is now a thin
+            # source over a shared runner: core.qobuz walks the pages, and
+            # core.radar owns the state file, the clock and the pacing.
+            monkeypatch.setattr(client, "get_json", self._get_json)
             monkeypatch.setattr(radar, "store_cookies", lambda store: "c=1")
-            monkeypatch.setattr(radar, "load_seen", lambda: set(seen))
-            monkeypatch.setattr(radar, "_save_seen",
+            monkeypatch.setattr(runner, "load_seen", lambda path: set(seen))
+            monkeypatch.setattr(runner, "save_seen",
                                 lambda path, s: setattr(self, "saved", s))
-            monkeypatch.setattr(radar.time, "sleep", lambda s: None)
+            monkeypatch.setattr(runner.time, "sleep", lambda s: None)
             if watching is not None:
                 monkeypatch.setattr(radar, "WATCHED_ARTISTS", watching)
             monkeypatch.setattr(sys, "argv", ["qobuz.py", *args])

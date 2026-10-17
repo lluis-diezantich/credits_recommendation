@@ -54,10 +54,6 @@ import unicodedata
 import urllib.parse
 from pathlib import Path
 
-# Run directly (./stages/writing.py) or as a module (python -m stages.writing):
-# either way the project root has to be importable before core/policy resolve.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
 from core.credits import parse_performers
 from core.names import normalise
 from core.paths import CACHE, DATA

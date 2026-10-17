@@ -35,17 +35,12 @@ import os
 import sys
 import time
 import urllib.parse
-from pathlib import Path
-
-# Run directly (./stages/discover.py) or as a module (python -m stages.discover):
-# either way the project root has to be importable before core/policy resolve.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core.discogs import Throttle, discogs_credits, find_discogs_artist
 from core.names import normalise, strip_discogs_suffix
 from core.paths import DATA
-from core.qobuz import API, APP_ID, PAGE_LIMIT, SITE, STORE, store_cookies
 from core.qobuz import PAUSE as QOBUZ_PAUSE
+from core.qobuz import SITE, STORE, artist_releases, store_cookies
 from core.qobuz import get as _qobuz_get
 from policy import (
     CLASS_NAMES,
@@ -124,30 +119,6 @@ def qobuz_find_artist(name: str, store: str) -> tuple[dict | None, str]:
             return None, f"http_{status}"
         time.sleep(0.8 * (attempt + 1))        # transient: back off and retry
     return None, "http_5xx"
-
-
-def qobuz_releases(artist_id: int, store: str, cookies: str) -> list[dict]:
-    zone = store.split("-")[0].upper()
-    headers = {"x-app-id": APP_ID, "cookie": cookies}
-    collected, offset = [], 0
-    while True:
-        query = urllib.parse.urlencode({
-            "artist_id": artist_id, "extra": "albums_with_last_release",
-            "limit": PAGE_LIMIT, "offset": offset, "zone": zone, "store": store})
-        status, body, _ = _qobuz_get(f"{API}/artist/get?{query}", headers)
-        if status != 200:
-            return collected
-        try:
-            data = json.loads(body)
-        except json.JSONDecodeError:
-            return collected
-        page = (data.get("albums_without_last_release") or {}).get("items") or []
-        collected += [a for a in page
-                      if any(str(x.get("id")) == str(artist_id)
-                             for x in (a.get("artists") or []))]
-        if len(page) < PAGE_LIMIT:
-            return collected
-        offset += PAGE_LIMIT
 
 
 def main() -> int:
@@ -468,7 +439,8 @@ def build_pool(args, seed, known_qobuz, collaborators) -> int:
                   "score": round(best["role_weight"] * best["selectivity"] * embedded, 4),
                   "flags": (["single_token_name"]
                             if len((artist.get("qobuz_name") or "").split()) == 1 else [])}
-        for release in qobuz_releases(artist["qobuz_id"], args.store, cookies):
+        _, releases, _ = artist_releases(artist["qobuz_id"], args.store, cookies)
+        for release in releases:
             rid = str(release.get("id") or "")
             if not rid or rid in seen:
                 continue

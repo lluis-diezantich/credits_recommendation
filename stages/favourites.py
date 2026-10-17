@@ -43,10 +43,6 @@ import datetime as dt
 import json
 import sys
 import time
-from pathlib import Path
-
-# Run directly (./stages/favourites.py) or as a module (python -m stages.favourites).
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core import favourites
 from core.http import get as _http_get

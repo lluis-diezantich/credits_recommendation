@@ -3,17 +3,12 @@
 # Scoped in the name on purpose: this one only ever reports artists already in
 # data/favourites.json. Releases from artists you do NOT know is a different
 # job with a different precision/recall trade -- the credits pools, the
-# Remezcla picks, the fresh-releases feed -- and belongs in its own workflow
+# Remezcla picks, the fresh-releases feed -- and belongs in its own caller
 # writing its own issues, so one can be noisy without making the other
 # untrustworthy.
 #
-# Stateless on purpose. data/qobuz_seen.json is gitignored and a runner has no
-# disk between runs, so the two alternatives were committing 136 KB of ids back
-# every week, or actions/cache -- where an eviction silently resets the radar to
-# "everything is new" and reports 8,000 releases as a week's news. Instead the
-# date window does the filtering: --all ignores the state file and writes
-# nothing. The cost is that a release can appear in two consecutive issues when
-# DAYS exceeds seven, which is cheap and visible, unlike a cache miss.
+# The steps live in .github/workflows/radar.yml. This file is only the two
+# decisions that are actually about THIS radar: when to look, and with what.
 #
 # Needs no secrets: the watchlist (data/favourites.json) is committed and the
 # Qobuz app id is a public web-player value, not a key.
@@ -44,47 +39,10 @@ permissions:
   issues: write
 
 jobs:
-  radar:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Install
-        run: pip install -e .
-
-      - name: Run the radar
-        env:
-          DAYS: ${{ inputs.days || '10' }}
-          STORE: ${{ inputs.store || 'gb-en' }}
-        run: |
-          set -euo pipefail
-          python3 radars/qobuz.py --all --days "$DAYS" --store "$STORE" \
-            --json releases.json 2> warnings.txt || {
-              echo "::error::the radar exited non-zero"
-              cat warnings.txt
-              exit 1
-            }
-          cat warnings.txt
-
-      - name: Format it
-        # Per-artist warnings are the early sign of Qobuz refusing a datacenter
-        # IP, so they go into the issue rather than only the run log.
-        run: |
-          set -euo pipefail
-          python3 radars/report.py releases.json --warnings warnings.txt > body.md
-          cat body.md >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Open the issue
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh issue create \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "releases: known artists @$(date -u +%F)" \
-            --body-file body.md
+  qobuz:
+    uses: ./.github/workflows/radar.yml
+    with:
+      radar: radars/qobuz.py
+      title: "releases: known artists"
+      days: ${{ inputs.days || '10' }}
+      extra: --store ${{ inputs.store || 'gb-en' }}

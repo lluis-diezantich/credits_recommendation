@@ -5,19 +5,23 @@ Qobuz cannot see. Its 25 req/min (60 with a token) is the binding constraint on
 the whole pipeline, so the Throttle here reads Discogs' own headers rather than
 guessing.
 
-Lifted verbatim from the original discogs_resolve.py, including the page-1 gate
-that lets a caller stop before paying for pages 2..n.
+Lifted from the original discogs_resolve.py, including the page-1 gate that
+lets a caller stop before paying for pages 2..n. The hand-rolled urlopen went
+with the rest of them: this now goes through core/http.py, which pools the
+connection and honours Retry-After. The 429 backoff below STAYS, because
+urllib3 retries a 429 in 0.8/1.6/3.2s and Discogs is counting a 60-second
+rolling window -- the adapter's three tries all land inside the same closed
+window, and the long sleep is what actually reopens it.
 """
 from __future__ import annotations
 
 import json
 import sys
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
 from collections.abc import Callable
 
+from core.http import get as http_get
 from core.names import normalise, strip_discogs_suffix
 
 DISCOGS = "https://api.discogs.com"
@@ -64,28 +68,30 @@ class Throttle:
 
 def discogs_get(path: str, throttle: Throttle, token: str | None,
                 attempt: int = 0) -> dict | None:
+    """One Discogs GET, or None. Never raises -- a caller is mid-loop.
+
+    The rate-limit header is read on every outcome, not just the happy one:
+    a 429 is precisely when its value matters.
+    """
     throttle.wait()
-    url = f"{DISCOGS}{path}"
-    headers = {"User-Agent": DISCOGS_UA}
-    if token:
-        headers["Authorization"] = f"Discogs token={token}"
-    request = urllib.request.Request(url, headers=headers)
+    headers = {"Authorization": f"Discogs token={token}"} if token else {}
+    status, body, response_headers = http_get(
+        f"{DISCOGS}{path}", headers=headers, timeout=30,
+        user_agent=DISCOGS_UA, service="Discogs", fatal=False)
+    throttle.note(response_headers)
+    if status == 0:
+        print(f"warning: discogs {path} unreachable: {body}", file=sys.stderr)
+        return None
+    if status == 429 and attempt < 3:
+        back = 20 * (attempt + 1)
+        print(f"  [throttle] HTTP 429, backing off {back}s", file=sys.stderr)
+        time.sleep(back)
+        return discogs_get(path, throttle, token, attempt + 1)
+    if status != 200:
+        print(f"warning: discogs {path} HTTP {status}", file=sys.stderr)
+        return None
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            throttle.note(response.headers)
-            return json.loads(response.read().decode("utf-8", "replace"))
-    except urllib.error.HTTPError as error:
-        throttle.note(error.headers)
-        if error.code == 429 and attempt < 3:
-            back = 20 * (attempt + 1)
-            print(f"  [throttle] HTTP 429, backing off {back}s", file=sys.stderr)
-            time.sleep(back)
-            return discogs_get(path, throttle, token, attempt + 1)
-        print(f"warning: discogs {path} HTTP {error.code}", file=sys.stderr)
-        return None
-    except urllib.error.URLError as error:
-        print(f"warning: discogs {path} unreachable: {error.reason}", file=sys.stderr)
-        return None
+        return json.loads(body)
     except json.JSONDecodeError:
         return None
 

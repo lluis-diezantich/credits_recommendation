@@ -29,6 +29,12 @@ dev = [
 # exists to pull requests in, not to ship anything.
 [tool.setuptools]
 packages = ["core", "stages", "radars"]
+# policy.py is a single module at the root, not a package, and naming it here is
+# what lets `./stages/discover.py` import it. Running a file directly puts
+# stages/ on sys.path, never the root -- which the scripts used to paper over
+# with a sys.path.insert line each. The install replaces those ten lines, so it
+# has to cover everything they reached, policy.py included.
+py-modules = ["policy"]
 
 [tool.pytest.ini_options]
 # So `import core.qobuz` works without a sys.path line in every test file.

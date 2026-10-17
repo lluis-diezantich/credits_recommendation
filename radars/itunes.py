@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """A personal new-release radar, backed by the iTunes Search API.
 
-Companion to fresh_releases.py, which reads the ListenBrainz feed. That one is
-a single global request filtered locally, and inherits MusicBrainz's coverage
+Companion to listenbrainz.py, which reads the ListenBrainz feed. That one is a
+single global request filtered locally, and inherits MusicBrainz's coverage
 gaps: it does not know about releases MusicBrainz has not registered yet, which
 in practice means a lot of singles and a lot of non-Anglophone artists.
 
@@ -11,48 +11,32 @@ better coverage of what actually came out, but it can only ever tell you about
 artists you have listed.
 
 No API key and no auth. `requests` via core/http.py for the pooling and the
-retry policy.
+retry policy. The run itself is core/radar.py, shared with the other two --
+which is how this radar acquired --json and the broken-run guard it had been
+missing: an Apple outage used to report "Nothing new." and look correct.
 
-    ./itunes_releases.py              # new releases from the last 90 days
-    ./itunes_releases.py --days 365   # widen the reporting window
-    ./itunes_releases.py --days 0     # no date cutoff (first run: whole discography)
-    ./itunes_releases.py --all        # ignore the state file
-    ./itunes_releases.py --dry-run    # report without recording anything
+    ./radars/itunes.py              # new releases from the last 90 days
+    ./radars/itunes.py --days 365   # widen the reporting window
+    ./radars/itunes.py --days 0     # no date cutoff (first run: whole discography)
+    ./radars/itunes.py --all        # ignore the state file
+    ./radars/itunes.py --dry-run    # report without recording anything
 """
 
 from __future__ import annotations
 
-import argparse
-import datetime as dt
 import json
 import sys
-import time
 import urllib.parse
-from pathlib import Path
-
-# Run directly (./radars/qobuz.py) or as a module (python -m radars.qobuz).
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from collections.abc import Iterator
 
 from core import favourites
 from core.http import get as http_get
-from core.paths import DATA
-from core.state import load_seen as _load_seen
-from core.state import save_seen as _save_seen
-
-STATE_FILE = DATA / "itunes_seen.json"
-
-
-def load_seen() -> set[str]:
-    return _load_seen(STATE_FILE)
-
-
-def save_seen(seen: set[str]) -> None:
-    _save_seen(STATE_FILE, seen)
+from core.radar import Batch, Radar, Release, execute, parser
 
 # --- what you watch -------------------------------------------------------
 # Apple artist IDs, which are NOT MusicBrainz MBIDs. This is deliberately a
-# separate namespace (and a separate state file) from fresh_releases.py, so the
-# two scripts never have to agree about artist identity.
+# separate namespace (and a separate state file) from listenbrainz.py, so the
+# two radars never have to agree about artist identity.
 #
 # To find an ID:
 #   curl -s "https://itunes.apple.com/search?term=Jorge+Drexler&entity=musicArtist&limit=3" \
@@ -68,11 +52,6 @@ WATCHED_ARTISTS: dict[int, str] = favourites.ids_for("itunes_id", {
 # in the US store, 66 in ES, 69 in UY. If a release you expect is missing, try
 # the artist's home storefront before assuming the API is at fault.
 STOREFRONT = "US"
-
-# Release types to report. Apple has no usable type field (`collectionType` is
-# literally "Album" even for a one-track single), so this is inferred from the
-# title suffix -- see classify().
-KEEP_TYPES = {"Album", "EP", "Single"}
 
 # Only report releases at most this many days old. This is what stops the first
 # run from dumping a 40-year back catalogue at you: everything gets recorded to
@@ -136,105 +115,71 @@ def clean_title(row: dict) -> str:
     return name
 
 
-def normalize(row: dict, label: str) -> dict:
-    """One release, in the same shape fresh_releases.py reports.
+def normalize(row: dict, label: str) -> Release:
+    """One Apple result row as a Release.
 
-    Keeping the two scripts' records structurally similar is deliberate: if
-    they are ever merged, the shared part is the reporting stage, and this is
-    the seam it would work against.
+    `hires` and `streamable` are left unset rather than False: Apple does not
+    say, and core.radar.Release distinguishes "no" from "no idea".
     """
-    return {
-        "date": (row.get("releaseDate") or "")[:10] or "????-??-??",
-        "type": classify(row),
-        "artist": row.get("artistName") or label,
-        "title": clean_title(row),
-        "id": str(row.get("collectionId") or ""),
-        "source": "itunes",
-        "tracks": row.get("trackCount") or 0,
-    }
+    return Release(
+        id=str(row.get("collectionId") or ""),
+        date=(row.get("releaseDate") or "")[:10] or "????-??-??",
+        kind=classify(row),
+        artist=row.get("artistName") or label,
+        title=clean_title(row),
+        source="itunes",
+        tracks=row.get("trackCount") or 0,
+    )
 
 
-def describe(release: dict, today: dt.date) -> str:
-    # Apple lists pre-orders with a future date, so flag those rather than
-    # letting them look like something you had missed.
-    upcoming = " [upcoming]" if release["date"] > today.isoformat() else ""
-    tracks = f"({release['tracks']} tr)" if release["tracks"] else ""
-    return (f"{release['date']}  {release['type']:<7}{upcoming:<11} "
-            f"{release['artist']} - {release['title']} {tracks}".rstrip())
+class ItunesRadar(Radar):
+    name = "itunes"
+    # Apple has no usable type field (`collectionType` is literally "Album"
+    # even for a one-track single), so this is inferred -- see classify().
+    keep_types = {"Album", "EP", "Single"}
+    pause = REQUEST_PAUSE_SECONDS
+    default_days = RECENT_DAYS
+
+    def watching(self) -> dict:
+        return WATCHED_ARTISTS
+
+    def empty_message(self) -> str:
+        return "WATCHED_ARTISTS is empty - add at least one Apple artist ID."
+
+    def batches(self, args, watching: dict) -> Iterator[Batch]:
+        for artist_id, label in watching.items():
+            try:
+                rows = fetch_artist_releases(artist_id)
+            except (RuntimeError, json.JSONDecodeError) as error:
+                # One artist failing should not lose the whole run.
+                yield Batch(ok=False, label=label,
+                            warning=f"{label} ({artist_id}) lookup failed: {error}")
+                continue
+            warning = "" if rows else (
+                f"{label} ({artist_id}) returned no releases "
+                f"- wrong ID, or nothing in the {STOREFRONT} store?")
+            yield Batch(releases=[normalize(row, label) for row in rows],
+                        label=label, warning=warning)
+
+    def summary(self, args, run) -> str:
+        plural = "s" if run.watching != 1 else ""
+        return (f"Scanned {run.scanned} releases from {run.fetched} of "
+                f"{run.watching} artist{plural} in the {STOREFRONT} store "
+                f"({self.window(args)}).")
+
+    def report_extra(self, args) -> dict:
+        return {"store": STOREFRONT}
+
+    def broken_run_message(self, run) -> str:
+        plural = "s" if run.calls != 1 else ""
+        return (f"nothing came back from any of {run.calls} artist{plural} "
+                f"({run.failed} failed, {run.empty} returned no releases)")
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Report new releases from watched artists via iTunes.")
-    parser.add_argument("--days", type=int, default=RECENT_DAYS,
-                        help="only report releases this recent; 0 disables "
-                             f"(default: {RECENT_DAYS})")
-    parser.add_argument("--all", action="store_true",
-                        help="report everything, including already-seen releases")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="report without recording anything to the state file")
-    args = parser.parse_args()
-
-    if not WATCHED_ARTISTS:
-        sys.exit("WATCHED_ARTISTS is empty - add at least one Apple artist ID.")
-
-    today = dt.date.today()
-    cutoff = (today - dt.timedelta(days=args.days)).isoformat() if args.days > 0 else ""
-    seen = set() if args.all else load_seen()
-
-    found: list[dict] = []
-    everything: set[str] = set()
-    scanned = 0
-
-    for index, (artist_id, label) in enumerate(WATCHED_ARTISTS.items()):
-        if index:
-            time.sleep(REQUEST_PAUSE_SECONDS)
-        try:
-            rows = fetch_artist_releases(artist_id)
-        except (RuntimeError, json.JSONDecodeError) as error:
-            # One artist failing should not lose the whole run.
-            print(f"warning: {label} ({artist_id}) lookup failed: {error}", file=sys.stderr)
-            continue
-
-        if not rows:
-            print(f"warning: {label} ({artist_id}) returned no releases "
-                  f"- wrong ID, or nothing in the {STOREFRONT} store?", file=sys.stderr)
-            continue
-
-        scanned += len(rows)
-        for row in rows:
-            release = normalize(row, label)
-            if not release["id"]:
-                continue
-            everything.add(release["id"])
-            if release["id"] in seen:
-                continue
-            if release["type"] not in KEEP_TYPES:
-                continue
-            if cutoff and release["date"] < cutoff:
-                continue
-            found.append(release)
-
-    watching = len(WATCHED_ARTISTS)
-    window = f"last {args.days} days" if args.days > 0 else "all dates"
-    print(f"Scanned {scanned} releases from {watching} "
-          f"artist{'s' if watching != 1 else ''} in the {STOREFRONT} store ({window}).")
-
-    if not found:
-        print("Nothing new.")
-    else:
-        print()
-        for release in sorted(found, key=lambda r: r["date"]):
-            print(f"  {describe(release, today)}")
-        print()
-        print(f"{len(found)} new release{'s' if len(found) != 1 else ''}.")
-
-    # Record everything seen this run, not just what was reported, so the date
-    # cutoff does not cause old releases to be re-reported later.
-    if not args.dry_run and not args.all and everything:
-        save_seen(seen | everything)
-
-    return 0
+    radar = ItunesRadar()
+    args = parser(radar, "Report new releases from watched artists via iTunes.").parse_args()
+    return execute(radar, args)
 
 
 if __name__ == "__main__":

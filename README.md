@@ -12,15 +12,10 @@ cannot: sharing a producer means something, sharing a mastering house does not.
 | new releases from artists you already know | `radars/qobuz.py` over `data/favourites.json` | Fridays, as a GitHub issue |
 | the test suite | `pytest` | every push and pull request |
 
-Everything else is a script you run by hand.
-
 ## Install
 
     python3 -m venv .venv && ./.venv/bin/pip install -e ".[dev]"
 
-`requests` for connection pooling and retries, since a radar run makes ~90
-sequential calls to one host; `beautifulsoup4` for the one radar that reads
-HTML. `pytest` and `ruff` are dev-only.
 
 ## Running it
 
@@ -38,7 +33,7 @@ resumes a run that died partway through its fan-out.
 
     policy.py          scoring judgement calls - ONE copy, at the root, on purpose
     core/              plumbing - http, names, credits, qobuz, discogs, favourites,
-                       state, paths
+                       state, paths, radar (the shared radar run)
     stages/            the pipeline, in order
       favourites.py      ListenBrainz top artists -> Qobuz ids -> favourites.json
       discover.py        seed artist -> credits -> people          [EXACT]
@@ -46,13 +41,14 @@ resumes a run that died partway through its fan-out.
       resolve_discogs.py the ones Qobuz cannot see -> pool_discogs  [LOSSY]
       writing.py         one person -> what they WROTE, anywhere   [CACHED]
       load.py            all of the above -> data/music.db         [DERIVED]
-    radars/            new-release watchers, independent, own state each
-      qobuz.py  listenbrainz.py  itunes.py  remezcla.py
+    radars/            new-release watchers, one thin source each
+      qobuz.py  listenbrainz.py  itunes.py    core/radar.py drives these three
+      remezcla.py        a blog, not an id namespace - its own script
       report.py          a radar's JSON -> markdown, for the weekly issue
     tests/             pytest, offline - every network call stubbed at the seam
     data/              generated JSON, gitignored except favourites.json
     cache/             API responses - the source of truth, never regenerated
-    .github/workflows/ the weekly issue, and the tests
+    .github/workflows/ radar.yml runs any radar; one caller per schedule
     contrib/           qobuz_keys.py - vendored gist, not ours
 
 `data/music.db` is derived and disposable: `./stages/load.py` rebuilds 216k rows
@@ -77,8 +73,10 @@ the corpus.
   do: alert on records made by *people* you follow. The pools hold 7,860
   candidate releases and nothing consumes them. One `album/get` per fresh
   release, cached.
-- **`core/model.py`.** No normalised `Release`, so album identity is unresolved
-  and two editions of one record are two rows. See
+- **Album identity.** `core/radar.Release` now normalises what the radars
+  report, but it is a *reporting* record keyed on each store's own id: two
+  editions of one album are still two rows, and nothing reconciles a Qobuz id
+  with an MBID. The pools are untouched by it. See
   [architecture.md](docs/architecture.md).
 - **A ranker.** 7,860 candidates, each with an explainable `via.signal.score`,
   and no order.

@@ -1,0 +1,118 @@
+# One radar run, as a reusable workflow. Called, never scheduled.
+#
+# Every radar needs the same nine steps: check out, install, run, format,
+# open an issue, keep the evidence. The only things that differ are which
+# script to run, what to call the issue, and the flags that script happens to
+# take. Those are the inputs below, so a new radar costs a caller file of
+# about fifteen lines rather than a copy of this one that slowly drifts.
+#
+# Deliberately NOT scheduled here: a `schedule:` in a reusable workflow does
+# nothing. Each radar's own caller owns its cron, which is also where the
+# decision about how often to look belongs.
+name: radar
+
+on:
+  workflow_call:
+    inputs:
+      radar:
+        description: "the radar script to run, e.g. radars/qobuz.py"
+        required: true
+        type: string
+      title:
+        description: "issue title prefix; the run date is appended"
+        required: true
+        type: string
+      days:
+        description: "how many days back to report"
+        default: "10"
+        type: string
+      extra:
+        description: "extra flags for the radar, e.g. --store gb-en"
+        default: ""
+        type: string
+      stateless:
+        # True until the state file has somewhere durable to live. A runner has
+        # no disk between runs, so the alternatives were committing the ids
+        # back every week or actions/cache, where an eviction silently resets
+        # the radar to "everything is new" and reports the back catalogue as a
+        # week's news. The date window does the filtering instead: --all
+        # ignores the state file and writes nothing. The cost is that a release
+        # can appear in two consecutive issues when days exceeds seven, which
+        # is cheap and visible, unlike a cache miss.
+        description: "ignore the state file (--all), because CI has no durable disk"
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  radar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e .
+
+      - name: Run the radar
+        env:
+          RADAR: ${{ inputs.radar }}
+          DAYS: ${{ inputs.days }}
+          EXTRA: ${{ inputs.extra }}
+          STATELESS: ${{ inputs.stateless }}
+        run: |
+          set -euo pipefail
+          # read -ra, not an unquoted expansion: the flags are split on
+          # whitespace into an array without handing the string to a shell.
+          read -ra EXTRA_ARGS <<< "$EXTRA"
+          ARGS=(--days "$DAYS" --json releases.json --run-log runs.jsonl)
+          # An `if`, not `[ ... ] && ...`: under `set -e` a false test at
+          # statement level is a non-zero exit and kills the step.
+          if [ "$STATELESS" = "true" ]; then ARGS+=(--all); fi
+          python3 "$RADAR" "${ARGS[@]}" "${EXTRA_ARGS[@]}" 2> warnings.txt || {
+              echo "::error::the radar exited non-zero"
+              cat warnings.txt
+              exit 1
+            }
+          cat warnings.txt
+
+      - name: Format it
+        # Per-artist warnings are the early sign of a service refusing a
+        # datacenter IP, so they go into the issue rather than only the run log.
+        run: |
+          set -euo pipefail
+          python3 radars/report.py releases.json --warnings warnings.txt > body.md
+          cat body.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: ${{ inputs.title }}
+        run: |
+          set -euo pipefail
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$TITLE @$(date -u +%F)" \
+            --body-file body.md
+
+      - name: Keep the evidence
+        # 90 days of run history for free, and the closest thing to a durable
+        # run log until there is somewhere to put one. `if: always()` because a
+        # failed run is the one worth looking at.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: radar-${{ github.run_id }}
+          path: |
+            releases.json
+            warnings.txt
+            runs.jsonl
+          retention-days: 90
+          if-no-files-found: ignore

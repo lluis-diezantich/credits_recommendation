@@ -58,13 +58,21 @@ SESSION = _session()
 
 def get(url: str, headers: dict[str, str] | None = None,
         timeout: int = DEFAULT_TIMEOUT, user_agent: str = "Mozilla/5.0",
-        service: str = "the service"):
+        service: str = "the service", fatal: bool = True):
     """GET returning (status, body, response-headers).
 
     HTTP errors come back as a status so callers can read the API's own
     message; a dead network is fatal, because retrying it silently helps
     nobody. 5xx and 429 have already been retried by the adapter before a
     status reaches you, so a 503 here means it stayed broken.
+
+    `fatal=False` downgrades a dead network to `(0, reason, {})` instead, for
+    the caller that cannot afford to exit: core/discogs.py walks hundreds of
+    people at 25 requests a minute and its stage writes nothing until the end,
+    so a SystemExit from the middle of that loop throws away every lookup
+    already paid for. 0 is not a real HTTP status, so anything already checking
+    `status != 200` handles it; the reason arrives in the body slot, where the
+    caller can put it in its own warning rather than printing a second line.
     """
     try:
         response = SESSION.get(
@@ -74,6 +82,8 @@ def get(url: str, headers: dict[str, str] | None = None,
             allow_redirects=True,
         )
     except requests.RequestException as error:
+        if not fatal:
+            return 0, str(error), {}
         raise SystemExit(f"network error talking to {service}: {error}") from error
     return response.status_code, response.text, response.headers
 

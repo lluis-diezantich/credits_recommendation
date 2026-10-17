@@ -29,25 +29,17 @@ import datetime as dt
 import json
 import sys
 import time
-import urllib.parse
 from pathlib import Path
-
-# Run directly (./stages/discover.py) or as a module (python -m stages.discover):
-# either way the project root has to be importable before core/policy resolve.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core.paths import DATA
 from core.qobuz import (
-    API,
-    APP_ID,
-    PAGE_LIMIT,
     PAUSE,
     STORE,
+    artist_releases,
     pick,
     search_artists,
     store_cookies,
 )
-from core.qobuz import get as _get
 from policy import WEAK_CLASSES, role_weight
 
 
@@ -73,31 +65,6 @@ def signal_for(artist: dict) -> dict:
     return {"role_weight": round(weight, 3), "seed_albums": seed_albums,
             "embedded": round(embedded, 3),
             "score": round(weight * embedded, 4), "flags": flags}
-
-
-def artist_releases(artist_id: int, store: str, cookies: str) -> list[dict]:
-    zone = store.split("-")[0].upper()
-    headers = {"x-app-id": APP_ID, "cookie": cookies}
-    collected, offset = [], 0
-    while True:
-        query = urllib.parse.urlencode({
-            "artist_id": artist_id, "extra": "albums_with_last_release",
-            "limit": PAGE_LIMIT, "offset": offset, "zone": zone, "store": store})
-        status, body, _ = _get(f"{API}/artist/get?{query}", headers)
-        if status != 200:
-            print(f"warning: artist/get {artist_id} HTTP {status}", file=sys.stderr)
-            return collected
-        try:
-            data = json.loads(body)
-        except json.JSONDecodeError:
-            return collected
-        page = (data.get("albums_without_last_release") or {}).get("items") or []
-        collected += [a for a in page
-                      if any(str(x.get("id")) == str(artist_id)
-                             for x in (a.get("artists") or []))]
-        if len(page) < PAGE_LIMIT:
-            return collected
-        offset += PAGE_LIMIT
 
 
 def load_mutes(path: Path) -> set[int]:
@@ -230,7 +197,8 @@ def main() -> int:
     pool, seen_ids = [], set()
     seed_id = str(seed["qobuz_id"])
     for index, artist in enumerate(watching, 1):
-        for release in artist_releases(artist["qobuz_id"], args.store, cookies):
+        _, releases, _ = artist_releases(artist["qobuz_id"], args.store, cookies)
+        for release in releases:
             rid = str(release.get("id") or "")
             if not rid or rid in seen_ids:
                 continue

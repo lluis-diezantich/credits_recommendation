@@ -16,6 +16,11 @@ data/*.db
 data/*.duckdb
 data/*.parquet
 
+# Run log, appended to by --run-log. One line per radar run, and the shape
+# that turns into a table the day there is a database to put it in.
+data/runs.jsonl
+runs.jsonl
+
 # API response cache - saves calls, means nothing to anyone else.
 cache/
 

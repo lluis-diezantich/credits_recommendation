@@ -32,14 +32,10 @@ import time
 import urllib.parse
 from pathlib import Path
 
-# Run directly (./stages/discover.py) or as a module (python -m stages.discover):
-# either way the project root has to be importable before core/policy resolve.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
 from core.credits import parse_performers
 from core.names import normalise
 from core.paths import CACHE, DATA
-from core.qobuz import API, APP_ID, PAGE_LIMIT, PAUSE, STORE, store_cookies
+from core.qobuz import API, APP_ID, PAUSE, STORE, artist_releases, store_cookies
 from core.qobuz import get as _get
 from core.qobuz import message as _message
 from policy import MUSICAL_ROLES, classify_roles
@@ -50,36 +46,35 @@ SEED_ARTIST = 41620          # Jorge Drexler
 
 
 def seed_releases(artist_id: int, store: str, cookies: str) -> tuple[str, list[dict]]:
-    """(seed name, releases where the seed is a primary artist)."""
-    zone = store.split("-")[0].upper()
-    headers = {"x-app-id": APP_ID, "cookie": cookies}
-    name, collected, offset = "?", [], 0
-    while True:
-        query = urllib.parse.urlencode({
-            "artist_id": artist_id, "extra": "albums_with_last_release",
-            "limit": PAGE_LIMIT, "offset": offset, "zone": zone, "store": store})
-        status, body, _ = _get(f"{API}/artist/get?{query}", headers)
-        if status != 200:
-            raise SystemExit(f"artist/get failed (HTTP {status}): {_message(body)}")
-        data = json.loads(body)
-        name = data.get("name") or name
-        page = (data.get("albums_without_last_release") or {}).get("items") or []
-        collected += [a for a in page
-                      if any(str(x.get("id")) == str(artist_id)
-                             for x in (a.get("artists") or []))]
-        if len(page) < PAGE_LIMIT:
-            return name, collected
-        offset += PAGE_LIMIT
+    """(seed name, releases where the seed is a primary artist).
+
+    A partial discography IS fatal here, unlike in the radars: every later
+    number in the file -- who the seed worked with, on how many albums -- is
+    computed over this list, so a half-read one produces a plausible,
+    silently wrong discovery file. core.qobuz has already warned with the
+    API's own message by the time this raises.
+    """
+    name, releases, ok = artist_releases(artist_id, store, cookies)
+    if not ok:
+        raise SystemExit(f"could not read the discography for artist {artist_id} "
+                         "- see the warning above")
+    return name, releases
 
 
-def album_tracks(album_id: str, store: str, cookies: str, refresh: bool) -> list[dict] | None:
-    """Tracks for one album, cached on disk. None means the fetch failed."""
+def album_tracks(album_id: str, store: str, cookies: str,
+                 refresh: bool) -> tuple[list[dict] | None, bool]:
+    """(tracks for one album, came-from-cache). None tracks means it failed.
+
+    The second value exists so the caller can skip the politeness pause on a
+    cache hit. Without it, a fully cached re-run still slept PAUSE per release
+    and took half a minute to do nothing.
+    """
     CACHE_DIR.mkdir(exist_ok=True)
     safe = urllib.parse.quote(str(album_id), safe="")
     cached = CACHE_DIR / f"{store}_{safe}.json"
     if cached.exists() and not refresh:
         try:
-            return json.loads(cached.read_text())
+            return json.loads(cached.read_text()), True
         except (json.JSONDecodeError, OSError):
             pass   # fall through and refetch
     zone = store.split("-")[0].upper()
@@ -88,17 +83,17 @@ def album_tracks(album_id: str, store: str, cookies: str, refresh: bool) -> list
                            {"x-app-id": APP_ID, "cookie": cookies})
     if status != 200:
         print(f"warning: album/get {album_id} HTTP {status}: {_message(body)}", file=sys.stderr)
-        return None
+        return None, False
     try:
         tracks = (json.loads(body).get("tracks") or {}).get("items") or []
     except json.JSONDecodeError:
         print(f"warning: album/get {album_id} returned non-JSON", file=sys.stderr)
-        return None
+        return None, False
     # Cache only what this step needs.
     slim = [{"id": t.get("id"), "title": t.get("title"),
              "performers": t.get("performers") or ""} for t in tracks]
     cached.write_text(json.dumps(slim))
-    return slim
+    return slim, False
 
 
 def main() -> int:
@@ -126,7 +121,7 @@ def main() -> int:
     fetched = 0
 
     for index, release in enumerate(releases, 1):
-        tracks = album_tracks(release["id"], args.store, cookies, args.refresh)
+        tracks, from_cache = album_tracks(release["id"], args.store, cookies, args.refresh)
         if tracks is None:
             failed += 1
             continue
@@ -154,7 +149,8 @@ def main() -> int:
                         album["roles"].append(role)
         if index % 15 == 0:
             print(f"  ...{index}/{len(releases)}", file=sys.stderr)
-        time.sleep(PAUSE if not (CACHE_DIR / "x").exists() else 0)
+        if not from_cache:
+            time.sleep(PAUSE)
 
     def is_musical(entry: dict) -> bool:
         return any(r.lower() in MUSICAL_ROLES for r in entry["roles"])
