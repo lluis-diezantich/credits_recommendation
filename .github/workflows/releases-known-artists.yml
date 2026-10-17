@@ -36,7 +36,7 @@ on:
     inputs:
       days:
         description: "how many days back to report"
-        default: "10"
+        default: "7"
       store:
         description: "Qobuz storefront"
         default: "gb-en"
