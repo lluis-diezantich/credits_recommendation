@@ -94,7 +94,7 @@ def credits_by_person(performers: str) -> dict[str, set[str]]:
     return out
 
 
-def title_key(title: str) -> str:
+def title_key(title: str | None) -> str:
     """Fold a track title to a song key.
 
     Strips accents, case, bracketed and parenthesised decoration (feat., en
@@ -134,6 +134,156 @@ def collapse(keys: list[str]) -> dict[str, str]:
 def is_covers_mill(name: str) -> bool:
     low = normalise(name)
     return any(hint in low for hint in COVERS_MILL_HINTS)
+
+
+def classify_rows(rows: list[dict], aliases: set[str]) -> list[dict]:
+    """The track rows this person holds a writing credit on, one dict each.
+
+    Extracted from run_one so it can be tested without a network or a CLI: it
+    is pure, and it is where every per-track judgement happens -- whose credit
+    counts as theirs, who else composed, which tier that implies, and whether
+    they are on the recording at all.
+
+    A row they do not write on is dropped here rather than carried with a flag,
+    because the whole file is about what they wrote.
+    """
+    hits = []
+    for track in rows:
+        people = credits_by_person(track.get("performers") or "")
+        mine: set[str] = set()
+        for name, roles in people.items():
+            if name in aliases:
+                mine |= roles
+        if not (mine & WRITING_ROLES):
+            continue
+        co_composers = [name for name, roles in people.items()
+                        if name not in aliases and (roles & COMPOSER_ROLES)]
+        tier = writing_tier(mine, bool(co_composers))
+        performer = ((track.get("performer") or {}).get("name") or "")
+        performs = bool(mine & PERFORMANCE_ROLES) or normalise(performer) in aliases
+        hits.append({
+            "title": track.get("title"), "key": title_key(track.get("title") or ""),
+            # How many people this release credits at all. A master release
+            # lists 40+; a karaoke re-record lists 2. Used to pick which
+            # recording's tier to trust -- see fold_songs.
+            "credit_depth": len(people),
+            "co_composers": co_composers,
+            "performer": performer, "album": ((track.get("album") or {}).get("title")),
+            "album_id": ((track.get("album") or {}).get("id")),
+            "tier": tier, "roles": sorted(mine & WRITING_ROLES),
+            "performs": performs,
+        })
+    return hits
+
+
+def flag_album_wide_credits(hits: list[dict]) -> set[str]:
+    """Flag the hits that are a blanket album credit, and return those albums.
+
+    Every track of "Amigo É Casa (Special Edition)" carries the same lone
+    Author credit. That is a credit on the album, not authorship of 25 songs.
+    Signature: 4+ tracks from one album, all carrying the same single role, and
+    none of them performed by the person -- a writer who also plays on four of
+    their own tracks is not a smear.
+
+    Mutates `hits`, adding "album_wide_credit" to their flags, because the flag
+    belongs to the row and the caller needs the album count for its summary.
+    """
+    by_album: dict = collections.defaultdict(list)
+    for hit in hits:
+        by_album[hit["album_id"]].append(hit)
+    smeared = set()
+    for album_id, group in by_album.items():
+        roles = {tuple(h["roles"]) for h in group}
+        if (album_id and len(group) >= 4 and len(roles) == 1
+                and len(next(iter(roles))) == 1
+                and not any(h["performs"] for h in group)):
+            smeared.add(album_id)
+            for hit in group:
+                hit.setdefault("flags", []).append("album_wide_credit")
+    return smeared
+
+
+def fold_songs(hits: list[dict]) -> list[dict]:
+    """Many track rows into one row per SONG, sorted and ready to write.
+
+    The other half of what run_one used to do inline, and the half that holds
+    the two judgements worth arguing with -- both recorded where they are made:
+    a song's tier is a PLURALITY across recordings rather than the deepest or
+    the strongest single claim, and the performer order excludes covers mills
+    from the sort so a karaoke pile cannot outrank a Mercedes Sosa cover.
+    """
+    canon = collapse([h["key"] for h in hits])
+    songs: dict[str, dict] = {}
+    for hit in hits:
+        key = canon[hit["key"]]
+        song = songs.setdefault(key, {
+            "song": key, "titles": collections.Counter(), "tier": "none",
+            "_depth": -1, "roles": set(), "tier_votes": collections.Counter(),
+            "co_composers": collections.Counter(),
+            "performers": {}, "flags": set(), "own_recording": False})
+        song["titles"][hit["title"]] += 1
+        song["roles"] |= set(hit["roles"])
+        # Trust the DEEPEST credit block, not the strongest claim. Taking the
+        # strongest made "Waka Waka" come out `authored`: karaoke re-records
+        # credit Drexler as Composer, while Shakira's master -- 44 credit lines,
+        # with the Zangalewa authors holding Composer -- has him as Lyricist
+        # only. A 2-line stub must not outvote that.
+        song["tier_votes"][hit["tier"]] += 1
+        song["co_composers"].update(hit["co_composers"])
+        song["_depth"] = max(song["_depth"], hit["credit_depth"])
+        song["flags"] |= set(hit.get("flags") or [])
+        if hit["performs"]:
+            song["own_recording"] = True
+            continue
+        entry = song["performers"].setdefault(normalise(hit["performer"]), {
+            "name": hit["performer"], "albums": set(),
+            "covers_mill": is_covers_mill(hit["performer"])})
+        if hit["album"]:
+            entry["albums"].add(hit["album"])
+
+    out_songs = []
+    for song in songs.values():
+        # Plurality across recordings, not one chosen recording. Trusting the
+        # deepest credit block alone made "12 Segundos de Oscuridad" -- his own
+        # song -- come out lyrics_only, because Vitor Ramil's cover credits
+        # Ramil as composer. Five recordings say authored, two say otherwise.
+        song["tier"] = song["tier_votes"].most_common(1)[0][0] if song["tier_votes"] else "none"
+        performers = sorted(song["performers"].values(), key=lambda p: normalise(p["name"]))
+        real = [p for p in performers if not p["covers_mill"]]
+        out_songs.append({
+            "song": song["song"],
+            "title": min(song["titles"], key=lambda t: (-song["titles"][t], len(t), t)),
+            "variants": sorted(song["titles"]),
+            # A HINT, from the deepest credit block. Cover and karaoke
+            # metadata is wrong in both directions -- it credits Drexler as
+            # Composer on "Waka Waka" (he wrote only the Spanish lyric) and
+            # credits the cover artist as Composer on "12 Segundos de
+            # Oscuridad" (his own song). No single recording settles it, so
+            # read co_composers and tier_votes, not this field alone.
+            "tier": song["tier"],
+            "tier_votes": dict(song["tier_votes"].most_common()),
+            "tier_disagreement": len(song["tier_votes"]) > 1,
+            # Everyone else credited as composer on any recording, with counts.
+            # This is the actual evidence: co_composers naming the Zangalewa
+            # authors means the song is not his; a single name matching the
+            # cover artist means the cover's metadata is junk.
+            "co_composers": dict(song["co_composers"].most_common(8)),
+            "roles": sorted(song["roles"]),
+            "own_recording": song["own_recording"],
+            "performer_count": len(performers),
+            "performer_count_excl_mills": len(real),
+            "performers": [{"name": p["name"], "albums": sorted(p["albums"]),
+                            "covers_mill": p["covers_mill"]} for p in performers],
+            "flags": sorted(song["flags"]),
+        })
+
+    # Most independent recordings first; mills excluded from the sort so a
+    # karaoke pile cannot outrank a Mercedes Sosa cover. Sorted here rather
+    # than after the caller's --tier/--for-others-only filters, which is the
+    # same order either way because filtering a sorted list keeps it sorted.
+    out_songs.sort(key=lambda s: (-s["performer_count_excl_mills"],
+                                  -s["performer_count"], s["song"]))
+    return out_songs
 
 
 # ---- fetching ------------------------------------------------------------
@@ -189,6 +339,19 @@ def search_page(query: str, offset: int, store: str,
                        "id": (t.get("album") or {}).get("id")}} for t in items]
     cached.write_text(json.dumps({"total": total, "items": slim}))
     return slim, total, False
+
+
+def pages_needed(total: int, max_pages: int) -> int:
+    """How many search pages to fetch for `total` reported rows.
+
+    One copy. There were two, and they disagreed: the gate message printed
+    `min(max_pages, ceil(total / SEARCH_PAGE))` while the run used
+    `min(max_pages, max(1, ...))`. Only reachable for total == 0, which cannot
+    arrive here (an empty page 1 returns before the gate), so unifying them
+    changes no output -- but the next person to read the message should not have
+    to prove that.
+    """
+    return min(max_pages, max(1, -(-total // SEARCH_PAGE)))
 
 
 def writing_share(items: list[dict], aliases: set[str]) -> tuple[int, int]:
@@ -298,11 +461,11 @@ def run_one(args, artist: str, extra_aliases: list[str]) -> int:
         print(f"{artist}: page 1 has {credited} credited track(s), {writing} with a writing "
               f"role -> share {share:.2f} vs min {args.min_writing_share} -> {verdict} "
               f"({total} total rows would cost "
-              f"{min(args.max_pages, -(-total // SEARCH_PAGE))} requests)")
+              f"{pages_needed(total, args.max_pages)} requests)")
         if args.explain_gate or verdict == "GATED":
             return 0
 
-    pages = min(args.max_pages, max(1, -(-total // SEARCH_PAGE)))
+    pages = pages_needed(total, args.max_pages)
     rows = list(items)
     requests = 0 if cached else 1
     cache_hits = 1 if cached else 0
@@ -317,128 +480,14 @@ def run_one(args, artist: str, extra_aliases: list[str]) -> int:
     print(f"{artist}: fetched {len(rows)} of {total} rows in {requests} request(s)"
           f"{f', {cache_hits} page(s) from cache' if cache_hits else ''}", file=sys.stderr)
 
-    # ---- classify each row ------------------------------------------------
-    writing_hits, own = [], 0
-    for track in rows:
-        people = credits_by_person(track.get("performers") or "")
-        mine: set[str] = set()
-        for name, roles in people.items():
-            if name in aliases:
-                mine |= roles
-        if not (mine & WRITING_ROLES):
-            continue
-        co_composers = [name for name, roles in people.items()
-                        if name not in aliases and (roles & COMPOSER_ROLES)]
-        others_compose = bool(co_composers)
-        tier = writing_tier(mine, others_compose)
-        performer = ((track.get("performer") or {}).get("name") or "")
-        performs = bool(mine & PERFORMANCE_ROLES) or normalise(performer) in aliases
-        if performs:
-            own += 1
-        writing_hits.append({
-            "title": track.get("title"), "key": title_key(track.get("title") or ""),
-            # How many people this release credits at all. A master release
-            # lists 40+; a karaoke re-record lists 2. Used to pick which
-            # recording's tier to trust -- see below.
-            "credit_depth": len(people),
-            "co_composers": co_composers,
-            "performer": performer, "album": ((track.get("album") or {}).get("title")),
-            "album_id": ((track.get("album") or {}).get("id")),
-            "tier": tier, "roles": sorted(mine & WRITING_ROLES),
-            "performs": performs,
-        })
-
-    # ---- album-wide credit smear -----------------------------------------
-    # Every track of "Amigo É Casa (Special Edition)" carries the same lone
-    # Author credit. That is a blanket credit on the album, not authorship of
-    # 25 songs. Signature: 4+ tracks from one album, all the same single role.
-    by_album = collections.defaultdict(list)
-    for hit in writing_hits:
-        by_album[hit["album_id"]].append(hit)
-    smeared = set()
-    for album_id, group in by_album.items():
-        roles = {tuple(h["roles"]) for h in group}
-        if (album_id and len(group) >= 4 and len(roles) == 1
-                and len(next(iter(roles))) == 1
-                and not any(h["performs"] for h in group)):
-            smeared.add(album_id)
-            for hit in group:
-                hit.setdefault("flags", []).append("album_wide_credit")
-
-    # ---- collapse titles into songs --------------------------------------
-    canon = collapse([h["key"] for h in writing_hits])
-    songs: dict[str, dict] = {}
-    for hit in writing_hits:
-        key = canon[hit["key"]]
-        song = songs.setdefault(key, {
-            "song": key, "titles": collections.Counter(), "tier": "none",
-            "_depth": -1, "roles": set(), "tier_votes": collections.Counter(),
-            "co_composers": collections.Counter(),
-            "performers": {}, "flags": set(), "own_recording": False})
-        song["titles"][hit["title"]] += 1
-        song["roles"] |= set(hit["roles"])
-        # Trust the DEEPEST credit block, not the strongest claim. Taking the
-        # strongest made "Waka Waka" come out `authored`: karaoke re-records
-        # credit Drexler as Composer, while Shakira's master -- 44 credit lines,
-        # with the Zangalewa authors holding Composer -- has him as Lyricist
-        # only. A 2-line stub must not outvote that.
-        song["tier_votes"][hit["tier"]] += 1
-        song["co_composers"].update(hit["co_composers"])
-        song["_depth"] = max(song["_depth"], hit["credit_depth"])
-        song["flags"] |= set(hit.get("flags") or [])
-        if hit["performs"]:
-            song["own_recording"] = True
-            continue
-        entry = song["performers"].setdefault(normalise(hit["performer"]), {
-            "name": hit["performer"], "albums": set(),
-            "covers_mill": is_covers_mill(hit["performer"])})
-        if hit["album"]:
-            entry["albums"].add(hit["album"])
-
-    out_songs = []
-    for song in songs.values():
-        # Plurality across recordings, not one chosen recording. Trusting the
-        # deepest credit block alone made "12 Segundos de Oscuridad" -- his own
-        # song -- come out lyrics_only, because Vitor Ramil's cover credits
-        # Ramil as composer. Five recordings say authored, two say otherwise.
-        song["tier"] = song["tier_votes"].most_common(1)[0][0] if song["tier_votes"] else "none"
-        performers = sorted(song["performers"].values(), key=lambda p: normalise(p["name"]))
-        real = [p for p in performers if not p["covers_mill"]]
-        out_songs.append({
-            "song": song["song"],
-            "title": min(song["titles"], key=lambda t: (-song["titles"][t], len(t), t)),
-            "variants": sorted(song["titles"]),
-            # A HINT, from the deepest credit block. Cover and karaoke
-            # metadata is wrong in both directions -- it credits Drexler as
-            # Composer on "Waka Waka" (he wrote only the Spanish lyric) and
-            # credits the cover artist as Composer on "12 Segundos de
-            # Oscuridad" (his own song). No single recording settles it, so
-            # read co_composers and tier_votes, not this field alone.
-            "tier": song["tier"],
-            "tier_votes": dict(song["tier_votes"].most_common()),
-            "tier_disagreement": len(song["tier_votes"]) > 1,
-            # Everyone else credited as composer on any recording, with counts.
-            # This is the actual evidence: co_composers naming the Zangalewa
-            # authors means the song is not his; a single name matching the
-            # cover artist means the cover's metadata is junk.
-            "co_composers": dict(song["co_composers"].most_common(8)),
-            "roles": sorted(song["roles"]),
-            "own_recording": song["own_recording"],
-            "performer_count": len(performers),
-            "performer_count_excl_mills": len(real),
-            "performers": [{"name": p["name"], "albums": sorted(p["albums"]),
-                            "covers_mill": p["covers_mill"]} for p in performers],
-            "flags": sorted(song["flags"]),
-        })
-
+    writing_hits = classify_rows(rows, aliases)
+    own = sum(1 for hit in writing_hits if hit["performs"])
+    smeared = flag_album_wide_credits(writing_hits)
+    out_songs = fold_songs(writing_hits)
     if args.tier:
         out_songs = [s for s in out_songs if s["tier"] in args.tier]
     if args.for_others_only:
         out_songs = [s for s in out_songs if s["performers"]]
-    # Most independent recordings first; mills excluded from the sort so a
-    # karaoke pile cannot outrank a Mercedes Sosa cover.
-    out_songs.sort(key=lambda s: (-s["performer_count_excl_mills"],
-                                  -s["performer_count"], s["song"]))
 
     out = Path(args.out) if args.out else DATA / f"writing_{slug(artist)}.json"
     out.write_text(json.dumps({

@@ -88,6 +88,103 @@ def wanted(person: dict, classes: set[str], roles: set[str], match_any: bool) ->
     return False
 
 
+def signal_of(weight: float, total: int) -> tuple[float, float, str]:
+    """(signal, selectivity score, selectivity band) for one person.
+
+    The product that both gates are expressed in: what their credit is worth
+    times how much one credit from them tells you.
+    """
+    score, band = selectivity(total)
+    return weight * score, score, band
+
+
+def gate_verdict(weight: float, total: int | None, min_role_weight: float,
+                 min_signal: float) -> tuple[str, float | None, float | None]:
+    """(verdict, selectivity, signal) for the two gates, in ONE copy.
+
+    This existed twice. The live run applied the role-weight filter as a list
+    comprehension and the signal filter as a lambda handed to
+    discogs_credits(); --explain-gate reimplemented both to predict what the
+    run would do. Two copies of a prediction and the thing it predicts is the
+    one arrangement where drift is invisible -- the explain output would simply
+    have been wrong, and confidently.
+
+    Four verdicts, because when a person is dropped decides what it cost:
+
+        gated_free          their top role is too weak to be worth a request.
+                            Costs nothing, and is why --min-role-weight is
+                            applied before --top: the budget should buy N
+                            viable people, not N rows of which a third are
+                            masterers.
+        unknown             worth a request, and the total is not known yet.
+                            Only --explain-gate sees this, replaying offline.
+        gated_after_page_1  the Discogs total arrived with page 1 and the
+                            signal does not clear the floor. Costs one request
+                            instead of max_pages plus the whole Qobuz fan-out.
+        keep                pay for the rest.
+    """
+    if weight < min_role_weight:
+        return "gated_free", None, None
+    if total is None:
+        return "unknown", None, None
+    sig, score, _ = signal_of(weight, total)
+    if sig < min_signal:
+        return "gated_after_page_1", score, sig
+    return "keep", score, sig
+
+
+def select_targets(unresolved: list[dict], classes: set[str], roles: set[str],
+                   roles_any: bool, min_role_weight: float, top: int,
+                   ) -> tuple[list[dict], int, int]:
+    """(targets, after --roles, after --min-role-weight) -- who to spend on.
+
+    Most seed albums first, because Discogs' rate limit means the run may not
+    reach the end of the list and the people with most seed albums are the ones
+    worth reaching. Both counts are returned so the caller can report what each
+    filter removed without recomputing either.
+    """
+    ordered = sorted(unresolved, key=lambda u: -(u.get("albums") or 0))
+    if classes or roles:
+        ordered = [u for u in ordered if wanted(u, classes, roles, roles_any)]
+    after_roles = len(ordered)
+    if min_role_weight > 0:
+        ordered = [u for u in ordered
+                   if gate_verdict(person_role_weight(u), None, min_role_weight,
+                                   0.0)[0] != "gated_free"]
+    return ordered[:top], after_roles, len(ordered)
+
+
+def known_totals(saved: dict) -> dict[str, int]:
+    """Discogs totals a previous run already wrote, by normalised name.
+
+    --explain-gate needs a total to replay the second gate, and a total costs a
+    request. Reusing what is on disk is what makes the explain free.
+    """
+    known: dict[str, int] = {}
+    for key, field in (("recovered", "discogs_total_releases"),
+                       ("still_unresolved", "discogs_total")):
+        for row in saved.get(key) or []:
+            if row.get(field):
+                for name in row.get("names") or []:
+                    known[normalise(name)] = row[field]
+    return known
+
+
+def role_census(unresolved: list[dict]) -> tuple[collections.Counter,
+                                                 collections.Counter]:
+    """(top roles, their classes) across the unresolved, both most-common first.
+
+    Roles are stored most-frequent-first, so [0] is what a person mainly is --
+    which is also what the gate reads, so this census describes the same thing
+    --min-role-weight will act on.
+    """
+    tops = collections.Counter(person_roles(u)[0] for u in unresolved
+                               if person_roles(u))
+    by_class = collections.Counter(role_class(r) for u in unresolved
+                                   for r in person_roles(u)[:1])
+    return tops, by_class
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Recover Qobuz-unresolved people via Discogs, and turn them into a pool.")
@@ -162,60 +259,43 @@ def main() -> int:
           f"({'60' if token else '25'} req/min)", file=sys.stderr)
 
     if args.list_roles:
-        # Roles are stored most-frequent-first, so [0] is their top role.
-        tops = collections.Counter(person_roles(u)[0] for u in unresolved if person_roles(u))
+        tops, by_class = role_census(unresolved)
         print(f"top roles across {len(unresolved)} unresolved people "
               f"(pass any of these to --roles):\n")
         for role, count in tops.most_common():
             print(f"  {count:>3}  {role:<24} class={role_class(role):<12} "
                   f"weight={role_weight(role)}")
-        by_class = collections.Counter(role_class(r) for u in unresolved
-                                      for r in person_roles(u)[:1])
         print("\nby class: " + ", ".join(f"{k} {v}" for k, v in by_class.most_common()))
         return 0
 
     if args.explain_gate:
         # Replay both gates offline. Role weight needs nothing; selectivity needs
         # a Discogs total, which a previous run may already have written to --out.
-        known: dict[str, int] = {}
         saved_path = DATA / args.out
         if saved_path.exists():
-            saved = json.loads(saved_path.read_text())
-            for row in (saved.get("recovered") or []):
-                for name in row.get("names") or []:
-                    if row.get("discogs_total_releases"):
-                        known[normalise(name)] = row["discogs_total_releases"]
-            for row in (saved.get("still_unresolved") or []):
-                for name in row.get("names") or []:
-                    if row.get("discogs_total"):
-                        known[normalise(name)] = row["discogs_total"]
+            known = known_totals(json.loads(saved_path.read_text()))
             print(f"totals for {len(known)} name(s) reused from {args.out}\n")
         else:
+            known = {}
             print(f"no {args.out} yet - selectivity unknown, role weight only\n")
 
         print(f"{'person':<28}{'weight':>7}{'total':>7}{'sel':>6}{'signal':>8}  verdict")
         counts: collections.Counter = collections.Counter()
+        labels = {"gated_free": ("GATED (no request)", "gated free"),
+                  "unknown": ("would look up", "unknown"),
+                  "gated_after_page_1": ("GATED (after page 1)", "gated after 1 page"),
+                  "keep": ("keep", "keep")}
         for person in sorted(unresolved, key=lambda u: -u.get("albums", 0)):
             names = person.get("names") or ["?"]
             weight = person_role_weight(person)
-            if weight < args.min_role_weight:
-                verdict, counts["gated free"] = "GATED (no request)", counts["gated free"] + 1
-                total = select = signal = None
-            else:
-                total = next((known[normalise(n)] for n in names
-                              if normalise(n) in known), None)
-                if total is None:
-                    verdict, counts["unknown"] = "would look up", counts["unknown"] + 1
-                    select = signal = None
-                else:
-                    select = selectivity(total)[0]
-                    signal = weight * select
-                    if signal < args.min_signal:
-                        verdict = "GATED (after page 1)"
-                        counts["gated after 1 page"] += 1
-                    else:
-                        verdict = "keep"
-                        counts["keep"] += 1
+            total = next((known[normalise(n)] for n in names
+                          if normalise(n) in known), None)
+            outcome, select, signal = gate_verdict(weight, total, args.min_role_weight,
+                                                   args.min_signal)
+            if outcome == "gated_free":
+                total = None               # never looked up, so do not print one
+            verdict, bucket = labels[outcome]
+            counts[bucket] += 1
             print(f"{names[0][:27]:<28}{weight:>7.2f}"
                   f"{(total if total is not None else '-'):>7}"
                   f"{(f'{select:.1f}' if select is not None else '-'):>6}"
@@ -226,22 +306,16 @@ def main() -> int:
         return 0
 
     sel_classes, sel_roles = parse_role_selection(args.roles)
-    ordered = sorted(unresolved, key=lambda u: -u.get("albums", 0))
+    targets, after_roles, after_weight = select_targets(
+        unresolved, sel_classes, sel_roles, args.roles_any,
+        args.min_role_weight, args.top)
     if sel_classes or sel_roles:
-        before = len(ordered)
-        ordered = [u for u in ordered if wanted(u, sel_classes, sel_roles, args.roles_any)]
-        print(f"--roles kept {len(ordered)} of {before} people "
+        print(f"--roles kept {after_roles} of {len(unresolved)} people "
               f"(classes={sorted(sel_classes) or '-'}, roles={sorted(sel_roles) or '-'}"
               f"{', any-role' if args.roles_any else ''})", file=sys.stderr)
-    # Before --top, not after: the budget should buy N viable people, not N rows
-    # of which a third are masterers.
-    if args.min_role_weight > 0:
-        before = len(ordered)
-        ordered = [u for u in ordered if person_role_weight(u) >= args.min_role_weight]
-        if len(ordered) != before:
-            print(f"--min-role-weight {args.min_role_weight} kept {len(ordered)} of "
-                  f"{before} people, at no request cost", file=sys.stderr)
-    targets = ordered[:args.top]
+    if after_weight != after_roles:
+        print(f"--min-role-weight {args.min_role_weight} kept {after_weight} of "
+              f"{after_roles} people, at no request cost", file=sys.stderr)
     print(f"processing {len(targets)} of {len(unresolved)} unresolved people",
           file=sys.stderr)
 
@@ -264,7 +338,8 @@ def main() -> int:
         weight = person_role_weight(person)
         credits, own, total, gated = discogs_credits(
             did, throttle, token, args.max_pages,
-            gate=lambda t, w=weight: w * selectivity(t)[0] >= args.min_signal)
+            gate=lambda t, w=weight: gate_verdict(
+                w, t, args.min_role_weight, args.min_signal)[0] == "keep")
         select_score, select_label = selectivity(total)
 
         if gated:

@@ -37,18 +37,44 @@ Where the code can be wrong without anything noticing.
   disagreeing role vocabularies are now pinned against each other, so unifying
   them fails a test rather than quietly rewriting a column of existing data.
 
-- **Three files are at zero coverage.** Overall is 34% → 55%. Done:
-  `stages/load.py` 0% → 99%, `radars/itunes.py` and `radars/listenbrainz.py`
-  both 0% → 100%. What remains at 0%: `stages/resolve_discogs.py` 230
-  statements, `stages/writing.py` 219, `core/discogs.py` 89.
+- **~~Files at zero coverage.~~** None left. Overall 34% → 67%:
+  `core/discogs.py`, `radars/itunes.py` and `radars/listenbrainz.py` at 100%,
+  `stages/load.py` 99%, `stages/writing.py` 55%,
+  `stages/resolve_discogs.py` 28%.
 
-  Those three are harder than what came before, and in the same way: each is a
-  long fan-out over a rate-limited API with the pagination, the gates and the
-  output shaping interleaved in one `main()`. The cheap fixtures that covered
-  `load.py` (JSON in, sqlite out) and the radars (one stubbed seam, a shared
-  runner) do not exist here. Expect to extract a function or two before the
-  tests read well — `core/discogs.py` first, since it is the smallest and the
-  other two call it.
+  (The entry this replaces said three files were still at 0% and named
+  `core/discogs.py` among them. It was stale — a `todo.md` conflict between two
+  merged PRs resolved in favour of the older text.)
+
+  The last two needed their decisions extracted before they could be tested at
+  all, which is done: `classify_rows`, `flag_album_wide_credits`, `fold_songs`
+  and `pages_needed` in `writing.py`; `gate_verdict`, `select_targets`,
+  `signal_of`, `known_totals` and `role_census` in `resolve_discogs.py`. All
+  pure, all tested, and the refactor is verified behaviour-preserving —
+  `writing.py` reproduces the committed `writing_jorge-drexler.json` byte for
+  byte from `cache/` alone, and both of `resolve_discogs.py`'s offline modes
+  print identical output.
+
+  What is still uncovered in those two is the orchestration: `main()`,
+  `build_pool()` and the fetch-and-print middle of `run_one()`. That is now
+  what those functions ARE, the decisions having moved out. Covering them means
+  stubbing Discogs plus the filesystem and asserting on printed output, which
+  buys much less than the 65 decision tests did — worth doing when
+  `build_pool` next changes, not before.
+
+- **`collapse()` never merges two titles of the same length.** Found while
+  testing it. The fuzzy pass skips any candidate that is not *strictly* longer
+  (`len(other) <= len(target)`), so equal-length spellings never meet however
+  similar they are. `writing.py`'s own docstring offers "orcuridad" as a caught
+  typo and it is exactly this case: 24 characters against 24, similarity 0.958
+  against a 0.92 floor, no merge.
+
+  Not a one-line fix, which is why it is recorded rather than done: choosing a
+  canonical form between two equal-length keys is a new decision (first seen?
+  alphabetical? most frequent?), and the longest-wins rule exists so the fuller
+  title survives. A test states the current behaviour so the choice is
+  deliberate when it is made.
+
 - **~~No indexes in `data/music.db`.~~** Done: 45 of them, created after the
   bulk load so the rebuild stays under a second. Every join and filter in
   [store.md](docs/store.md) now uses one instead of scanning the table.
