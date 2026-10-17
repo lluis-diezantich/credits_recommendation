@@ -37,25 +37,32 @@ Where the code can be wrong without anything noticing.
   disagreeing role vocabularies are now pinned against each other, so unifying
   them fails a test rather than quietly rewriting a column of existing data.
 
-- **Six files are at zero coverage.** The real shape of the gap, now that
-  `pytest --cov` reports it (34% overall): `stages/load.py` 299 statements,
-  `stages/resolve_discogs.py` 230, `stages/writing.py` 219, `core/discogs.py`
-  89, `radars/itunes.py` 68, `radars/listenbrainz.py` 63 — all at 0%.
-  `load.py` is the largest file in the repo. The entry above named the two
-  files that mattered most for a ranker; these are what is left.
+- **Five files are at zero coverage.** `load.py` is done — 0% to 99%, 69 cases,
+  and the only lines left need duckdb installed. Overall is 34% → 48%. What
+  remains at 0%: `stages/resolve_discogs.py` 230 statements,
+  `stages/writing.py` 219, `core/discogs.py` 89, `radars/itunes.py` 68,
+  `radars/listenbrainz.py` 63. The two radars are the cheapest of these —
+  `core/radar.py` already has a tested harness they plug into.
 - **~~No indexes in `data/music.db`.~~** Done: 45 of them, created after the
   bulk load so the rebuild stays under a second. Every join and filter in
   [store.md](docs/store.md) now uses one instead of scanning the table.
 
-- **Still no primary keys, and that is now a finding rather than an omission.**
-  Four tables hold rows that duplicate on any natural key: `person_albums` has
-  777 rows for 563 distinct `(person_key, album_id, roles)` triples —
-  *identical* triples, so the loader inserts some rows twice. Also
-  `person_roles` (923/612), `tracks` (910/906) and `credits` (11,926/9,516,
-  with `track_id` NULL on the 8,806 rows that came from `search`). Fix the
-  loader where the rows are built; a key added before that converts a silent
-  duplicate into a failed rebuild, and cheap rebuilds are `load.py`'s whole
-  contract.
+- **Still no primary keys, and the cause is now located.** `load_people`
+  inserts six junction tables and only three go through `set()`:
+  `person_names`, `person_sources` and `person_classes` are deduplicated;
+  `person_roles`, `person_albums` and `person_edges` are not. That is the whole
+  bug — three missing `set()` calls at `stages/load.py:481-492` — and it
+  explains the measurements exactly: `person_names` 281/281 distinct against
+  `person_roles` 923/612 and `person_albums` 777/563.
+
+  Two xfail(strict=True) tests in `tests/test_load.py` say what the loader
+  *should* do. They fail today; the day the `set()` calls land they pass, pytest
+  reports the xpass as a failure, and that is the reminder to delete the
+  markers. Then the primary keys can go on.
+
+  `tracks` (910/906) and `credits` (11,926/9,516) are a separate question --
+  those come from the cache, not the merge, so the duplicates are in the cached
+  pages themselves and dedup there would be a judgement about which copy wins.
 - **~~Two hand-rolled retry loops are left.~~** Done: both deleted.
   `stages/writing.py` goes through `core.qobuz.get_json` now, so the adapter's
   jitter and `Retry-After` apply, and the "5xx after 3 tries" warning went
