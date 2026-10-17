@@ -37,14 +37,17 @@ Where the code can be wrong without anything noticing.
   disagreeing role vocabularies are now pinned against each other, so unifying
   them fails a test rather than quietly rewriting a column of existing data.
 
-- **~~Files at zero coverage.~~** None left. Overall 34% → 67%:
+- **Two files are still at zero coverage.** Overall 34% → 67%. Done:
   `core/discogs.py`, `radars/itunes.py` and `radars/listenbrainz.py` at 100%,
   `stages/load.py` 99%, `stages/writing.py` 55%,
   `stages/resolve_discogs.py` 28%.
 
-  (The entry this replaces said three files were still at 0% and named
-  `core/discogs.py` among them. It was stale — a `todo.md` conflict between two
-  merged PRs resolved in favour of the older text.)
+  Still at 0%: **`stages/discover.py`** (121 statements) and
+  **`stages/resolve_qobuz.py`** (112). They are the same shape as the two below
+  — one long `main()` with the decisions wedged between a fetch and a print —
+  so they want the same treatment: extract, then test. `discover.py` is the
+  more valuable of the two, being the stage the whole credit graph comes out
+  of. `radars/remezcla.py` is at 41% and is the other soft spot.
 
   The last two needed their decisions extracted before they could be tested at
   all, which is done: `classify_rows`, `flag_album_wide_credits`, `fold_songs`
