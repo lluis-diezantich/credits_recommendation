@@ -59,7 +59,6 @@ resumes a run that died partway through its fan-out.
     .github/workflows/ radar.yml runs any radar; one caller per schedule
                        tests.yml: ruff, ty, pytest --cov on 3.11/3.12/3.13
     requirements*.lock hashed pins for CI - generated, see their headers
-    contrib/           qobuz_keys.py - vendored gist, not ours
 
 `data/music.db` is derived and disposable: `./stages/load.py` rebuilds 216k rows
 in 2s and fetches nothing. Deleting it costs one rerun; deleting `cache/` costs

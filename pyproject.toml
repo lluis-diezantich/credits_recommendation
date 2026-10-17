@@ -52,7 +52,6 @@ target-version = "py311"
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.per-file-ignores]
-"contrib/*" = ["ALL"]             # vendored third-party gist, not ours to lint
 # A showcase notebook is exploratory, and the conventions differ on purpose:
 # `ax.set_yticks(y); ax.set_yticklabels(labels)` on one line is how plotting
 # cells read. Linting it as a script would mean rewriting cells to satisfy
@@ -69,7 +68,7 @@ select = ["E", "F", "I", "UP", "B"]
 # averages that together with policy.py until neither means anything.
 [tool.coverage.run]
 source = ["core", "stages", "radars", "policy"]
-omit = ["contrib/*", "notebooks/*", "tests/*"]
+omit = ["notebooks/*", "tests/*"]
 
 [tool.coverage.report]
 show_missing = true
@@ -86,7 +85,6 @@ exclude_also = [
 [tool.ty.src]
 exclude = [
     ".venv",
-    "contrib",                    # vendored gist, not ours (as in ruff above)
     "notebooks",                  # exploratory cells, same reason as ruff
     "cache",
     "data",
