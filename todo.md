@@ -37,12 +37,22 @@ Where the code can be wrong without anything noticing.
   disagreeing role vocabularies are now pinned against each other, so unifying
   them fails a test rather than quietly rewriting a column of existing data.
 
-- **Five files are at zero coverage.** `load.py` is done — 0% to 99%, 69 cases,
-  and the only lines left need duckdb installed. Overall is 34% → 48%. What
-  remains at 0%: `stages/resolve_discogs.py` 230 statements,
-  `stages/writing.py` 219, `core/discogs.py` 89, `radars/itunes.py` 68,
-  `radars/listenbrainz.py` 63. The two radars are the cheapest of these —
-  `core/radar.py` already has a tested harness they plug into.
+- **Two files are at zero coverage.** Overall is 34% → 59%. Done:
+  `stages/load.py` 0% → 99%, `radars/itunes.py`, `radars/listenbrainz.py` and
+  `core/discogs.py` all 0% → 100%. What remains at 0%:
+  `stages/resolve_discogs.py` 230 statements and `stages/writing.py` 219.
+
+  Both are harder than anything above, and in the same way: each is a long
+  fan-out over a rate-limited API with the paging, the gates and the output
+  shaping interleaved in one `main()`. The cheap fixtures that covered
+  `load.py` (JSON in, sqlite out), the radars (one stubbed seam over a tested
+  runner) and `core/discogs.py` (a response queue) do not fit a function that
+  both decides and prints. Expect to extract the decisions before the tests
+  read well — which is worth doing anyway, since a ranker will want them.
+
+  The two already share `core/discogs.py`, which is now covered, so the
+  throttle, the 429 backoff and the page-1 gate underneath them are no longer
+  the untested part.
 - **~~No indexes in `data/music.db`.~~** Done: 45 of them, created after the
   bulk load so the rebuild stays under a second. Every join and filter in
   [store.md](docs/store.md) now uses one instead of scanning the table.
