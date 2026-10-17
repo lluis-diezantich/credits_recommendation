@@ -178,6 +178,91 @@ CREATE TABLE listens (
     recording_mbid TEXT, artist_mbid TEXT, release_mbid TEXT);
 """
 
+# Indexes, created AFTER the rows are in -- the whole build is one bulk load
+# into a file that was just deleted, and maintaining an index per INSERT is the
+# one way to make a 2s rebuild slow. Nothing here is a constraint: see below.
+#
+# NOT primary keys, which is the other half of what todo.md asked for, and the
+# answer is that the data will not currently take them. Four tables hold rows
+# that are duplicates on any natural key, measured on the 216k-row build:
+#
+#     person_roles   923 rows,  612 distinct (person_key, role)
+#     person_albums  777 rows,  563 distinct (person_key, album_id, roles)
+#     tracks         910 rows,  906 distinct (store, query, album_id, title)
+#     credits      11926 rows, 9516 distinct, and track_id is NULL on 8806
+#                             of them -- every row that came from `search`
+#
+# person_albums is the clearest: the triples are IDENTICAL, so a person's album
+# is inserted twice rather than inserted once per source. That is a loader bug
+# to fix where the rows are built, not something to paper over here -- and a
+# PRIMARY KEY added before fixing it would convert a silently duplicated row
+# into a failed build. This file's contract is that rebuilding is always cheap
+# and always works (`db.unlink()` above runs before anything is parsed), so a
+# constraint that can make the rebuild fail on next week's JSON is a worse
+# trade than the duplicate it catches. Indexes are pure speed and cannot fail.
+#
+# What is indexed is what docs/store.md actually joins and filters on, plus the
+# ids every join in the cookbook goes through: person_key, album_id, and the
+# (song_key, artist_query) pair that is the real identity of a song row.
+INDEXES = """
+-- people: person_key is the join key for six tables
+CREATE INDEX ix_people_key            ON people (person_key);
+CREATE INDEX ix_people_name           ON people (name);
+CREATE INDEX ix_people_qobuz          ON people (qobuz_id);
+CREATE INDEX ix_person_names_key      ON person_names (person_key);
+CREATE INDEX ix_person_names_name     ON person_names (name);
+CREATE INDEX ix_person_sources_key    ON person_sources (person_key);
+CREATE INDEX ix_person_classes_key    ON person_classes (person_key, class);
+CREATE INDEX ix_person_roles_key      ON person_roles (person_key);
+CREATE INDEX ix_person_roles_class    ON person_roles (role_class);
+CREATE INDEX ix_person_albums_key     ON person_albums (person_key);
+CREATE INDEX ix_person_albums_album   ON person_albums (album_id);
+CREATE INDEX ix_person_edges_key      ON person_edges (person_key);
+CREATE INDEX ix_person_edges_other    ON person_edges (other_name);
+
+-- releases: album_id joins, sig_score and date are what a ranker will order by
+CREATE INDEX ix_releases_album        ON releases (album_id);
+CREATE INDEX ix_releases_source       ON releases (source);
+CREATE INDEX ix_releases_score        ON releases (sig_score);
+CREATE INDEX ix_releases_date         ON releases (date);
+CREATE INDEX ix_releases_via          ON releases (via_qobuz_id);
+CREATE INDEX ix_release_artists_album ON release_artists (album_id);
+CREATE INDEX ix_release_artists_name  ON release_artists (name);
+
+-- songs: (song_key, artist_query) is the identity, and every child joins on it
+CREATE INDEX ix_songs_key             ON songs (song_key, artist_query);
+CREATE INDEX ix_songs_tier            ON songs (tier);
+CREATE INDEX ix_song_titles_key       ON song_titles (song_key, artist_query);
+CREATE INDEX ix_song_roles_key        ON song_roles (song_key, artist_query);
+CREATE INDEX ix_song_tier_votes_key   ON song_tier_votes (song_key, artist_query);
+CREATE INDEX ix_song_co_composers_key ON song_co_composers (song_key, artist_query);
+CREATE INDEX ix_song_performers_key   ON song_performers (song_key, artist_query);
+CREATE INDEX ix_song_performers_who   ON song_performers (performer_key);
+CREATE INDEX ix_song_performers_mill  ON song_performers (covers_mill);
+
+-- the parsed cache
+CREATE INDEX ix_tracks_album          ON tracks (album_id);
+CREATE INDEX ix_tracks_query          ON tracks (query);
+CREATE INDEX ix_tracks_performer      ON tracks (performer_name);
+CREATE INDEX ix_credits_key           ON credits (person_key);
+CREATE INDEX ix_credits_album         ON credits (album_id);
+CREATE INDEX ix_credits_class         ON credits (role_class);
+CREATE INDEX ix_credits_source        ON credits (source);
+
+-- discogs candidates
+CREATE INDEX ix_discogs_cand_name     ON discogs_candidates (name);
+CREATE INDEX ix_discogs_via_name      ON discogs_candidate_via (name);
+CREATE INDEX ix_discogs_via_key       ON discogs_candidate_via (person_key);
+
+-- listens: the big one, and artist_key is how every credit joins to a play
+CREATE INDEX ix_listens_artist        ON listens (artist_key);
+CREATE INDEX ix_listens_year          ON listens (year);
+CREATE INDEX ix_listens_date          ON listens (listened_date);
+CREATE INDEX ix_listens_at            ON listens (listened_at);
+CREATE INDEX ix_listens_recording     ON listens (recording_mbid);
+CREATE INDEX ix_listens_track         ON listens (track_name);
+"""
+
 VIEWS = """
 CREATE VIEW v_releases_scored AS
 SELECT source, album_id, title, date, label, genre, via_name, via_top_role,
@@ -683,12 +768,18 @@ def main() -> int:
                   file=sys.stderr)
 
     ld.insert("meta", ["table_name", "source", "rows", "generated", "loaded_at"], ld.meta)
+    # After the rows, never before: see the comment on INDEXES.
+    built = 0
+    for statement in INDEXES.strip().split(";"):
+        if statement.strip():
+            con.execute(statement)
+            built += 1
     for statement in VIEWS.strip().split(";"):
         if statement.strip():
             con.execute(statement)
     con.commit()
 
-    print(f"\nbuilt {db.name} ({db.stat().st_size / 1e6:.1f} MB)")
+    print(f"\nbuilt {db.name} ({db.stat().st_size / 1e6:.1f} MB, {built} indexes)")
     for table, n in sorted(ld.counts.items(), key=lambda kv: -kv[1]):
         print(f"  {table:<24}{n:>8}")
     print("\nsee docs/store.md for queries")
