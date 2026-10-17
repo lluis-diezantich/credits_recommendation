@@ -357,24 +357,21 @@ def test_a_malformed_people_file_is_skipped_and_the_rest_still_load(store, capsy
     assert "skipping discovery_bad.json" in capsys.readouterr().err
 
 
-# ---- the dedup asymmetry (a real bug, pinned) ---------------------------
+# ---- dedup, now symmetric across all six junction tables ----------------
 #
-# names, sources and classes are inserted through set(); roles, albums and
-# edges are not. Measured on the real build: person_names 281/281 distinct,
-# person_classes 396/396, but person_roles 923/612 and person_albums 777/563.
-#
-# xfail(strict=True) rather than asserting the duplicate: these say what the
-# loader SHOULD do, they fail today, and the day the three missing set() calls
-# land they will pass and pytest will report the xpass as a failure -- which is
-# the reminder to delete the marker. Asserting `== 2` instead would quietly
-# cement the bug as the specification.
+# Every junction table is assembled by appending from several files, so a person
+# in both discovery_*.json and watchlist.json contributes the same album twice.
+# Three of the six inserts deduplicated and three did not, which cost 777
+# person_albums rows for 563 distinct triples. All six now go through
+# deduped(), and these are the regression tests -- including for the three that
+# were already right, since the fix moved those onto the shared helper too.
 
 
 def test_a_name_from_two_files_is_stored_once(store):
     store.write("discovery_1.json", {"people": [{"names": ["Dup"]}]})
     store.write("discovery_2.json", {"people": [{"names": ["Dup"]}]})
     load.load_people(store.ld)
-    assert store.count("person_names") == 1      # set() applied here
+    assert store.count("person_names") == 1
 
 
 def test_a_class_from_two_files_is_stored_once(store):
@@ -383,12 +380,10 @@ def test_a_class_from_two_files_is_stored_once(store):
     store.write("discovery_2.json", {"people": [
         {"names": ["Dup"], "classes": ["production"]}]})
     load.load_people(store.ld)
-    assert store.count("person_classes") == 1    # and here
+    assert store.count("person_classes") == 1
 
 
-@pytest.mark.xfail(strict=True, reason="person_roles is inserted without set(); "
-                                       "923 rows for 612 distinct pairs in the real build")
-def test_a_role_from_two_files_should_be_stored_once(store):
+def test_a_role_from_two_files_is_stored_once(store):
     store.write("discovery_1.json", {"people": [
         {"names": ["Dup"], "roles": {"Producer": 2}}]})
     store.write("discovery_2.json", {"people": [
@@ -397,9 +392,7 @@ def test_a_role_from_two_files_should_be_stored_once(store):
     assert store.count("person_roles") == 1
 
 
-@pytest.mark.xfail(strict=True, reason="person_albums is inserted without set(); "
-                                       "777 rows for 563 distinct triples, identical")
-def test_the_same_album_from_two_files_should_be_stored_once(store):
+def test_the_same_album_from_two_files_is_stored_once(store):
     album = {"album_id": "a1", "title": "T", "date": "2020-01-01", "tracks": 10,
              "roles": ["Producer"]}
     store.write("discovery_1.json", {"people": [{"names": ["Dup"], "albums": [album]}]})
@@ -807,3 +800,55 @@ def test_summary_mode_reads_an_existing_db_without_rebuilding_it(store, monkeypa
     monkeypatch.setattr("sys.argv", ["load.py", "--db", str(db), "--summary"])
     assert load.main() == 0
     assert db.stat().st_mtime_ns == before
+
+
+def test_an_edge_from_two_files_is_stored_once(store):
+    """The third table that was missing its dedup. A person recovered twice
+    brought their whole worked_with list along twice with them."""
+    edge = {"name": "Other", "releases": 4, "roles": ["Bass"]}
+    store.write("discogs_watchlist.json", {"recovered": [
+        {"names": ["Dup"], "worked_with": [edge, edge]}]})
+    load.load_people(store.ld)
+    assert store.count("person_edges") == 1
+
+
+def test_deduping_keeps_rows_that_only_look_alike(store):
+    """Distinct on the WHOLE tuple: the same person on the same album under a
+    different role list is two facts, not one row to collapse."""
+    store.write("discovery_1.json", {"people": [{"names": ["P"], "albums": [
+        {"album_id": "a1", "title": "T", "roles": ["Producer"]},
+        {"album_id": "a1", "title": "T", "roles": ["Bass"]}]}]})
+    load.load_people(store.ld)
+    assert {r[0] for r in store.rows("person_albums", "roles")} == {"Producer", "Bass"}
+
+
+def test_dedup_survives_the_nulls_that_make_sorting_impossible(store):
+    """Why deduped() uses dict.fromkeys. These rows mix None with int and str in
+    one column, and sorted(set(...)) -- the fix that looks right -- raises
+    TypeError on them instead of deduplicating anything:
+
+        person_roles.n   None for watchlist.json's bare-list role form, an int
+                         for the {role: count} form every other file uses
+        person_albums    date/tracks/roles absent on some rows and present on
+                         others, for the same person and the same album
+    """
+    store.write("discovery_1.json", {"people": [
+        {"names": ["P"], "roles": {"Producer": 3},
+         "albums": [{"album_id": "a1", "title": "T", "date": "2020-01-01",
+                     "tracks": 10, "roles": ["Producer"]}]}]})
+    store.write("watchlist.json", {"artists": [
+        {"name": "P", "roles": ["Producer"],
+         "appearances": [{"album_id": "a1", "title": "T"}]}]})
+    load.load_people(store.ld)                   # must not raise
+
+    # set(), not sorted() -- sorting these is the very thing that raises
+    assert set(store.rows("person_roles", "n")) == {(None,), (3,)}
+    assert store.count("person_albums") == 2     # genuinely different tuples
+
+
+def test_deduped_is_order_preserving_so_a_rebuild_is_reproducible(store):
+    """A bare set() would order rows by Python's per-process string hash seed,
+    so two builds of the same inputs would differ. dict.fromkeys does not."""
+    assert load.deduped([("b", 2), ("a", 1), ("b", 2), ("c", 3), ("a", 1)]) == [
+        ("b", 2), ("a", 1), ("c", 3)]
+    assert load.deduped([]) == []
