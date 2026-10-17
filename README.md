@@ -70,40 +70,5 @@ the corpus.
 
 ## TODO
 
-- **A radar for people, not artists.** The thesis, and the one thing this cannot
-  do: alert on records made by *people* you follow. The pools hold 7,860
-  candidate releases and nothing consumes them. One `album/get` per fresh
-  release, cached.
-- **Album identity.** `core/radar.Release` now normalises what the radars
-  report, but it is a *reporting* record keyed on each store's own id: two
-  editions of one album are still two rows, and nothing reconciles a Qobuz id
-  with an MBID. The pools are untouched by it. See
-  [architecture.md](docs/architecture.md).
-- **A ranker.** 7,860 candidates, each with an explainable `via.signal.score`,
-  and no order.
-- **Nowhere durable to keep state.** A runner has no disk between runs, so the
-  Friday job passes `--all` and lets the date window do the filtering;
-  `data/*_seen.json` only ever accumulates on one laptop, and `--run-log`
-  writes a file that dies with the job. The cost today is a release appearing
-  in two consecutive issues when `--days` exceeds seven. Cheapest fix: have the
-  Action commit the seen file back, which also turns the history into a log of
-  what was reported. This blocks every stateful radar, not just this one.
-- **Resolve Apple ids.** Every `itunes_id` in `favourites.json` is null, so
-  `radars/itunes.py` falls back to its built-in list of one artist. It has
-  everything else it needs since `core/radar.py` — `--json`, the broken-run
-  guard — so scheduling it is a fifteen-line caller against `radar.yml`. The
-  ids are the only thing missing.
-- **Record what you played.** The weekly issue is already a dated log of what
-  was *shown*; the other half is missing, and without it the evaluation in
-  [roadmap.md](docs/roadmap.md) has nothing to score.
-- **Decide the storefront.** `gb-en` is the default and the watchlist leans
-  Latin and Iberian; `--store es-es` is a different catalogue, not a different
-  view of one.
-- **Cross-check coverage.** `./radars/listenbrainz.py --days 20 --dry-run` reads
-  a second source for the same 89 artists; anything it names that Qobuz missed
-  is a gap nothing else would reveal.
-- **`--review` cannot re-ask about a row that resolved `exact`.** A wrong id
-  that looked confident can only be fixed by editing the JSON.
-- **Unify the role-class vocabularies.** `discover.py` folds engineering into
-  `production`, `resolve_discogs.py` splits it out. Both live in `policy.py`;
-  unifying them rewrites `classes` in existing data.
+Moved to [todo.md](todo.md): the product gaps, what is untested, the
+build-hygiene list, and what is deliberately deferred.
