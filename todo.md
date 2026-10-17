@@ -37,12 +37,18 @@ Where the code can be wrong without anything noticing.
   disagreeing role vocabularies are now pinned against each other, so unifying
   them fails a test rather than quietly rewriting a column of existing data.
 
-- **Five files are at zero coverage.** `load.py` is done — 0% to 99%, 69 cases,
-  and the only lines left need duckdb installed. Overall is 34% → 48%. What
-  remains at 0%: `stages/resolve_discogs.py` 230 statements,
-  `stages/writing.py` 219, `core/discogs.py` 89, `radars/itunes.py` 68,
-  `radars/listenbrainz.py` 63. The two radars are the cheapest of these —
-  `core/radar.py` already has a tested harness they plug into.
+- **Three files are at zero coverage.** Overall is 34% → 55%. Done:
+  `stages/load.py` 0% → 99%, `radars/itunes.py` and `radars/listenbrainz.py`
+  both 0% → 100%. What remains at 0%: `stages/resolve_discogs.py` 230
+  statements, `stages/writing.py` 219, `core/discogs.py` 89.
+
+  Those three are harder than what came before, and in the same way: each is a
+  long fan-out over a rate-limited API with the pagination, the gates and the
+  output shaping interleaved in one `main()`. The cheap fixtures that covered
+  `load.py` (JSON in, sqlite out) and the radars (one stubbed seam, a shared
+  runner) do not exist here. Expect to extract a function or two before the
+  tests read well — `core/discogs.py` first, since it is the smallest and the
+  other two call it.
 - **~~No indexes in `data/music.db`.~~** Done: 45 of them, created after the
   bulk load so the rebuild stays under a second. Every join and filter in
   [store.md](docs/store.md) now uses one instead of scanning the table.
