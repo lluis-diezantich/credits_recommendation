@@ -47,22 +47,42 @@ Where the code can be wrong without anything noticing.
   bulk load so the rebuild stays under a second. Every join and filter in
   [store.md](docs/store.md) now uses one instead of scanning the table.
 
-- **Still no primary keys, and the cause is now located.** `load_people`
-  inserts six junction tables and only three go through `set()`:
-  `person_names`, `person_sources` and `person_classes` are deduplicated;
-  `person_roles`, `person_albums` and `person_edges` are not. That is the whole
-  bug — three missing `set()` calls at `stages/load.py:481-492` — and it
-  explains the measurements exactly: `person_names` 281/281 distinct against
-  `person_roles` 923/612 and `person_albums` 777/563.
+- **~~The loader inserted duplicate rows.~~** Fixed. `load_people` assembles
+  six junction tables by appending from several files, and only three went
+  through a dedup; all six now go through one `deduped()` helper.
+  `person_roles` 923 → 722, `person_albums` 777 → 563, and all six are now
+  distinct on the full tuple.
 
-  Two xfail(strict=True) tests in `tests/test_load.py` say what the loader
-  *should* do. They fail today; the day the `set()` calls land they pass, pytest
-  reports the xpass as a failure, and that is the reminder to delete the
-  markers. Then the primary keys can go on.
+  `dict.fromkeys`, not the obvious `sorted(set(...))`, and that is not a style
+  choice — sorting these tuples *raises*. They carry `None` wherever a source
+  file omits a column (an album with no date, an edge with no release count,
+  and `n`, which is `None` for `watchlist.json`'s bare-list role form and an
+  int everywhere else), and Python will not compare `None` with `str` or `int`.
+  The fix that looks right turns a silently duplicated row into a failed build.
 
-  `tracks` (910/906) and `credits` (11,926/9,516) are a separate question --
-  those come from the cache, not the merge, so the duplicates are in the cached
-  pages themselves and dedup there would be a judgement about which copy wins.
+- **Primary keys: now viable on four tables, blocked on three, for two
+  different reasons.** Worth separating, because they are no longer one item.
+
+  Ready: `people`, `person_names`, `person_classes`, `person_sources`,
+  `person_albums` (563/563 on `person_key, album_id`) and `person_edges`
+  (123/123 on `person_key, other_name, kind`).
+
+  `person_roles` needs a MERGE decision first, not a dedup. 722 rows against
+  612 distinct `(person_key, role)` pairs, because the same role arrives twice
+  with different counts:
+
+        ('adrian i. lacaberg', 'Assistant Engineer', 8)
+        ('adrian i. lacaberg', 'Assistant Engineer', None)
+
+  Two tuples, one fact — the `None` row is `watchlist.json`'s bare-list form
+  and carries nothing the counted row does not. Collapsing it means deciding
+  that a count beats an absence, which is a judgement about source precedence
+  and belongs in the open rather than in a `set()`.
+
+  `tracks` (910/906) and `credits` (11,926/9,516) are a cache question, not a
+  merge one: the duplicates are in the cached pages themselves, so dedup there
+  means deciding which cached copy wins.
+
 - **~~Two hand-rolled retry loops are left.~~** Done: both deleted.
   `stages/writing.py` goes through `core.qobuz.get_json` now, so the adapter's
   jitter and `Retry-After` apply, and the "5xx after 3 tries" warning went

@@ -334,6 +334,33 @@ def joined(values) -> str | None:
     return " | ".join(str(v) for v in values) if values else None
 
 
+def deduped(rows: list[tuple]) -> list[tuple]:
+    """Distinct rows, in first-seen order.
+
+    Every junction table here is assembled by appending from several files, so
+    a person in both discovery_*.json and watchlist.json contributes the same
+    album twice. Three of the six used to go through sorted(set(...)) and three
+    went through unchanged, which is the whole of the duplicate-row bug: 777
+    person_albums rows for 563 distinct triples, identical.
+
+    dict.fromkeys rather than the obvious sorted(set(...)), and this is not a
+    style preference -- sorting these tuples RAISES. They carry None in every
+    column a source file may omit (an album with no date, an edge with no
+    release count, and `n` which is None for watchlist.json's bare-list role
+    form and an int for the dict form everywhere else), and Python 3 will not
+    compare None with str or int:
+
+        TypeError: '<' not supported between instances of 'int' and 'NoneType'
+
+    So the fix that looks right turns a silently duplicated row into a failed
+    build. dict.fromkeys dedupes on hash alone, never compares, and keeps a
+    deterministic order -- which matters because the alternative, a bare set(),
+    would order rows by Python's per-process string hash seed and make the
+    build unreproducible.
+    """
+    return list(dict.fromkeys(rows))
+
+
 # ---- people --------------------------------------------------------------
 
 
@@ -474,19 +501,23 @@ def load_people(ld: Loader) -> None:
     ld.insert("people", cols,
               [tuple(joined(sorted(r["sources"])) if c == "sources" else r.get(c)
                      for c in cols) for r in people.values()])
-    ld.insert("person_names", ["person_key", "name"], sorted(set(names)))
+    ld.insert("person_names", ["person_key", "name"], deduped(names))
     # A junction rather than a column, because multi-seed intersection is a
     # FILTER: "keep people who appear in 3+ discovery graphs" (README:122) is a
     # HAVING COUNT(*) on this table, and unanswerable against a joined string.
     ld.insert("person_sources", ["person_key", "source"],
-              sorted({(k, src) for k, r in people.items() for src in r["sources"]}))
-    ld.insert("person_classes", ["person_key", "class"], sorted(set(classes)))
+              deduped([(k, src) for k, r in people.items()
+                       for src in sorted(r["sources"])]))
+    ld.insert("person_classes", ["person_key", "class"], deduped(classes))
     ld.insert("person_roles",
-              ["person_key", "role", "role_key", "role_class", "role_weight", "n"], roles)
+              ["person_key", "role", "role_key", "role_class", "role_weight", "n"],
+              deduped(roles))
     ld.insert("person_albums",
-              ["person_key", "album_id", "title", "date", "tracks", "roles"], albums)
+              ["person_key", "album_id", "title", "date", "tracks", "roles"],
+              deduped(albums))
     ld.insert("person_edges",
-              ["person_key", "other_name", "releases", "roles", "kind"], edges)
+              ["person_key", "other_name", "releases", "roles", "kind"],
+              deduped(edges))
 
 
 # ---- releases ------------------------------------------------------------
