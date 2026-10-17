@@ -1,7 +1,9 @@
 """Qobuz storefront access.
 
-APP_ID is the public web-player app id, not a secret; the API also wants the
-cookies any /discover page hands out. Both were copied into four scripts.
+APP_ID is the public web-player app id, not a secret -- the same value for
+everybody, which is why it is a default in code rather than configuration (see
+the note on it below). The API also wants the cookies any /discover page hands
+out. Both were copied into four scripts.
 
 search_artists/pick moved here from stages/resolve_qobuz.py: name resolution is
 plumbing, not credits judgement, and leaving it in a stage meant anything that
@@ -11,6 +13,7 @@ with it.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import urllib.parse
 from collections.abc import Iterable
@@ -20,7 +23,17 @@ from core.http import get as _http_get
 from core.http import message as message  # noqa: F401  (re-exported for callers)
 from core.names import normalise
 
-APP_ID = "712109809"
+# An override, NOT a relocation: the default is the working value, so nothing
+# has to be configured and nothing can be misconfigured. The env var exists for
+# the one case that is otherwise a commit -- Qobuz rotating the id while a job
+# is scheduled -- and for that it is worth one line.
+#
+# Deliberately not a required secret. This value is the same for everybody, so
+# .github/workflows/ needs no secrets at all, which is worth keeping: nothing to
+# rotate, nothing to leak, and pull requests from forks still run. Contrast
+# DISCOGS_TOKEN (stages/resolve_discogs.py), which is per-person and genuinely
+# secret, and so is read from the environment with no default.
+APP_ID = os.environ.get("QOBUZ_APP_ID") or "712109809"
 API = "https://www.qobuz.com/api.json/0.2"
 SITE = "https://www.qobuz.com"
 UA = "Mozilla/5.0"
