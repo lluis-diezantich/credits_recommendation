@@ -15,6 +15,12 @@ cannot: sharing a producer means something, sharing a mastering house does not.
 ## Install
 
     python3 -m venv .venv && ./.venv/bin/pip install -e ".[dev]"
+    ./.venv/bin/pre-commit install          # ruff before the commit, not after
+
+CI installs from `requirements.lock` (runtime) and `requirements-dev.lock`
+(plus the tooling) with `--require-hashes`, so a release somebody else ships
+cannot turn the Friday radar red. Both are generated — regenerate with the
+`uv pip compile` line in their headers after changing `pyproject.toml`.
 
 
 ## Running it
@@ -23,7 +29,7 @@ cannot: sharing a producer means something, sharing a mastering house does not.
     ./stages/favourites.py --review            # fix what did not resolve cleanly
     ./radars/qobuz.py --days 10                # what came out
     ./stages/load.py                           # everything on disk -> data/music.db
-    pytest -q                                  # 65 cases, offline
+    pytest -q                                  # 187 cases, offline
 
 `python -m stages.favourites` works too. Each stage reads and writes JSON in
 `data/`, so any stage can be rerun alone, and `resolve_discogs.py --pool-only`
@@ -46,9 +52,13 @@ resumes a run that died partway through its fan-out.
       remezcla.py        a blog, not an id namespace - its own script
       report.py          a radar's JSON -> markdown, for the weekly issue
     tests/             pytest, offline - every network call stubbed at the seam
+                       policy.py and core/credits.py are at 100%; six files are
+                       at zero - `pytest --cov` names them
     data/              generated JSON, gitignored except favourites.json
     cache/             API responses - the source of truth, never regenerated
     .github/workflows/ radar.yml runs any radar; one caller per schedule
+                       tests.yml: ruff, ty, pytest --cov on 3.11/3.12/3.13
+    requirements*.lock hashed pins for CI - generated, see their headers
     contrib/           qobuz_keys.py - vendored gist, not ours
 
 `data/music.db` is derived and disposable: `./stages/load.py` rebuilds 216k rows
