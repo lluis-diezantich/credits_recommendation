@@ -1,0 +1,52 @@
+# ruff BEFORE the commit, not after it.
+#
+# The reason is recorded in the git history: "clear the lint backlog ruff could
+# not report before" was a commit, and the one after it was "revert the
+# notebook: ruff --fix reached it before the exemption did". A backlog
+# accumulated because linting was a thing someone remembered to run, and then
+# clearing it in one pass touched a file it should not have.
+#
+#     pip install -e ".[dev]" && pre-commit install
+#
+# `pre-commit run --all-files` does the whole tree on demand. The hooks are
+# pinned to a rev, like the Actions are pinned to a SHA, and bumped by
+# dependabot (.github/dependabot.yml) rather than floating.
+#
+# Deliberately NOT here: pytest and ty. Both read the whole project rather than
+# the staged files, so they belong in CI where they can take as long as they
+# need -- a commit hook that runs the suite is a commit hook people start
+# passing --no-verify to, which costs the lint checks as well.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.1                 # keep in step with the ruff in requirements-dev.lock
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+        # Format CHECK only, never a rewrite: this project's style is
+        # deliberate in places ruff-format disagrees with -- the aligned
+        # columns in policy.py's ROLE_WEIGHTS, the comment-per-value layout in
+        # load.py's SCHEMA. Reformatting those would cost more than it buys.
+        args: [--diff]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml           # the workflows are the thing worth validating
+      - id: check-toml           # pyproject.toml holds the whole build now
+      - id: check-added-large-files
+        # cache/ is the corpus and data/ is generated; .gitignore already keeps
+        # them out, so anything big arriving here is an accident.
+        args: [--maxkb=512]
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+exclude: |
+  (?x)^(
+    contrib/.*            # vendored gist, as in ruff and ty
+    |notebooks/.*         # exploratory cells
+    |requirements.*\.lock  # generated, and trailing-whitespace would churn it
+  )$

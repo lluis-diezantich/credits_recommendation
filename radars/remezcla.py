@@ -206,7 +206,7 @@ def parse_issue(page: str, url: str, fallback_date: str) -> tuple[list[dict], li
         blurb_all = section.get_text(" ").strip()
         if not title:
             byline_only = BYLINE_RE.search(blurb_all)
-            embed = section.find(attrs={"title": True})
+            embed = section.find(None, {"title": True})
             hint = embed["title"] if embed and 5 <= len(embed["title"]) <= 90 else ""
             # "Spotify Embed: X" gives the track and no artist; a YouTube title
             # gives both but reversed and shouted. Neither is parsed here.
