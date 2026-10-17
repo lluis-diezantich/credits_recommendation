@@ -80,14 +80,68 @@ def get_json(url: str, headers: dict[str, str] | None = None,
     return None, "error"
 
 
-def search_artists(name: str, store: str = STORE) -> list[dict]:
-    """Autosuggest. Needs no app id and no cookies, and folds case and accents."""
+def search_artists_outcome(name: str, store: str = STORE) -> tuple[list[dict], str]:
+    """(candidates, outcome) for one autosuggest query: "ok", "not_found", "error".
+
+    The outcome is the whole point. Qobuz autosuggest returns intermittent 500s
+    under sustained load, and a caller that cannot tell that from an empty
+    result will record "this person is not in Qobuz" for a request that simply
+    failed -- which once discarded 146 of 154 collaborators on a single run.
+    Needs no app id and no cookies, and folds case and accents.
+    """
     url = f"{SITE}/v4/{store}/catalog/search/autosuggest?q={urllib.parse.quote(name)}"
     data, outcome = get_json(url, {"x-requested-with": "XMLHttpRequest"},
                              f"search for {name!r}")
     if outcome != "ok" or not isinstance(data, dict):
-        return []
-    return data.get("artists") or []
+        return [], outcome
+    return data.get("artists") or [], "ok"
+
+
+def search_artists(name: str, store: str = STORE) -> list[dict]:
+    """Autosuggest candidates, with a failure flattened into an empty list.
+
+    Convenient and lossy: callers that must not mistake a 500 for an absence
+    want find_artist() or search_artists_outcome() instead. Kept because the
+    two interactive callers genuinely do not care -- stages/favourites.py is
+    showing a human a menu, and a human can see that it came up empty.
+    """
+    return search_artists_outcome(name, store)[0]
+
+
+def find_artist(names, store: str = STORE) -> tuple[dict | None, str]:
+    """Resolve any spelling of one artist to a Qobuz artist, and say how.
+
+    Outcomes are pick()'s three, plus "error" for a request that failed:
+
+        exact / ambiguous   a hit; `ambiguous` means several names matched and
+                            the one with most albums was taken
+        not_found           the searches came back empty
+        no_exact_match      there were candidates and none matched a spelling
+        error               the storefront failed. NOT an answer -- the caller
+                            is expected to keep this retryable rather than
+                            record the person as missing from Qobuz.
+
+    Every spelling is searched until one yields a hit, because the variants are
+    where the matches are: Discogs decorates names it needs to disambiguate
+    ("Mauro (5)", "Valeria Castro*"), and those fail an exact match verbatim
+    while the stripped form resolves. Matching is always against the FULL set of
+    spellings, so a search under one name can match a candidate under another.
+    """
+    spellings = [n for n in dict.fromkeys(names) if n and n.strip()]
+    if not spellings:
+        return None, "not_found"
+    seen_candidates = False
+    for name in spellings:
+        candidates, outcome = search_artists_outcome(name, store)
+        if outcome == "error":
+            return None, "error"
+        if not candidates:
+            continue
+        seen_candidates = True
+        hit, how = pick(spellings, candidates)
+        if hit is not None:
+            return hit, how
+    return None, ("no_exact_match" if seen_candidates else "not_found")
 
 
 def pick(names: Iterable[str], candidates: list[dict]) -> tuple[dict | None, str]:

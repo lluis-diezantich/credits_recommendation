@@ -34,14 +34,12 @@ import json
 import os
 import sys
 import time
-import urllib.parse
 
 from core.discogs import Throttle, discogs_credits, find_discogs_artist
 from core.names import normalise, strip_discogs_suffix
 from core.paths import DATA
 from core.qobuz import PAUSE as QOBUZ_PAUSE
-from core.qobuz import SITE, STORE, artist_releases, store_cookies
-from core.qobuz import get as _qobuz_get
+from core.qobuz import STORE, artist_releases, find_artist, store_cookies
 from policy import (
     CLASS_NAMES,
     MIN_ROLE_WEIGHT,
@@ -88,37 +86,6 @@ def wanted(person: dict, classes: set[str], roles: set[str], match_any: bool) ->
         if role_key(role) in roles or role_class(role) in classes:
             return True
     return False
-
-
-# ---- Qobuz side (same conventions as qobuz_resolve.py) -------------------
-
-
-def qobuz_find_artist(name: str, store: str) -> tuple[dict | None, str]:
-    """Exact-match an artist name to a Qobuz artist.
-
-    Returns (hit, outcome) so "genuinely not in Qobuz" is distinguishable from
-    "the request failed". Qobuz autosuggest returns intermittent HTTP 500 under
-    sustained load, and treating that as a miss silently discarded 146 of 154
-    collaborators on one run -- an error must never look like an answer.
-    """
-    url = f"{SITE}/v4/{store}/catalog/search/autosuggest?q={urllib.parse.quote(name)}"
-    for attempt in range(3):
-        status, body, _ = _qobuz_get(url, {"x-requested-with": "XMLHttpRequest"})
-        if status == 200:
-            try:
-                candidates = json.loads(body).get("artists") or []
-            except json.JSONDecodeError:
-                return None, "bad_json"
-            exact = [c for c in candidates
-                     if normalise(c.get("name") or "") == normalise(name)]
-            if not exact:
-                return None, "not_found"
-            exact.sort(key=lambda c: -(c.get("albumsCount") or 0))
-            return exact[0], "exact"
-        if status < 500:
-            return None, f"http_{status}"
-        time.sleep(0.8 * (attempt + 1))        # transient: back off and retry
-    return None, "http_5xx"
 
 
 def main() -> int:
@@ -405,9 +372,14 @@ def build_pool(args, seed, known_qobuz, collaborators) -> int:
     print(f"\nresolving {len(ranked)} collaborator artists in Qobuz...", file=sys.stderr)
     cookies = store_cookies(args.store)
     resolved, unmatched, errored = [], [], []
+    ambiguous = 0
     for index, candidate in enumerate(ranked, 1):
-        hit, outcome = qobuz_find_artist(candidate["name"], args.store)
-        if hit is None and outcome != "not_found":
+        # Both spellings, because these names came out of Discogs credit rows
+        # and nothing has stripped the decorations off them yet: "Valeria
+        # Castro*" and "Mauro (5)" fail an exact match verbatim.
+        hit, outcome = find_artist(
+            [candidate["name"], strip_discogs_suffix(candidate["name"])], args.store)
+        if outcome == "error":
             # A failure, not an answer. Keep it visible so it can be retried.
             errored.append({"name": candidate["name"], "outcome": outcome})
         elif hit is None:
@@ -415,14 +387,17 @@ def build_pool(args, seed, known_qobuz, collaborators) -> int:
         elif int(hit["id"]) in known_qobuz or str(hit["id"]) == str(seed.get("qobuz_id")):
             pass                                   # already watched, or the seed
         else:
+            ambiguous += outcome == "ambiguous"
             resolved.append({**candidate, "qobuz_id": int(hit["id"]),
                              "qobuz_name": hit.get("name"),
+                             "qobuz_match": outcome,
                              "albums_count": hit.get("albumsCount") or 0})
         if index % 25 == 0:
             print(f"  ...{index}/{len(ranked)}", file=sys.stderr)
         time.sleep(QOBUZ_PAUSE)
 
-    print(f"resolved {len(resolved)} in Qobuz, {len(unmatched)} not found, "
+    print(f"resolved {len(resolved)} in Qobuz ({ambiguous} ambiguous), "
+          f"{len(unmatched)} not found, "
           f"{len(errored)} FAILED (retryable with --pool-only)", file=sys.stderr)
 
     pool, seen = [], set()

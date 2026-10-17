@@ -90,11 +90,11 @@ class QobuzRadar(Radar):
     pause = PAUSE
     default_days = RECENT_DAYS
 
-    def add_arguments(self, ap) -> None:
-        ap.add_argument("--find", metavar="NAME",
-                        help="look up Qobuz artist ids by name and exit")
-        ap.add_argument("--store", default=STORE,
-                        help=f"storefront code (default: {STORE})")
+    def add_arguments(self, parser) -> None:
+        parser.add_argument("--find", metavar="NAME",
+                            help="look up Qobuz artist ids by name and exit")
+        parser.add_argument("--store", default=STORE,
+                            help=f"storefront code (default: {STORE})")
 
     def watching(self) -> dict:
         return WATCHED_ARTISTS

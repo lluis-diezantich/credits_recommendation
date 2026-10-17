@@ -1,0 +1,44 @@
+# Bump the pins deliberately, as pull requests.
+#
+# This is the other half of pinning: .github/workflows/* now reference actions
+# by commit SHA rather than by `@v4`, which stops a moving tag from changing
+# what runs, and requirements*.lock pin every package by hash. Both are
+# unambiguous and both are now frozen, so without something to bump them they
+# would rot -- a security fix in actions/checkout would never arrive.
+#
+# Weekly, on Monday, so anything it opens has the week to be looked at before
+# the Friday radar run that actually matters.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:23"              # off the hour, as the radar cron is
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+    groups:
+      # One PR for all of them: they are first-party actions that move
+      # together, and three separate SHA bumps a week is noise.
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:41"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+    groups:
+      dev-tooling:
+        # ruff and ty move fast and a bump can add diagnostics; keeping them
+        # out of the runtime group means a lint change never blocks a security
+        # bump to requests.
+        patterns: ["ruff", "ty", "pytest*", "pre-commit"]
+      runtime:
+        patterns: ["requests", "beautifulsoup4", "urllib3", "certifi", "soupsieve"]

@@ -57,9 +57,7 @@ from pathlib import Path
 from core.credits import parse_performers
 from core.names import normalise
 from core.paths import CACHE, DATA
-from core.qobuz import API, APP_ID, PAUSE, STORE
-from core.qobuz import get as _get
-from core.qobuz import message as _message
+from core.qobuz import API, APP_ID, PAUSE, STORE, get_json
 from policy import (
     COMPOSER_ROLES,
     COVERS_MILL_HINTS,
@@ -170,30 +168,27 @@ def search_page(query: str, offset: int, store: str,
     url = f"{API}/track/search?" + urllib.parse.urlencode(
         {"query": query, "limit": SEARCH_PAGE, "offset": offset,
          "app_id": APP_ID, "store": store})
-    # Qobuz returns intermittent 5xx under sustained load; a transient failure
-    # must not look like the end of the result set (qobuz_resolve.py:81).
-    for attempt in range(3):
-        status, body, _ = _get(url, {"x-app-id": APP_ID})
-        if status == 200:
-            try:
-                block = json.loads(body).get("tracks") or {}
-            except json.JSONDecodeError:
-                return [], 0, False
-            items = block.get("items") or []
-            total = int(block.get("total") or 0)
-            slim = [{"title": t.get("title"),
-                     "performers": t.get("performers") or "",
-                     "performer": {"name": (t.get("performer") or {}).get("name")},
-                     "album": {"title": (t.get("album") or {}).get("title"),
-                               "id": (t.get("album") or {}).get("id")}} for t in items]
-            cached.write_text(json.dumps({"total": total, "items": slim}))
-            return slim, total, False
-        if status < 500:
-            print(f"warning: track/search HTTP {status}: {_message(body)}", file=sys.stderr)
-            return [], 0, False
-        time.sleep(0.8 * (attempt + 1))
-    print("warning: track/search failed with 5xx after 3 tries", file=sys.stderr)
-    return [], 0, False
+    # Qobuz returns intermittent 5xx under sustained load, and a transient
+    # failure must not look like the end of the result set
+    # (qobuz_resolve.py:81). The retrying is core.http's adapter's job now --
+    # with jitter and Retry-After, which the loop that used to sit here
+    # ignored -- so an outcome arriving back is already final. get_json has
+    # warned by this point; `False` for "not from the cache" is all that is
+    # left to say.
+    data, outcome = get_json(url, {"x-app-id": APP_ID},
+                             f"track/search {query!r} at offset {offset}")
+    if outcome != "ok" or not isinstance(data, dict):
+        return [], 0, False
+    block = data.get("tracks") or {}
+    items = block.get("items") or []
+    total = int(block.get("total") or 0)
+    slim = [{"title": t.get("title"),
+             "performers": t.get("performers") or "",
+             "performer": {"name": (t.get("performer") or {}).get("name")},
+             "album": {"title": (t.get("album") or {}).get("title"),
+                       "id": (t.get("album") or {}).get("id")}} for t in items]
+    cached.write_text(json.dumps({"total": total, "items": slim}))
+    return slim, total, False
 
 
 def writing_share(items: list[dict], aliases: set[str]) -> tuple[int, int]:

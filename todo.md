@@ -32,32 +32,75 @@ The gap between "a credits database" and "recommends music".
 
 Where the code can be wrong without anything noticing.
 
-- **`policy.py` and `core/credits.py` are untested.** Zero coverage on the two
-  files holding every judgement in the project — the role weights,
-  `writing_tier`, `selectivity`, and the packed-segment heuristic in
-  `parse_performers`. A ranker will be built directly on top of both, so this
-  is the prerequisite rather than a chore. Hours, not days.
-- **No indexes and no primary keys in `data/music.db`.** `stages/load.py`
-  creates 20-odd tables and not one index, on a store whose stated purpose is
-  joins — over 190k listens. See [store.md](docs/store.md).
-- **Two hand-rolled retry loops are left.** `stages/resolve_discogs.py:120` and
-  `stages/writing.py:194` still sleep `0.8 * (attempt + 1)` on a 5xx, which
-  `core/http.py`'s adapter has done with jitter and `Retry-After` since the
-  `requests` move.
-- **A weaker copy of the autosuggest is left.** `resolve_discogs.py:96`
-  `qobuz_find_artist` duplicates `core.qobuz.search_artists` + `pick`, but
-  searches one spelling instead of every name variant and cannot report
-  `ambiguous`.
+- **~~`policy.py` and `core/credits.py` are untested.~~** Done: both at 100%,
+  94 cases in `tests/test_policy.py` and `tests/test_credits.py`. The three
+  disagreeing role vocabularies are now pinned against each other, so unifying
+  them fails a test rather than quietly rewriting a column of existing data.
+
+- **Six files are at zero coverage.** The real shape of the gap, now that
+  `pytest --cov` reports it (34% overall): `stages/load.py` 299 statements,
+  `stages/resolve_discogs.py` 230, `stages/writing.py` 219, `core/discogs.py`
+  89, `radars/itunes.py` 68, `radars/listenbrainz.py` 63 — all at 0%.
+  `load.py` is the largest file in the repo. The entry above named the two
+  files that mattered most for a ranker; these are what is left.
+- **~~No indexes in `data/music.db`.~~** Done: 45 of them, created after the
+  bulk load so the rebuild stays under a second. Every join and filter in
+  [store.md](docs/store.md) now uses one instead of scanning the table.
+
+- **Still no primary keys, and that is now a finding rather than an omission.**
+  Four tables hold rows that duplicate on any natural key: `person_albums` has
+  777 rows for 563 distinct `(person_key, album_id, roles)` triples —
+  *identical* triples, so the loader inserts some rows twice. Also
+  `person_roles` (923/612), `tracks` (910/906) and `credits` (11,926/9,516,
+  with `track_id` NULL on the 8,806 rows that came from `search`). Fix the
+  loader where the rows are built; a key added before that converts a silent
+  duplicate into a failed rebuild, and cheap rebuilds are `load.py`'s whole
+  contract.
+- **~~Two hand-rolled retry loops are left.~~** Done: both deleted.
+  `stages/writing.py` goes through `core.qobuz.get_json` now, so the adapter's
+  jitter and `Retry-After` apply, and the "5xx after 3 tries" warning went
+  with the loop that produced it.
+- **~~A weaker copy of the autosuggest is left.~~** Done, and it was hiding a
+  real defect. `qobuz_find_artist` is replaced by `core.qobuz.find_artist`,
+  which reports `ambiguous`, keeps `error` apart from `not_found`, and tries
+  **every** spelling — which matters more than it sounds: those names come
+  straight out of Discogs credit rows, so `"Valeria Castro*"` and `"Mauro (5)"`
+  were being matched verbatim and failing. `search_artists` keeps its lossy
+  shape for the two interactive callers. `stages/resolve_qobuz.py:140` still
+  has the old blindness — a one-line change whenever that stage next matters.
 
 ## Infrastructure
 
-- **Nowhere durable to keep state.** A runner has no disk between runs, so the
-  Friday job passes `--all` and lets the date window do the filtering;
-  `data/*_seen.json` only ever accumulates on one laptop, and `--run-log`
-  writes a file that dies with the job. The cost today is a release appearing
-  in two consecutive issues when `--days` exceeds seven. Cheapest fix: have the
-  Action commit the seen file back, which also turns the history into a log of
-  what was reported. This blocks every stateful radar, not just this one.
+- **~~Nowhere durable to keep state.~~** Done. `core/radar.py` takes
+  `--state PATH`, and `radar.yml` derives `data/ci/<radar>_seen.json`, runs
+  against it, and commits it back — so the Friday radar is stateful and the git
+  history of that file is a dated log of what was actually reported, which is
+  the impression data [roadmap.md](docs/roadmap.md) needs before anything can
+  be evaluated. `stateless: true` remains for a backfill.
+
+  Four things that are load-bearing rather than incidental, recorded so nobody
+  "tidies" them:
+
+  - **`data/ci/`, not `data/<radar>_seen.json`.** The reason that file is
+    gitignored still holds: a runner's "already reported" must not arrive on a
+    laptop and silence the radar there. `.gitignore` un-ignores this directory
+    alone.
+  - **The record step runs AFTER the issue is opened.** If the issue fails and
+    the ids are already recorded, that week's releases are marked seen and
+    appear in no issue at all. Losing state costs one duplicate; losing the
+    issue costs the week.
+  - **The caller needs `contents: write` too.** A called workflow can never
+    hold more permission than its caller grants, so leaving
+    `releases-known-artists.yml` at `read` makes only the push 403 while every
+    other step succeeds — the quietest possible way to lose the state.
+  - **`concurrency` is queued, not cancelled.** Two runs racing means the
+    loser's push is rejected; a cancelled radar run is a missed week.
+
+  Expect the first stateful commit to be large (~136 KB): `record_scanned` is
+  True for Qobuz, so a run records every id it *scanned*, not just what it
+  reported — which is what stops an old release resurfacing the week it falls
+  out of the date window. Later commits are small.
+
 - **`cache/` exists in one copy, on one laptop.** Deleting `data/music.db`
   costs one rerun; deleting `cache/` costs the corpus. This is a backup
   problem, not an architecture problem, and `rclone sync` answers it in twenty
@@ -65,21 +108,39 @@ Where the code can be wrong without anything noticing.
 
 ## Build and CI
 
-Each of these is under an hour, and each is something a reviewer would expect.
+~~Each of these is under an hour, and each is something a reviewer would
+expect.~~ All done.
 
-- **No type checker.** Everything is annotated and nothing verifies it; `ruff`
-  is lint, not types. Add `ty` or `pyright` to the dev extra and a step to
-  `tests.yml`.
-- **No lockfile.** `requests>=2.32` is a floor, not a lock, so CI can break on
-  somebody else's release rather than on a change here.
-- **No `pre-commit`.** `ruff` currently runs after the fact, which is how a
-  lint backlog accumulated once already.
-- **Actions float on major tags.** `actions/checkout@v4` and friends are moving
-  references; pin to SHAs and add `dependabot.yml` to bump them deliberately.
-- **No coverage measurement.** 76 tests and no record of what they reach, which
-  is how `policy.py` stayed untested without it being obvious.
-- **Only one Python version is tested.** `requires-python = ">=3.11"`, CI runs
-  3.12 alone, so the floor is a claim rather than a tested fact.
+- **~~No type checker.~~** `ty`, in the dev extra and a `tests.yml` step,
+  configured in `pyproject.toml` so `ty check` means the same on a laptop.
+  Clean now, and it found two real things on its first run: `radars/qobuz.py`
+  overrode `add_arguments(self, ap)` against a base taking `parser`, so a
+  keyword call broke on that one subclass, and `radars/remezcla.py` called
+  `find(attrs=...)` in a form bs4's own overloads reject. Both fixed. The only
+  rule suppressed in source is `unresolved-import`, for the optional `duckdb`
+  that `stages/load.py` already guards with `try/except ImportError`.
+- **~~No lockfile.~~** Two, hashed and universal, resolved for the 3.11 floor
+  so one file serves the whole matrix: `requirements.lock` for the radar's
+  runtime and `requirements-dev.lock` for CI. Installed with
+  `--require-hashes`, then the project with `--no-deps` so the lock stays
+  authoritative. A test-only package can no longer break the Friday job,
+  because it is not in that job's environment at all.
+- **~~No `pre-commit`.~~** `.pre-commit-config.yaml`, pinned to a rev.
+  `ruff-format` is `--diff` only, never a rewrite: the aligned columns in
+  `policy.py` and the comment-per-value `SCHEMA` in `load.py` are deliberate.
+  `pytest` and `ty` stay out of it — both read the whole project, and a hook
+  that runs the suite is a hook people pass `--no-verify` to, which costs the
+  lint checks as well.
+- **~~Actions float on major tags.~~** All three pinned to SHAs in both
+  workflows, with `.github/dependabot.yml` bumping actions and pip weekly on
+  Monday — grouped so a lint bump never blocks a security bump to `requests`.
+- **~~No coverage measurement.~~** `pytest --cov`, into the job summary rather
+  than a service, and no `fail_under` — the useful signal is per-file, and a
+  global percentage averages `load.py` together with `policy.py` until neither
+  means anything. It paid for itself immediately: see the zero-coverage entry
+  under Correctness.
+- **~~Only one Python version is tested.~~** 3.11, 3.12 and 3.13, with
+  `fail-fast: false`. The floor is a tested fact now.
 
 ## Smaller things
 
@@ -96,7 +157,7 @@ Each of these is under an hour, and each is something a reviewer would expect.
   is a gap nothing else would reveal.
 - **`--review` cannot re-ask about a row that resolved `exact`.** A wrong id
   that looked confident can only be fixed by editing the JSON.
-- **`README.md` says `65 cases`.** It is 76.
+- **~~`README.md` says `65 cases`.~~** It says 187, which is what it is.
 
 ## Not yet, on purpose
 

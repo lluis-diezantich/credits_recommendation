@@ -20,7 +20,10 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "pytest-cov>=5.0",            # coverage, so an untested file is visible
     "ruff>=0.6",
+    "ty>=0.0.89",                 # types; everything here is annotated already
+    "pre-commit>=3.7",            # ruff before the commit, not after it
 ]
 
 # This is a collection of scripts, not a distributable package, but naming the
@@ -55,3 +58,54 @@ select = ["E", "F", "I", "UP", "B"]
 # cells read. Linting it as a script would mean rewriting cells to satisfy
 # rules that do not apply to them.
 "notebooks/*" = ["ALL"]
+
+# Coverage is measured to answer one question: which files does the suite not
+# reach at all? policy.py sat at zero for the life of the project without that
+# being obvious from "76 tests pass", which is the failure mode worth closing.
+#
+# No `fail_under`. A number here would be a target, and the useful signal is
+# per-file: stages/load.py is 699 lines of bulk insert that a test suite with
+# no fixtures for a 190k-row export cannot reach, and a global percentage
+# averages that together with policy.py until neither means anything.
+[tool.coverage.run]
+source = ["core", "stages", "radars", "policy"]
+omit = ["contrib/*", "notebooks/*", "tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_also = [
+    "if __name__ == .__main__.:",   # every stage ends in one
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
+
+# ty, not mypy: everything is annotated, nothing verified it, and `ruff` is
+# lint. Narrow on purpose -- the point is to catch a signature that drifted
+# from its caller, not to win an argument with requests' stubs.
+[tool.ty.src]
+exclude = [
+    ".venv",
+    "contrib",                    # vendored gist, not ours (as in ruff above)
+    "notebooks",                  # exploratory cells, same reason as ruff
+    "cache",
+    "data",
+]
+
+[tool.ty.rules]
+# duckdb is an optional query-layer dependency, imported inside a try/except
+# ImportError that exists precisely to report its absence (stages/load.py:105).
+# An unresolved import there is the design, not a defect.
+unresolved-import = "ignore"
+
+[[tool.ty.overrides]]
+include = ["tests/**"]
+
+[tool.ty.overrides.rules]
+# A test that has just asserted an outcome is "exact" knows the hit is not
+# None, and `assert hit is not None` on every line to prove it to the checker
+# makes the suite worse at its actual job of being readable.
+not-subscriptable = "ignore"
+# requests' BaseAdapter stub does not expose max_retries/poolmanager, which is
+# exactly what tests/test_http.py asserts the adapter was configured with.
+unresolved-attribute = "ignore"

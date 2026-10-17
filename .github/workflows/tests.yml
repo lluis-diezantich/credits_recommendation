@@ -1,4 +1,4 @@
-# The suite, on every push to main and every pull request.
+# The suite, the types and the lint, on every push to main and every pull request.
 #
 # Advisory on purpose: no branch protection and no required checks, because a
 # solo repo gains nothing from being unable to push a one-line fix. The point
@@ -7,6 +7,11 @@
 #
 # No secrets and no network: the suite stubs every call at the seam, so it
 # cannot reach Qobuz or ListenBrainz and cannot touch data/.
+#
+# Actions are pinned to commit SHAs, not to `@v4`. A major tag is a moving
+# reference, so `@v4` means "whatever that tag points at the morning the radar
+# runs" -- the one thing a job whose value is being trustworthy should not have.
+# .github/dependabot.yml bumps them as pull requests.
 name: tests
 
 on:
@@ -20,16 +25,68 @@ permissions:
 jobs:
   run:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    strategy:
+      # `requires-python = ">=3.11"` was a claim: CI ran 3.12 alone, so the
+      # floor was never exercised and neither was anything above it. 3.11 is
+      # the floor, 3.12 is what the radar runs on, 3.13 is the warning that
+      # something is about to break.
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
 
-      - uses: actions/setup-python@v5
+    name: py${{ matrix.python-version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
           cache: pip
+          cache-dependency-path: requirements-dev.lock
 
       - name: Install
-        run: pip install -e ".[dev]"
+        # The lock first, hashed, then the project itself with --no-deps: that
+        # order is what makes the lock authoritative. `pip install -e ".[dev]"`
+        # alone would re-resolve and quietly ignore it.
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r requirements-dev.lock
+          pip install -e . --no-deps
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Types
+        # Everything here is annotated and nothing verified it until now; ruff
+        # is lint, not types. Scoped in pyproject.toml ([tool.ty]) rather than
+        # by flags here, so `ty check` means the same thing on a laptop.
+        run: ty check
 
       - name: Run the suite
-        run: pytest -q
+        run: pytest -q --cov --cov-report=term-missing --cov-report=xml
+
+      - name: Coverage summary
+        # Into the job summary rather than a service: the question worth
+        # answering is "which file does the suite not reach at all", and that
+        # fits in a table. policy.py sat at zero for the life of the project
+        # without "76 tests pass" ever hinting at it.
+        if: always()
+        run: |
+          set -euo pipefail
+          {
+            echo "## Coverage (py${{ matrix.python-version }})"
+            echo
+            echo '```'
+            coverage report || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the coverage xml
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: coverage-py${{ matrix.python-version }}
+          path: coverage.xml
+          retention-days: 30
+          if-no-files-found: ignore
