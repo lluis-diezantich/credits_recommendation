@@ -62,7 +62,7 @@ Where the code can be wrong without anything noticing.
   `build_pool()` and the fetch-and-print middle of `run_one()`. That is now
   what those functions ARE, the decisions having moved out. Covering them means
   stubbing Discogs plus the filesystem and asserting on printed output, which
-  buys much less than the 65 decision tests did — worth doing when
+  buys much less than the 110 decision tests did — worth doing when
   `build_pool` next changes, not before.
 
 - **`collapse()` never merges two titles of the same length.** Found while
@@ -78,9 +78,10 @@ Where the code can be wrong without anything noticing.
   title survives. A test states the current behaviour so the choice is
   deliberate when it is made.
 
-- **~~No indexes in `data/music.db`.~~** Done: 45 of them, created after the
+- **~~No indexes in `data/music.db`.~~** Done: 30 of them, created after the
   bulk load so the rebuild stays under a second. Every join and filter in
-  [store.md](docs/store.md) now uses one instead of scanning the table.
+  [store.md](docs/store.md) now uses one instead of scanning the table. It was
+  45 until the primary keys went on and subsumed 15 — see that entry below.
 
 - **~~The loader inserted duplicate rows.~~** Fixed. `load_people` assembles
   six junction tables by appending from several files, and only three went
