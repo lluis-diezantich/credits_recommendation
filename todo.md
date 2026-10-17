@@ -173,15 +173,43 @@ Where the code can be wrong without anything noticing.
   reported — which is what stops an old release resurfacing the week it falls
   out of the date window. Later commits are small.
 
-- **`cache/` exists in one copy, on one laptop.** Deleting `data/music.db`
-  costs one rerun; deleting `cache/` costs the corpus. This is a backup
-  problem, not an architecture problem, and `rclone sync` answers it in twenty
-  minutes without touching any code.
+- **Nothing ever calls the real APIs except the Friday job.** The suite stubs
+  every network call at the seam, which is correct — it is why the tests are
+  offline, fast and free. The cost is that a *source* changing shape is
+  invisible: Qobuz renaming a field, Apple dropping `releaseDate`, Discogs
+  changing its pagination. Every test still passes, and the first anyone knows
+  is a Friday issue that is empty or wrong.
+
+  A canary closes it: one scheduled job that calls each source for real,
+  asserts the handful of fields the radars actually read, and opens an issue
+  when one is missing. `--dry-run` already exists on all three radars, so this
+  is a caller plus a small assertion script, not new machinery. Under an hour,
+  and it protects the only part of this that runs unattended.
+
+  Deliberately separate from `tests.yml`: a canary fails when a third party
+  changes something, which is news but not a broken commit, and wiring it into
+  the commit checks would make every push red for a reason nobody pushed.
 
 ## Build and CI
 
 ~~Each of these is under an hour, and each is something a reviewer would
-expect.~~ All done.
+expect.~~ The original six are done. Two more have since become worth having,
+both still under an hour.
+
+- **No vulnerability scanning.** `dependabot.yml` bumps versions; it does not
+  know which of them are vulnerable. `pip-audit` against the two lockfiles is
+  one step and answers a different question.
+
+- **No required status check on `main`.** There is no branch protection at all
+  (the API returns 404). `tests.yml` says advisory-on-purpose, and at 76 tests
+  that was reasonable; at 493 with `ruff` and `ty` gating as well, requiring
+  the check on pull requests costs nothing and stops a red merge.
+
+  Separately, and this is the sharper lesson: a `todo.md` conflict between two
+  merged PRs was resolved in favour of the older text, silently reverting a
+  correction. Branch protection would not have caught that. What would: either
+  stop editing `todo.md` in every branch, or give it a union merge driver in
+  `.gitattributes` so both sides survive a conflict instead of one winning.
 
 - **~~No type checker.~~** `ty`, in the dev extra and a `tests.yml` step,
   configured in `pyproject.toml` so `ty check` means the same on a laptop.
@@ -229,7 +257,8 @@ expect.~~ All done.
   is a gap nothing else would reveal.
 - **`--review` cannot re-ask about a row that resolved `exact`.** A wrong id
   that looked confident can only be fixed by editing the JSON.
-- **~~`README.md` says `65 cases`.~~** It says 187, which is what it is.
+- **~~`README.md` says `65 cases`.~~** It says 493, which is what it is. Worth
+  a glance whenever a batch of tests lands — it has been wrong twice now.
 
 ## Not yet, on purpose
 
@@ -239,6 +268,7 @@ Recorded so the deferral is a decision rather than an oversight.
 |---|---|
 | an orchestrator — Dagster, Prefect, Airflow | pipeline #3 exists. Two scripts and a `Makefile` do not need a scheduler with a UI |
 | Postgres | the ranker needs feedback state — dismissed, played, rated. That state is what defines the schema, so building it first means guessing |
-| object storage, `UPath`, R2 | after `cache/` is simply backed up. The backup is the urgent half; the migration is not |
+| backing up `cache/` | it is needed. Decided 2026-10-17: the 84 MB is `cache/remezcla`, raw HTML of a blog that is still online and re-scrapable, and the part that carries real weight is 650 KB across `cache/credits` (63 albums) and `cache/search` (10 pages) — refetchable in under a minute of requests. The exposure is a re-run, not a lost corpus, so it is cheaper to refetch when relevant than to maintain a sync. The one thing a refetch cannot recover is a credit Qobuz has since edited or removed; `writing.py`'s cache is what makes its output reproducible, so if that output ever needs to be defended rather than regenerated, copy the 650 KB first |
+| object storage, `UPath`, R2 | `cache/` outgrows a laptop, which at 85 MB it has not |
 | `pipelines/<name>/` layout | `stages/` becomes a junk drawer. With the credits chain paused, it will not soon |
 | a source registry, structured logging | the second and third radar are actually scheduled |

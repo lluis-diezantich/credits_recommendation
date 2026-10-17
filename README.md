@@ -29,7 +29,7 @@ cannot turn the Friday radar red. Both are generated — regenerate with the
     ./stages/favourites.py --review            # fix what did not resolve cleanly
     ./radars/qobuz.py --days 10                # what came out
     ./stages/load.py                           # everything on disk -> data/music.db
-    pytest -q                                  # 187 cases, offline
+    pytest -q                                  # 493 cases, offline
 
 `python -m stages.favourites` works too. Each stage reads and writes JSON in
 `data/`, so any stage can be rerun alone, and `resolve_discogs.py --pool-only`
@@ -52,8 +52,8 @@ resumes a run that died partway through its fan-out.
       remezcla.py        a blog, not an id namespace - its own script
       report.py          a radar's JSON -> markdown, for the weekly issue
     tests/             pytest, offline - every network call stubbed at the seam
-                       policy.py and core/credits.py are at 100%; six files are
-                       at zero - `pytest --cov` names them
+                       67% covered; two files are still at zero and
+                       `pytest --cov` names them
     data/              generated JSON, gitignored except favourites.json
     cache/             API responses - the source of truth, never regenerated
     .github/workflows/ radar.yml runs any radar; one caller per schedule
@@ -61,8 +61,10 @@ resumes a run that died partway through its fan-out.
     requirements*.lock hashed pins for CI - generated, see their headers
 
 `data/music.db` is derived and disposable: `./stages/load.py` rebuilds 216k rows
-in 2s and fetches nothing. Deleting it costs one rerun; deleting `cache/` costs
-the corpus.
+in under a second and fetches nothing. Deleting it costs one rerun. Deleting
+`cache/` costs a refetch and, for anything Qobuz has edited since, the ability
+to reproduce an old output exactly - 650 KB of the 85 MB is the part that
+matters, and todo.md has the measurement.
 
 ## Docs
 
