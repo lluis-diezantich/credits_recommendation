@@ -256,6 +256,12 @@ def parser(radar: Radar, description: str) -> argparse.ArgumentParser:
                     help="report everything, ignoring the state file")
     ap.add_argument("--dry-run", action="store_true",
                     help="report without recording anything")
+    ap.add_argument("--state", metavar="PATH",
+                    help="use this state file instead of the radar's default. For a "
+                         "runner, which needs state that is ITS OWN: data/*_seen.json "
+                         "is gitignored precisely so one machine's \"already "
+                         "reported\" does not become everyone's, and a CI run that "
+                         "committed that file back would do exactly that")
     ap.add_argument("--json", metavar="PATH",
                     help="also write the report as JSON, for radars/report.py to format")
     ap.add_argument("--run-log", metavar="PATH",
@@ -307,7 +313,10 @@ def execute(radar: Radar, args) -> int:
 
     today = dt.date.today()
     cutoff = radar.cutoff(args, today)
-    seen = set() if args.all else load_seen(radar.state_file)
+    # --state wins over the radar's own path, so the runner can keep its state
+    # beside the repo without colliding with a laptop's.
+    state_file = Path(args.state) if getattr(args, "state", None) else radar.state_file
+    seen = set() if args.all else load_seen(state_file)
 
     run = Run(watching=len(watching))
     # Ids collected THIS run. `seen` holds previous runs only, so without this
@@ -401,6 +410,13 @@ def execute(radar: Radar, args) -> int:
                   "and are listed once.)")
 
     if not args.dry_run and not args.all and run.everything:
-        save_seen(radar.state_file, seen | run.everything)
+        # The guard above has already returned on a broken run, so nothing that
+        # failed wholesale can write "I have seen everything" here. A PARTIAL
+        # failure is safe by construction: a batch that did not come back
+        # contributes no ids, so its releases are simply not recorded and the
+        # next run reports them.
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        save_seen(state_file, seen | run.everything)
+        print(f"recorded {len(run.everything)} ids in {state_file}", file=sys.stderr)
 
     return 0

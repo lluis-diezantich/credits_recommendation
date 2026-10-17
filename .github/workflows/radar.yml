@@ -1,7 +1,8 @@
 # One radar run, as a reusable workflow. Called, never scheduled.
 #
-# Every radar needs the same nine steps: check out, install, run, format,
-# open an issue, keep the evidence. The only things that differ are which
+# Every radar needs the same steps: check out, install, run, format, open an
+# issue, record what was reported, keep the evidence. The only things that
+# differ are which
 # script to run, what to call the issue, and the flags that script happens to
 # take. Those are the inputs below, so a new radar costs a caller file of
 # about fifteen lines rather than a copy of this one that slowly drifts.
@@ -9,6 +10,10 @@
 # Deliberately NOT scheduled here: a `schedule:` in a reusable workflow does
 # nothing. Each radar's own caller owns its cron, which is also where the
 # decision about how often to look belongs.
+#
+# Actions are pinned to commit SHAs rather than `@v4`, because a major tag is a
+# moving reference and this job's whole value is being trustworthy on a morning
+# nobody is watching. .github/dependabot.yml bumps them as pull requests.
 name: radar
 
 on:
@@ -30,43 +35,92 @@ on:
         description: "extra flags for the radar, e.g. --store gb-en"
         default: ""
         type: string
+      state:
+        # A runner has no disk between runs, so this job used to pass --all and
+        # let the date window do the filtering -- which re-reports a release in
+        # two consecutive issues whenever `days` exceeds seven. The two ways
+        # out were actions/cache, where an eviction silently resets the radar to
+        # "everything is new" and reports the back catalogue as a week's news,
+        # and committing the ids back. This is the second, and it pays for
+        # itself twice: the file is the state, and its git history is a dated
+        # log of what was actually reported -- the impression data that
+        # docs/roadmap.md needs before anything can be evaluated.
+        #
+        # A path under data/ci/, never data/<radar>_seen.json. That file is
+        # gitignored because one machine's "already reported" must not become
+        # everyone's, and committing it would do exactly that. The runner keeps
+        # its own copy; .gitignore un-ignores this directory alone.
+        description: "directory for the runner's state file; empty means stateless"
+        default: "data/ci"
+        type: string
       stateless:
-        # True until the state file has somewhere durable to live. A runner has
-        # no disk between runs, so the alternatives were committing the ids
-        # back every week or actions/cache, where an eviction silently resets
-        # the radar to "everything is new" and reports the back catalogue as a
-        # week's news. The date window does the filtering instead: --all
-        # ignores the state file and writes nothing. The cost is that a release
-        # can appear in two consecutive issues when days exceeds seven, which
-        # is cheap and visible, unlike a cache miss.
-        description: "ignore the state file (--all), because CI has no durable disk"
-        default: true
+        # The escape hatch, not the default any more. Still wanted for a
+        # backfill or a one-off --days 90, where recording the back catalogue
+        # as seen would silence the next real run.
+        description: "ignore the state file entirely (--all), recording nothing"
+        default: false
         type: boolean
 
 permissions:
-  contents: read
+  contents: write        # to commit the state file back; was: read
   issues: write
+
+# Two runs of one radar must not race on the state file: the loser's push is
+# rejected, and a lost push is a week of ids never recorded. Queued rather than
+# cancelled, because a cancelled radar run is a missed week.
+concurrency:
+  group: radar-${{ inputs.radar }}
+  cancel-in-progress: false
 
 jobs:
   radar:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: requirements.lock
 
       - name: Install
-        run: pip install -e .
+        # The runtime lock, hashed, then the project with --no-deps so the lock
+        # stays authoritative -- `pip install -e .` alone re-resolves and
+        # ignores it. requirements.lock carries no test tooling, so a pytest
+        # release cannot break the Friday radar.
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r requirements.lock
+          pip install -e . --no-deps
+
+      - name: Work out the state file
+        # <state>/<radar name>_seen.json, derived once here so the run step and
+        # the record step cannot disagree about which file they mean. One input
+        # serves every radar, and two radars cannot collide on one file.
+        id: state
+        env:
+          RADAR: ${{ inputs.radar }}
+          STATE_DIR: ${{ inputs.state }}
+          STATELESS: ${{ inputs.stateless }}
+        run: |
+          set -euo pipefail
+          if [ "$STATELESS" = "true" ] || [ -z "$STATE_DIR" ]; then
+            echo "path=" >> "$GITHUB_OUTPUT"
+            echo "stateless: this run records nothing"
+          else
+            name="$(basename "$RADAR" .py)"
+            echo "path=${STATE_DIR}/${name}_seen.json" >> "$GITHUB_OUTPUT"
+            echo "state: ${STATE_DIR}/${name}_seen.json"
+          fi
 
       - name: Run the radar
         env:
           RADAR: ${{ inputs.radar }}
           DAYS: ${{ inputs.days }}
           EXTRA: ${{ inputs.extra }}
-          STATELESS: ${{ inputs.stateless }}
+          STATE: ${{ steps.state.outputs.path }}
         run: |
           set -euo pipefail
           # read -ra, not an unquoted expansion: the flags are split on
@@ -75,7 +129,7 @@ jobs:
           ARGS=(--days "$DAYS" --json releases.json --run-log runs.jsonl)
           # An `if`, not `[ ... ] && ...`: under `set -e` a false test at
           # statement level is a non-zero exit and kills the step.
-          if [ "$STATELESS" = "true" ]; then ARGS+=(--all); fi
+          if [ -n "$STATE" ]; then ARGS+=(--state "$STATE"); else ARGS+=(--all); fi
           python3 "$RADAR" "${ARGS[@]}" "${EXTRA_ARGS[@]}" 2> warnings.txt || {
               echo "::error::the radar exited non-zero"
               cat warnings.txt
@@ -102,12 +156,62 @@ jobs:
             --title "$TITLE @$(date -u +%F)" \
             --body-file body.md
 
+      - name: Record what was reported
+        # AFTER the issue, deliberately, and this ordering is the whole safety
+        # argument. If opening the issue fails and the ids are already
+        # recorded, that week's releases are marked seen and appear in NO issue
+        # at all. Losing the state costs one duplicate next week; losing the
+        # issue costs the week. So the cheap failure is the one that is allowed
+        # to happen.
+        #
+        # Nothing here can record a broken run: core/radar.py's guard returns
+        # before writing when every call failed or came back empty, so there is
+        # no file to commit. A PARTIAL failure is safe by construction too -- a
+        # batch that did not come back contributes no ids.
+        #
+        # The commit is the log. `git log -p data/ci/qobuz_seen.json` is a dated
+        # record of what each run added.
+        if: steps.state.outputs.path != ''
+        env:
+          STATE: ${{ steps.state.outputs.path }}
+        run: |
+          set -euo pipefail
+          if [ ! -f "$STATE" ]; then
+            echo "no state file was written - nothing new, or the run was guarded"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- "$STATE"
+          if git diff --cached --quiet; then
+            echo "state unchanged"
+            exit 0
+          fi
+          n="$(python3 -c "import json,sys; print(len(json.load(open(sys.argv[1]))))" "$STATE")"
+          git commit -m "radar: ${STATE##*/} @ $(date -u +%F) ($n ids seen)"
+          # Another run may have pushed between checkout and here. Rebase onto
+          # it and retry rather than failing the job over a race the
+          # concurrency group already makes unlikely. --autostash because
+          # releases.json and friends are sitting untracked in the tree.
+          pushed=""
+          for attempt in 1 2 3; do
+            if git push; then pushed="yes"; echo "pushed on attempt $attempt"; break; fi
+            echo "push rejected, rebasing and retrying"
+            git pull --rebase --autostash origin "$GITHUB_REF_NAME"
+          done
+          if [ -z "$pushed" ]; then
+            # A warning, not a failure: the issue is already open, which is the
+            # part that mattered. The cost is that next week re-reports.
+            echo "::warning::could not push the state file; next run may re-report"
+          fi
+
       - name: Keep the evidence
-        # 90 days of run history for free, and the closest thing to a durable
-        # run log until there is somewhere to put one. `if: always()` because a
-        # failed run is the one worth looking at.
+        # 90 days of run history for free, and the run log the committed state
+        # file does not carry: runs.jsonl is what tells a quiet week from a
+        # broken one over time. `if: always()` because a failed run is the one
+        # worth looking at.
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: radar-${{ github.run_id }}
           path: |

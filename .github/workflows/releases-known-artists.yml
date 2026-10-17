@@ -10,6 +10,13 @@
 # The steps live in .github/workflows/radar.yml. This file is only the two
 # decisions that are actually about THIS radar: when to look, and with what.
 #
+# It takes radar.yml's state defaults, so this radar is now STATEFUL: the run
+# reads data/ci/qobuz_seen.json, reports only what is not in it, and commits it
+# back. Before that it passed --all and leaned on the date window, which
+# re-reported a release in two consecutive issues whenever days exceeded seven.
+# Pass stateless: true for a backfill, where recording the back catalogue as
+# seen would silence the next real run.
+#
 # Needs no secrets: the watchlist (data/favourites.json) is committed and the
 # Qobuz app id is a public web-player value, not a key.
 name: "releases: known artists"
@@ -34,8 +41,12 @@ on:
         description: "Qobuz storefront"
         default: "gb-en"
 
+# contents: write, because radar.yml commits the state file back and a called
+# workflow can never hold MORE permission than its caller grants -- leaving this
+# at `read` makes the push 403 while every other step succeeds, which is the
+# quietest possible way to lose the state.
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 jobs:
