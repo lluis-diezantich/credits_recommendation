@@ -45,6 +45,7 @@ import datetime as dt
 import glob
 import json
 import os
+import sqlite3
 import sys
 import zipfile
 from pathlib import Path
@@ -116,21 +117,26 @@ CREATE TABLE meta (
 
 -- people ---------------------------------------------------------------
 CREATE TABLE people (
-    person_key TEXT, name TEXT, qobuz_id INTEGER, discogs_id INTEGER,
+    person_key TEXT PRIMARY KEY, name TEXT, qobuz_id INTEGER, discogs_id INTEGER,
     watch BOOLEAN, cover_source_only BOOLEAN,
     albums INTEGER, tracks INTEGER, top_role TEXT, first_seen TEXT, last_seen TEXT,
     resolved_via TEXT, resolved_confidence TEXT, unresolved_reason TEXT,
     discogs_total_releases INTEGER, selectivity REAL, selectivity_band TEXT,
     sources TEXT);
-CREATE TABLE person_names   (person_key TEXT, name TEXT);
-CREATE TABLE person_sources (person_key TEXT, source TEXT);
-CREATE TABLE person_classes (person_key TEXT, class TEXT);
+CREATE TABLE person_names   (person_key TEXT, name TEXT,
+                             PRIMARY KEY (person_key, name));
+CREATE TABLE person_sources (person_key TEXT, source TEXT,
+                             PRIMARY KEY (person_key, source));
+CREATE TABLE person_classes (person_key TEXT, class TEXT,
+                             PRIMARY KEY (person_key, class));
 CREATE TABLE person_roles   (person_key TEXT, role TEXT, role_key TEXT,
                              role_class TEXT, role_weight REAL, n INTEGER);
 CREATE TABLE person_albums  (person_key TEXT, album_id TEXT, title TEXT,
-                             date TEXT, tracks INTEGER, roles TEXT);
+                             date TEXT, tracks INTEGER, roles TEXT,
+                             PRIMARY KEY (person_key, album_id));
 CREATE TABLE person_edges   (person_key TEXT, other_name TEXT, releases INTEGER,
-                             roles TEXT, kind TEXT);
+                             roles TEXT, kind TEXT,
+                             PRIMARY KEY (person_key, other_name, kind));
 
 -- releases (candidate pool) --------------------------------------------
 CREATE TABLE releases (
@@ -140,18 +146,25 @@ CREATE TABLE releases (
     via_seed_albums INTEGER, via_through TEXT,
     sig_score REAL, sig_role_weight REAL, sig_selectivity REAL,
     sig_selectivity_band TEXT, sig_person_seed_albums INTEGER,
-    sig_embedded REAL, sig_flags TEXT);
-CREATE TABLE release_artists (album_id TEXT, source TEXT, name TEXT);
+    sig_embedded REAL, sig_flags TEXT,
+    PRIMARY KEY (album_id, source));
+CREATE TABLE release_artists (album_id TEXT, source TEXT, name TEXT,
+                              PRIMARY KEY (album_id, source, name));
 
 -- songs (writing_*.json) ----------------------------------------------
 CREATE TABLE songs (
     song_key TEXT, artist_query TEXT, title TEXT, tier TEXT,
     tier_disagreement BOOLEAN, own_recording BOOLEAN,
-    performer_count INTEGER, performer_count_excl_mills INTEGER, flags TEXT);
-CREATE TABLE song_titles       (song_key TEXT, artist_query TEXT, title TEXT);
-CREATE TABLE song_roles        (song_key TEXT, artist_query TEXT, role TEXT);
-CREATE TABLE song_tier_votes   (song_key TEXT, artist_query TEXT, tier TEXT, n INTEGER);
-CREATE TABLE song_co_composers (song_key TEXT, artist_query TEXT, name TEXT, n INTEGER);
+    performer_count INTEGER, performer_count_excl_mills INTEGER, flags TEXT,
+    PRIMARY KEY (song_key, artist_query));
+CREATE TABLE song_titles       (song_key TEXT, artist_query TEXT, title TEXT,
+                                PRIMARY KEY (song_key, artist_query, title));
+CREATE TABLE song_roles        (song_key TEXT, artist_query TEXT, role TEXT,
+                                PRIMARY KEY (song_key, artist_query, role));
+CREATE TABLE song_tier_votes   (song_key TEXT, artist_query TEXT, tier TEXT, n INTEGER,
+                                PRIMARY KEY (song_key, artist_query, tier));
+CREATE TABLE song_co_composers (song_key TEXT, artist_query TEXT, name TEXT, n INTEGER,
+                                PRIMARY KEY (song_key, artist_query, name));
 CREATE TABLE song_performers   (song_key TEXT, artist_query TEXT, performer_name TEXT,
                                 performer_key TEXT, album_title TEXT, covers_mill BOOLEAN);
 
@@ -165,11 +178,12 @@ CREATE TABLE credits (
     role_class TEXT, role_weight REAL);
 
 -- discogs candidate artists -------------------------------------------
-CREATE TABLE discogs_candidates (name TEXT, releases INTEGER);
+CREATE TABLE discogs_candidates (name TEXT PRIMARY KEY, releases INTEGER);
 CREATE TABLE discogs_candidate_via (
     name TEXT, person_name TEXT, person_key TEXT, discogs_id INTEGER, roles TEXT,
     person_seed_albums INTEGER, role_weight REAL, selectivity REAL,
-    selectivity_band TEXT);
+    selectivity_band TEXT,
+    PRIMARY KEY (name, person_key, discogs_id));
 
 -- listens --------------------------------------------------------------
 CREATE TABLE listens (
@@ -180,62 +194,65 @@ CREATE TABLE listens (
 
 # Indexes, created AFTER the rows are in -- the whole build is one bulk load
 # into a file that was just deleted, and maintaining an index per INSERT is the
-# one way to make a 2s rebuild slow. Nothing here is a constraint: see below.
+# one way to make a sub-second rebuild slow.
 #
-# NOT primary keys, which is the other half of what todo.md asked for, and the
-# answer is that the data will not currently take them. Four tables hold rows
-# that are duplicates on any natural key, measured on the 216k-row build:
+# Fifteen fewer than there used to be, because the primary keys in SCHEMA now
+# cover them: a PK is itself a unique index, so PRIMARY KEY (person_key, name)
+# makes a separate index on person_key redundant -- leftmost-prefix matching
+# serves the lookup, and keeping both would maintain two indexes per row.
+# What is left is the columns no key starts with: the scores and dates a ranker
+# orders by, the names and classes a filter matches, and the listens.
 #
-#     person_roles   923 rows,  612 distinct (person_key, role)
-#     person_albums  777 rows,  563 distinct (person_key, album_id, roles)
-#     tracks         910 rows,  906 distinct (store, query, album_id, title)
-#     credits      11926 rows, 9516 distinct, and track_id is NULL on 8806
-#                             of them -- every row that came from `search`
+# On the primary keys themselves, since this file argued against them once:
+# they could not go on until the loader stopped inserting duplicate rows, which
+# it now does (see deduped()). Three tables still have none, for three
+# different reasons, and none of them is an oversight:
 #
-# person_albums is the clearest: the triples are IDENTICAL, so a person's album
-# is inserted twice rather than inserted once per source. That is a loader bug
-# to fix where the rows are built, not something to paper over here -- and a
-# PRIMARY KEY added before fixing it would convert a silently duplicated row
-# into a failed build. This file's contract is that rebuilding is always cheap
-# and always works (`db.unlink()` above runs before anything is parsed), so a
-# constraint that can make the rebuild fail on next week's JSON is a worse
-# trade than the duplicate it catches. Indexes are pure speed and cannot fail.
+#   person_roles     722 rows, 612 distinct (person_key, role). The same role
+#                    arrives with a count from discovery_*.json and with n=NULL
+#                    from watchlist.json's bare-list form. Two tuples, one
+#                    fact -- collapsing them means ruling that a count beats an
+#                    absence, which is source precedence and belongs in the
+#                    open, not in a constraint.
+#   song_performers  album_title is NULL BY DESIGN -- load_songs iterates
+#                    `perf["albums"] or [None]`, so a performer with no album
+#                    is a row with no album. Today's corpus happens to have one
+#                    for every performer, which is not the same as the column
+#                    being non-null. It is also where the two engines diverge:
+#                    SQLite tolerates NULL in a PK column (and treats NULLs as
+#                    distinct, so such rows go unprotected), while DuckDB
+#                    follows the standard and refuses them. A key here would
+#                    build under --engine sqlite and fail under duckdb.
+#   tracks, credits  Still genuinely duplicated: 910/906 and 11,926/9,516. The
+#                    duplicates are inside the cached pages, so deduping them
+#                    means deciding which cached copy wins -- a question about
+#                    the corpus, not about this loader.
 #
-# What is indexed is what docs/store.md actually joins and filters on, plus the
-# ids every join in the cookbook goes through: person_key, album_id, and the
-# (song_key, artist_query) pair that is the real identity of a song row.
+# And the caveat that applies to every key above, because SQLite will not say
+# it: in a rowid table a PK column may still be NULL, and NULLs count as
+# distinct. So each key protects the rows whose key columns are all present,
+# which is all of them today, and quietly protects nothing on a row where a
+# source file omitted a field. Loader.insert turns the violation it DOES catch
+# into a message that names the table and the row.
 INDEXES = """
 -- people: person_key is the join key for six tables
-CREATE INDEX ix_people_key            ON people (person_key);
 CREATE INDEX ix_people_name           ON people (name);
 CREATE INDEX ix_people_qobuz          ON people (qobuz_id);
-CREATE INDEX ix_person_names_key      ON person_names (person_key);
 CREATE INDEX ix_person_names_name     ON person_names (name);
-CREATE INDEX ix_person_sources_key    ON person_sources (person_key);
-CREATE INDEX ix_person_classes_key    ON person_classes (person_key, class);
 CREATE INDEX ix_person_roles_key      ON person_roles (person_key);
 CREATE INDEX ix_person_roles_class    ON person_roles (role_class);
-CREATE INDEX ix_person_albums_key     ON person_albums (person_key);
 CREATE INDEX ix_person_albums_album   ON person_albums (album_id);
-CREATE INDEX ix_person_edges_key      ON person_edges (person_key);
 CREATE INDEX ix_person_edges_other    ON person_edges (other_name);
 
 -- releases: album_id joins, sig_score and date are what a ranker will order by
-CREATE INDEX ix_releases_album        ON releases (album_id);
 CREATE INDEX ix_releases_source       ON releases (source);
 CREATE INDEX ix_releases_score        ON releases (sig_score);
 CREATE INDEX ix_releases_date         ON releases (date);
 CREATE INDEX ix_releases_via          ON releases (via_qobuz_id);
-CREATE INDEX ix_release_artists_album ON release_artists (album_id);
 CREATE INDEX ix_release_artists_name  ON release_artists (name);
 
 -- songs: (song_key, artist_query) is the identity, and every child joins on it
-CREATE INDEX ix_songs_key             ON songs (song_key, artist_query);
 CREATE INDEX ix_songs_tier            ON songs (tier);
-CREATE INDEX ix_song_titles_key       ON song_titles (song_key, artist_query);
-CREATE INDEX ix_song_roles_key        ON song_roles (song_key, artist_query);
-CREATE INDEX ix_song_tier_votes_key   ON song_tier_votes (song_key, artist_query);
-CREATE INDEX ix_song_co_composers_key ON song_co_composers (song_key, artist_query);
 CREATE INDEX ix_song_performers_key   ON song_performers (song_key, artist_query);
 CREATE INDEX ix_song_performers_who   ON song_performers (performer_key);
 CREATE INDEX ix_song_performers_mill  ON song_performers (covers_mill);
@@ -250,8 +267,6 @@ CREATE INDEX ix_credits_class         ON credits (role_class);
 CREATE INDEX ix_credits_source        ON credits (source);
 
 -- discogs candidates
-CREATE INDEX ix_discogs_cand_name     ON discogs_candidates (name);
-CREATE INDEX ix_discogs_via_name      ON discogs_candidate_via (name);
 CREATE INDEX ix_discogs_via_key       ON discogs_candidate_via (person_key);
 
 -- listens: the big one, and artist_key is how every credit joins to a play
@@ -299,11 +314,53 @@ class Loader:
         self.meta: list[tuple] = []
 
     def insert(self, table: str, cols: list[str], rows: list[tuple]) -> None:
+        """Bulk-insert, turning a key violation into something actionable.
+
+        The tables have primary keys now, so a loader that builds duplicate
+        rows fails here instead of writing them. That is the point of the key
+        -- but `sqlite3.IntegrityError: UNIQUE constraint failed:
+        person_albums.person_key, person_albums.album_id` names the constraint
+        and not the row, and a build over 216k rows is not a place to go
+        looking. So the offending row is found and printed.
+
+        Re-raised, never swallowed: this means the loader produced data its own
+        schema says is impossible, and continuing would write a store that is
+        wrong in a way no query would reveal.
+
+        sqlite3.IntegrityError only, which is the default engine and so the one
+        worth a readable message. Under --engine duckdb a violation arrives as
+        duckdb.ConstraintException and propagates with duckdb's own wording --
+        catching it would mean importing an optional dependency here to name an
+        exception class, which costs more than the better message is worth.
+        """
         if rows:
             marks = ",".join("?" * len(cols))
-            self.con.executemany(
-                f"INSERT INTO {table} ({','.join(cols)}) VALUES ({marks})", rows)
+            statement = f"INSERT INTO {table} ({','.join(cols)}) VALUES ({marks})"
+            try:
+                self.con.executemany(statement, rows)
+            except sqlite3.IntegrityError as error:
+                raise SystemExit(
+                    f"{table}: {error}\n"
+                    f"  first duplicate: {self._first_duplicate(table, cols, rows)}\n"
+                    "  the loader built a row its own schema forbids - see "
+                    "deduped() and the primary-key notes above INDEXES") from error
         self.counts[table] = self.counts.get(table, 0) + len(rows)
+
+    @staticmethod
+    def _first_duplicate(table: str, cols: list[str], rows: list[tuple]):
+        """The first row that repeats, as a {column: value} dict, or None.
+
+        Best effort and only ever reached on the way to exiting, so it costs
+        nothing in the normal case. It cannot know which columns the key used,
+        so it reports the first wholly repeated row -- which is the duplicate in
+        every case this loader has actually produced.
+        """
+        seen = set()
+        for row in rows:
+            if row in seen:
+                return dict(zip(cols, row, strict=False))
+            seen.add(row)
+        return None
 
     def note(self, table: str, source: str, rows: int, generated: str | None) -> None:
         self.meta.append((table, source, rows, generated,
