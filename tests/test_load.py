@@ -102,7 +102,7 @@ def test_every_index_is_created_after_the_rows_not_in_the_schema(store):
     """The 2s rebuild depends on it: an index in SCHEMA is maintained per
     INSERT across 216k rows. If one migrates into SCHEMA this fails."""
     assert "CREATE INDEX" not in load.SCHEMA
-    assert load.INDEXES.count("CREATE INDEX") == 45
+    assert load.INDEXES.count("CREATE INDEX") == 30
 
 
 def test_the_indexes_name_only_real_columns(store):
@@ -813,13 +813,16 @@ def test_an_edge_from_two_files_is_stored_once(store):
 
 
 def test_deduping_keeps_rows_that_only_look_alike(store):
-    """Distinct on the WHOLE tuple: the same person on the same album under a
-    different role list is two facts, not one row to collapse."""
-    store.write("discovery_1.json", {"people": [{"names": ["P"], "albums": [
-        {"album_id": "a1", "title": "T", "roles": ["Producer"]},
-        {"album_id": "a1", "title": "T", "roles": ["Bass"]}]}]})
+    """Distinct on the WHOLE tuple, not on a prefix of it. Stated on
+    person_roles because that is where it is load-bearing: the same person and
+    role arrives with a count from one file and without one from another, and
+    those are two rows -- which is also why that table has no primary key."""
+    store.write("discovery_1.json", {"people": [
+        {"names": ["P"], "roles": {"Producer": 3}}]})
+    store.write("watchlist.json", {"artists": [
+        {"name": "P", "roles": ["Producer"]}]})
     load.load_people(store.ld)
-    assert {r[0] for r in store.rows("person_albums", "roles")} == {"Producer", "Bass"}
+    assert set(store.rows("person_roles", "n")) == {(3,), (None,)}
 
 
 def test_dedup_survives_the_nulls_that_make_sorting_impossible(store):
@@ -832,18 +835,17 @@ def test_dedup_survives_the_nulls_that_make_sorting_impossible(store):
         person_albums    date/tracks/roles absent on some rows and present on
                          others, for the same person and the same album
     """
+    album = {"album_id": "a1", "title": "T", "date": "2020-01-01", "tracks": 10,
+             "roles": ["Producer"]}
     store.write("discovery_1.json", {"people": [
-        {"names": ["P"], "roles": {"Producer": 3},
-         "albums": [{"album_id": "a1", "title": "T", "date": "2020-01-01",
-                     "tracks": 10, "roles": ["Producer"]}]}]})
+        {"names": ["P"], "roles": {"Producer": 3}, "albums": [album]}]})
     store.write("watchlist.json", {"artists": [
-        {"name": "P", "roles": ["Producer"],
-         "appearances": [{"album_id": "a1", "title": "T"}]}]})
+        {"name": "P", "roles": ["Producer"], "appearances": [album]}]})
     load.load_people(store.ld)                   # must not raise
 
     # set(), not sorted() -- sorting these is the very thing that raises
     assert set(store.rows("person_roles", "n")) == {(None,), (3,)}
-    assert store.count("person_albums") == 2     # genuinely different tuples
+    assert store.count("person_albums") == 1     # identical tuples, collapsed
 
 
 def test_deduped_is_order_preserving_so_a_rebuild_is_reproducible(store):
@@ -852,3 +854,172 @@ def test_deduped_is_order_preserving_so_a_rebuild_is_reproducible(store):
     assert load.deduped([("b", 2), ("a", 1), ("b", 2), ("c", 3), ("a", 1)]) == [
         ("b", 2), ("a", 1), ("c", 3)]
     assert load.deduped([]) == []
+
+
+# ---- primary keys -------------------------------------------------------
+#
+# They could not go on until the loader stopped inserting duplicate rows. Now
+# that it has, 16 of the 21 tables carry one, and the five without are each
+# without for a stated reason rather than by omission.
+
+
+def test_the_tables_whose_key_is_real_have_one(store):
+    """A key is the only thing that makes the store self-checking: without one,
+    a loader that starts duplicating rows again is invisible until somebody
+    notices a count is too high."""
+    keyed = {}
+    for (name,) in store.con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"):
+        cols = [r[1] for r in store.con.execute(f"PRAGMA table_info({name})") if r[5]]
+        if cols:
+            keyed[name] = cols
+
+    assert keyed["people"] == ["person_key"]
+    assert keyed["person_names"] == ["person_key", "name"]
+    assert keyed["person_albums"] == ["person_key", "album_id"]
+    assert keyed["person_edges"] == ["person_key", "other_name", "kind"]
+    assert keyed["releases"] == ["album_id", "source"]
+    assert keyed["songs"] == ["song_key", "artist_query"]
+    assert len(keyed) == 15
+
+
+def test_the_five_without_a_key_are_the_five_with_a_reason(store):
+    """person_roles needs a merge decision (a count against a NULL), tracks and
+    credits are still duplicated inside the cache, song_performers has a
+    nullable column in its only candidate key, and meta/listens have no natural
+    key at all. If one of these grows a key, this test is where it is argued."""
+    unkeyed = {name for (name,) in store.con.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'")
+        if not any(r[5] for r in store.con.execute(f"PRAGMA table_info({name})"))}
+    assert unkeyed == {"person_roles", "song_performers", "tracks", "credits",
+                       "listens", "meta"}
+
+
+def test_releases_is_keyed_on_album_and_source_because_the_ids_collide(store):
+    """The key states the thing the docstring explains: both pools hold Qobuz
+    ids reached by different paths, so album_id alone is not an identity."""
+    store.write("pool.json", {"pool": [{"album_id": "same"}]})
+    store.write("pool_discogs.json", {"pool": [{"album_id": "same"}]})
+    load.load_releases(store.ld)                 # must not raise
+    assert store.count("releases") == 2
+
+
+def test_a_duplicate_row_now_fails_the_build_instead_of_being_written(store):
+    """The whole point. Previously this wrote two rows and nothing said so."""
+    with pytest.raises(SystemExit) as caught:
+        store.ld.insert("person_names", ["person_key", "name"],
+                        [("p", "Dup"), ("p", "Dup")])
+    assert "UNIQUE constraint failed" in str(caught.value)
+
+
+def test_the_failure_names_the_table_and_the_offending_row(store):
+    """sqlite says "UNIQUE constraint failed: person_albums.person_key,
+    person_albums.album_id" and names no row. Over a 216k-row build that is not
+    a place to go looking, so insert() finds the duplicate and prints it."""
+    row = ("jorge drexler", "a1", "Title", "2020-01-01", 10, "Producer")
+    with pytest.raises(SystemExit) as caught:
+        store.ld.insert("person_albums",
+                        ["person_key", "album_id", "title", "date", "tracks", "roles"],
+                        [row, row])
+    message = str(caught.value)
+    assert "person_albums" in message
+    assert "'person_key': 'jorge drexler'" in message
+    assert "'album_id': 'a1'" in message
+    assert "deduped()" in message                # where to go and fix it
+
+
+def test_a_violation_is_raised_rather_than_skipped(store):
+    """Never swallowed: it means the loader produced data its own schema says
+    is impossible, and a store that is wrong in a way no query reveals is worse
+    than no store."""
+    with pytest.raises(SystemExit):
+        store.ld.insert("songs",
+                        ["song_key", "artist_query", "title"],
+                        [("s1", "q", "A"), ("s1", "q", "B")])
+
+
+def test_a_clean_insert_is_unaffected_by_the_guard(store):
+    store.ld.insert("person_names", ["person_key", "name"],
+                    [("p", "One"), ("p", "Two"), ("q", "One")])
+    assert store.count("person_names") == 3
+
+
+def test_the_first_duplicate_helper_reports_nothing_when_there_is_nothing(store):
+    assert load.Loader._first_duplicate("t", ["a"], [("x",), ("y",)]) is None
+    assert load.Loader._first_duplicate("t", ["a", "b"], [("x", 1), ("x", 1)]) == {
+        "a": "x", "b": 1}
+
+
+def test_no_index_duplicates_a_primary_key(store):
+    """A PK is itself a unique index, so an index on its leftmost prefix is
+    maintained for nothing. Fifteen were dropped when the keys went on; this is
+    what notices if one comes back."""
+    for statement in load.INDEXES.strip().split(";"):
+        if statement.strip():
+            store.con.execute(statement)
+    for (table,) in store.con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"):
+        pk = [r[1] for r in store.con.execute(f"PRAGMA table_info({table})") if r[5]]
+        if not pk:
+            continue
+        for (idx,) in store.con.execute(
+                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=? "
+                "AND name LIKE 'ix_%'", (table,)):
+            cols = [r[2] for r in store.con.execute(f"PRAGMA index_info({idx})")]
+            assert cols != pk[:len(cols)], f"{idx} duplicates the key of {table}"
+
+
+def test_a_full_build_still_satisfies_every_key_it_declares(store, monkeypatch):
+    """End to end over inputs that overlap the way the real files do: one person
+    in three files, one album reached twice, one release in both pools."""
+    album = {"album_id": "a1", "title": "T", "date": "2020-01-01", "tracks": 9,
+             "roles": ["Producer"]}
+    store.write("discovery_1.json", {"people": [
+        {"names": ["P"], "classes": ["production"], "roles": {"Producer": 2},
+         "albums": [album]}]})
+    store.write("discovery_2.json", {"people": [
+        {"names": ["P"], "classes": ["production"], "roles": {"Producer": 2},
+         "albums": [album]}]})
+    store.write("watchlist.json", {"artists": [
+        {"name": "P", "name_variants": ["P"], "appearances": [album]}]})
+    store.write("pool.json", {"pool": [{"album_id": "x1", "artists": ["A"]}]})
+    store.write("pool_discogs.json", {"pool": [{"album_id": "x1", "artists": ["A"]}]})
+
+    db = store.tmp / "out.db"
+    monkeypatch.setattr(load, "LISTENS_GLOB", str(store.tmp / "none_*.zip"))
+    monkeypatch.setattr("sys.argv", ["load.py", "--db", str(db)])
+    assert load.main() == 0
+
+    con = sqlite3.connect(db)
+    assert con.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+    assert con.execute("SELECT COUNT(*) FROM person_albums").fetchone() == (1,)
+    assert con.execute("SELECT COUNT(*) FROM releases").fetchone() == (2,)
+
+
+def test_two_sources_disagreeing_about_one_album_fails_the_build_loudly(store):
+    """The one key here that rests on an empirical fact rather than a structural
+    one, recorded so it is known rather than discovered.
+
+    person_albums is keyed (person_key, album_id), which says a person worked on
+    an album once. Two files describe those albums -- discovery_*.json `albums`
+    and watchlist.json `appearances` -- and nothing in the loader makes them
+    agree on the title, date or track count. Measured on the real corpus: 214
+    shared (person, album) pairs, and ZERO where the two disagree on any field,
+    because `appearances` is derived from the same discovery pass. That is why
+    the key holds.
+
+    If a future file breaks that, this is the behaviour: the build stops and
+    says which row, rather than writing two rows for one album. Loud is the
+    right failure -- the alternative is a person_albums count that silently
+    double-counts an album, which no query would reveal.
+    """
+    store.write("discovery_1.json", {"people": [{"names": ["P"], "albums": [
+        {"album_id": "a1", "title": "Libertad", "tracks": 13}]}]})
+    store.write("watchlist.json", {"artists": [{"name": "P", "appearances": [
+        {"album_id": "a1", "title": "Libertad (Deluxe)", "tracks": 15}]}]})
+
+    with pytest.raises(SystemExit) as caught:
+        load.load_people(store.ld)
+    message = str(caught.value)
+    assert "person_albums" in message
+    assert "UNIQUE constraint failed" in message

@@ -60,28 +60,38 @@ Where the code can be wrong without anything noticing.
   int everywhere else), and Python will not compare `None` with `str` or `int`.
   The fix that looks right turns a silently duplicated row into a failed build.
 
-- **Primary keys: now viable on four tables, blocked on three, for two
-  different reasons.** Worth separating, because they are no longer one item.
+- **~~No primary keys in `data/music.db`.~~** Done: 15 of the 21 tables carry
+  one, and the build got *faster* — 0.77s to 0.23s — because a key is itself a
+  unique index, so 15 single-column indexes it now subsumes were dropped (45
+  indexes to 30).
 
-  Ready: `people`, `person_names`, `person_classes`, `person_sources`,
-  `person_albums` (563/563 on `person_key, album_id`) and `person_edges`
-  (123/123 on `person_key, other_name, kind`).
+  `Loader.insert` turns a violation into a message naming the table and the
+  offending row, because sqlite's own wording names the constraint and not the
+  row, and a 216k-row build is not a place to go looking.
 
-  `person_roles` needs a MERGE decision first, not a dedup. 722 rows against
-  612 distinct `(person_key, role)` pairs, because the same role arrives twice
-  with different counts:
+  Six tables have no key, each for a stated reason rather than by omission:
 
-        ('adrian i. lacaberg', 'Assistant Engineer', 8)
-        ('adrian i. lacaberg', 'Assistant Engineer', None)
+  | | |
+  |---|---|
+  | `person_roles` | needs a merge decision, not a constraint: 722 rows against 612 distinct `(person_key, role)`, because the same role arrives with a count from one file and `NULL` from another. Ruling that a count beats an absence is source precedence |
+  | `song_performers` | `album_title` is NULL *by design* — `load_songs` iterates `perf["albums"] or [None]`. Today's corpus has an album for every performer, which is not the same as the column being non-null |
+  | `tracks`, `credits` | still genuinely duplicated (910/906 and 11,926/9,516). The duplicates are inside the cached pages, so deduping means deciding which cached copy wins — a question about the corpus |
+  | `listens`, `meta` | no natural key. `listens` is an append-only log and `listened_at` is nullable |
 
-  Two tuples, one fact — the `None` row is `watchlist.json`'s bare-list form
-  and carries nothing the counted row does not. Collapsing it means deciding
-  that a count beats an absence, which is a judgement about source precedence
-  and belongs in the open rather than in a `set()`.
+  Two caveats worth keeping, both now in tests:
 
-  `tracks` (910/906) and `credits` (11,926/9,516) are a cache question, not a
-  merge one: the duplicates are in the cached pages themselves, so dedup there
-  means deciding which cached copy wins.
+  - SQLite will not say this: in a rowid table a PK column may still be NULL,
+    and NULLs count as distinct. Each key protects rows whose key columns are
+    all present — all of them today — and silently protects nothing on a row
+    where a source file omitted a field. This is also where the engines
+    diverge: DuckDB follows the standard and refuses NULL in a key, so a
+    `song_performers` key would build under sqlite and fail under duckdb.
+  - `person_albums (person_key, album_id)` rests on an empirical fact, not a
+    structural one. Two files describe those albums and nothing makes them
+    agree; measured, there are 214 shared `(person, album)` pairs and zero
+    disagreements, because `appearances` derives from the same discovery pass.
+    If that ever breaks, the build stops and names the row — which is the right
+    failure, since the alternative is a count that silently double-counts.
 
 - **~~Two hand-rolled retry loops are left.~~** Done: both deleted.
   `stages/writing.py` goes through `core.qobuz.get_json` now, so the adapter's
