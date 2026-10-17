@@ -41,7 +41,7 @@ resumes a run that died partway through its fan-out.
       resolve_discogs.py the ones Qobuz cannot see -> pool_discogs  [LOSSY]
       writing.py         one person -> what they WROTE, anywhere   [CACHED]
       load.py            all of the above -> data/music.db         [DERIVED]
-    radars/            new-release watchers, one thin source each
+    radars/            new-release watchers, one thin source each - docs/radars.md
       qobuz.py  listenbrainz.py  itunes.py    core/radar.py drives these three
       remezcla.py        a blog, not an id namespace - its own script
       report.py          a radar's JSON -> markdown, for the weekly issue
@@ -60,6 +60,7 @@ the corpus.
 | | |
 |---|---|
 | [favourites.md](docs/favourites.md) | the watchlist and the release radar, and why their cadences differ |
+| [radars.md](docs/radars.md) | what a radar is, and how to write another one |
 | [architecture.md](docs/architecture.md) | the module map, and the one module the rest waits on |
 | [roadmap.md](docs/roadmap.md) | what this is and is not as a recommender, stage by stage |
 | [store.md](docs/store.md) | `data/music.db` — table map, query cookbook, gotchas |
@@ -80,9 +81,18 @@ the corpus.
   [architecture.md](docs/architecture.md).
 - **A ranker.** 7,860 candidates, each with an explainable `via.signal.score`,
   and no order.
-- **Resolve Apple ids, or delete `radars/itunes.py`.** Every `itunes_id` in
-  `favourites.json` is null, so that radar silently falls back to its built-in
-  list of one artist.
+- **Nowhere durable to keep state.** A runner has no disk between runs, so the
+  Friday job passes `--all` and lets the date window do the filtering;
+  `data/*_seen.json` only ever accumulates on one laptop, and `--run-log`
+  writes a file that dies with the job. The cost today is a release appearing
+  in two consecutive issues when `--days` exceeds seven. Cheapest fix: have the
+  Action commit the seen file back, which also turns the history into a log of
+  what was reported. This blocks every stateful radar, not just this one.
+- **Resolve Apple ids.** Every `itunes_id` in `favourites.json` is null, so
+  `radars/itunes.py` falls back to its built-in list of one artist. It has
+  everything else it needs since `core/radar.py` — `--json`, the broken-run
+  guard — so scheduling it is a fifteen-line caller against `radar.yml`. The
+  ids are the only thing missing.
 - **Record what you played.** The weekly issue is already a dated log of what
   was *shown*; the other half is missing, and without it the evaluation in
   [roadmap.md](docs/roadmap.md) has nothing to score.
