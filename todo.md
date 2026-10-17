@@ -37,22 +37,18 @@ Where the code can be wrong without anything noticing.
   disagreeing role vocabularies are now pinned against each other, so unifying
   them fails a test rather than quietly rewriting a column of existing data.
 
-- **Two files are at zero coverage.** Overall is 34% → 59%. Done:
-  `stages/load.py` 0% → 99%, `radars/itunes.py`, `radars/listenbrainz.py` and
-  `core/discogs.py` all 0% → 100%. What remains at 0%:
-  `stages/resolve_discogs.py` 230 statements and `stages/writing.py` 219.
+- **Three files are at zero coverage.** Overall is 34% → 55%. Done:
+  `stages/load.py` 0% → 99%, `radars/itunes.py` and `radars/listenbrainz.py`
+  both 0% → 100%. What remains at 0%: `stages/resolve_discogs.py` 230
+  statements, `stages/writing.py` 219, `core/discogs.py` 89.
 
-  Both are harder than anything above, and in the same way: each is a long
-  fan-out over a rate-limited API with the paging, the gates and the output
-  shaping interleaved in one `main()`. The cheap fixtures that covered
-  `load.py` (JSON in, sqlite out), the radars (one stubbed seam over a tested
-  runner) and `core/discogs.py` (a response queue) do not fit a function that
-  both decides and prints. Expect to extract the decisions before the tests
-  read well — which is worth doing anyway, since a ranker will want them.
-
-  The two already share `core/discogs.py`, which is now covered, so the
-  throttle, the 429 backoff and the page-1 gate underneath them are no longer
-  the untested part.
+  Those three are harder than what came before, and in the same way: each is a
+  long fan-out over a rate-limited API with the pagination, the gates and the
+  output shaping interleaved in one `main()`. The cheap fixtures that covered
+  `load.py` (JSON in, sqlite out) and the radars (one stubbed seam, a shared
+  runner) do not exist here. Expect to extract a function or two before the
+  tests read well — `core/discogs.py` first, since it is the smallest and the
+  other two call it.
 - **~~No indexes in `data/music.db`.~~** Done: 45 of them, created after the
   bulk load so the rebuild stays under a second. Every join and filter in
   [store.md](docs/store.md) now uses one instead of scanning the table.

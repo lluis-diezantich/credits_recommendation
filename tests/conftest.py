@@ -13,6 +13,8 @@ goes through monkeypatch and is undone after each test.
 from __future__ import annotations
 
 import datetime as dt
+import json
+import sys
 
 import pytest
 
@@ -129,3 +131,132 @@ def favourites_file(monkeypatch, tmp_path):
 @pytest.fixture
 def today():
     return dt.date.today()
+
+
+@pytest.fixture
+def apple_release():
+    """One iTunes `lookup` result row, in the shape Apple returns.
+
+    `wrapperType` is "collection" because that is what fetch_artist_releases
+    filters on -- results[0] is the artist itself and everything else is a
+    release, so a row without it is invisible to the radar.
+    """
+    def make(collection_id, name, artist="Jorge Drexler", date="2026-10-14",
+             tracks=10, wrapper="collection"):
+        return {
+            "wrapperType": wrapper,
+            "collectionId": collection_id,
+            "collectionName": name,
+            "collectionType": "Album",      # literally this, even for a single
+            "artistName": artist,
+            "releaseDate": f"{date}T07:00:00Z",
+            "trackCount": tracks,
+        }
+    return make
+
+
+@pytest.fixture
+def itunes(monkeypatch):
+    """radars.itunes with Apple, state and sleeping stubbed.
+
+    Set `.catalogue` to {artist_id: [row, ...]}, or to an int to make that
+    artist's lookup return that HTTP status, or to a raw string for a body that
+    is not JSON. `.saved` is what would have reached the state file.
+    """
+    import urllib.parse
+
+    import core.radar as runner
+    import radars.itunes as radar
+
+    class Handle:
+        def __init__(self):
+            self.catalogue: dict | None = None
+            self.saved = None
+            self.asked: list[int] = []
+
+        def _get(self, url, headers=None, timeout=30, user_agent=None, service=""):
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+            artist = int(query["id"][0])
+            self.asked.append(artist)
+            pages = self.catalogue
+            items = pages(artist) if callable(pages) else (pages or {}).get(artist, [])
+            if isinstance(items, int):             # an explicit HTTP status
+                return items, "", {}
+            if isinstance(items, str):             # a body that is not JSON
+                return 200, items, {}
+            assert isinstance(items, list), (
+                "catalogue values are a list of rows, an int HTTP status, "
+                "or a raw body string")
+            # results[0] is the artist; the radar must skip it.
+            rows = [{"wrapperType": "artist", "artistId": artist}, *items]
+            return 200, json.dumps({"results": rows}), {}
+
+        def run(self, args, watching=None, seen=()):
+            monkeypatch.setattr(radar, "http_get", self._get)
+            monkeypatch.setattr(runner, "load_seen", lambda path: set(seen))
+            monkeypatch.setattr(runner, "save_seen",
+                                lambda path, s: setattr(self, "saved", s))
+            monkeypatch.setattr(runner.time, "sleep", lambda s: None)
+            if watching is not None:
+                monkeypatch.setattr(radar, "WATCHED_ARTISTS", watching)
+            monkeypatch.setattr(sys, "argv", ["itunes.py", *args])
+            return radar.main()
+
+    return Handle()
+
+
+@pytest.fixture
+def feed_row():
+    """One ListenBrainz fresh-releases row."""
+    def make(mbid="rel-1", name="Album", date="2026-10-14", kind="Album",
+             credit="Jorge Drexler", artist_mbids=("mbid-drexler",), **extra):
+        row = {
+            "release_mbid": mbid,
+            "release_name": name,
+            "release_date": date,
+            "release_group_primary_type": kind,
+            "artist_credit_name": credit,
+            "artist_mbids": list(artist_mbids),
+        }
+        row.update(extra)
+        return row
+    return make
+
+
+@pytest.fixture
+def listenbrainz(monkeypatch):
+    """radars.listenbrainz with the feed, state and sleeping stubbed.
+
+    Set `.feed` to a list of rows, an int for an HTTP status, or a raw string
+    for a body that is not JSON. `.urls` records what was requested, which is
+    how the half-width window is asserted.
+    """
+    import core.radar as runner
+    import radars.listenbrainz as radar
+
+    class Handle:
+        def __init__(self):
+            self.feed: list | int | str = []
+            self.saved = None
+            self.urls: list[str] = []
+
+        def _get(self, url, headers=None, timeout=60, user_agent=None, service=""):
+            self.urls.append(url)
+            if isinstance(self.feed, int):
+                return self.feed, "", {}
+            if isinstance(self.feed, str):
+                return 200, self.feed, {}
+            return 200, json.dumps({"payload": {"releases": self.feed}}), {}
+
+        def run(self, args, watching=None, seen=()):
+            monkeypatch.setattr(radar, "http_get", self._get)
+            monkeypatch.setattr(runner, "load_seen", lambda path: set(seen))
+            monkeypatch.setattr(runner, "save_seen",
+                                lambda path, s: setattr(self, "saved", s))
+            monkeypatch.setattr(runner.time, "sleep", lambda s: None)
+            if watching is not None:
+                monkeypatch.setattr(radar, "WATCHED_ARTISTS", watching)
+            monkeypatch.setattr(sys, "argv", ["listenbrainz.py", *args])
+            return radar.main()
+
+    return Handle()
