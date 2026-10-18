@@ -150,7 +150,13 @@ CREATE TABLE releases (
     sig_selectivity_band TEXT, sig_person_seed_albums INTEGER,
     sig_embedded REAL, sig_flags TEXT,
     PRIMARY KEY (album_id, source));
+-- name_key is normalise(name), the same key listens.artist_key carries, so a
+-- pooled artist can be joined to your listening at all. Without it the only
+-- join available is lower(name), which matches 250 of 2,773 names and silently
+-- calls every accented artist unheard -- it recommended Xoel Lopez, who is in
+-- the export 331 times.
 CREATE TABLE release_artists (album_id TEXT, source TEXT, name TEXT,
+                              name_key TEXT,
                               PRIMARY KEY (album_id, source, name));
 
 -- songs (writing_*.json) ----------------------------------------------
@@ -252,6 +258,7 @@ CREATE INDEX ix_releases_score        ON releases (sig_score);
 CREATE INDEX ix_releases_date         ON releases (date);
 CREATE INDEX ix_releases_via          ON releases (via_qobuz_id);
 CREATE INDEX ix_release_artists_name  ON release_artists (name);
+CREATE INDEX ix_release_artists_key   ON release_artists (name_key);
 
 -- songs: (song_key, artist_query) is the identity, and every child joins on it
 CREATE INDEX ix_songs_tier            ON songs (tier);
@@ -622,7 +629,8 @@ def load_releases(ld: Loader) -> None:
                 sig.get("score"), sig.get("role_weight"), sig.get("selectivity"),
                 sig.get("selectivity_band"), sig.get("person_seed_albums"),
                 sig.get("embedded"), joined(sig.get("flags"))))
-            artists += [(rel.get("album_id"), source, a) for a in rel.get("artists") or []]
+            artists += [(rel.get("album_id"), source, a, normalise(a))
+                        for a in rel.get("artists") or []]
         ld.insert("releases",
                   ["album_id", "source", "title", "date", "tracks", "hires",
                    "streamable", "label", "genre", "via_name", "via_qobuz_id",
@@ -630,7 +638,8 @@ def load_releases(ld: Loader) -> None:
                    "sig_score", "sig_role_weight", "sig_selectivity",
                    "sig_selectivity_band", "sig_person_seed_albums", "sig_embedded",
                    "sig_flags"], rows)
-        ld.insert("release_artists", ["album_id", "source", "name"], artists)
+        ld.insert("release_artists", ["album_id", "source", "name", "name_key"],
+                  artists)
         ld.note("releases", name, len(rows), blob.get("generated"))
 
 
