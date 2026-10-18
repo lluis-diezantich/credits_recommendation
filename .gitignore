@@ -29,6 +29,15 @@ cache/
 data/*_seen.json
 data/seen.json
 
+# ...and the monthly listening snapshots, which are tracked on purpose. Unlike
+# everything else generated here they cannot be regenerated: ListenBrainz's
+# `range=month` answers about ONE past calendar month and nothing can ask for it
+# again, so a lost snapshot costs a 21 MB manual export download rather than a
+# refetch. ~40 KB a month, one file, append-only. The export-seeded months are
+# NOT here -- those rebuild from the zip, so they stay in cache/.
+!data/listens_months/
+!data/listens_months/*.json
+
 # ...except data/ci/, reserved for a runner's own copy and tracked on purpose.
 # Nothing writes here yet -- see the durable-state item in todo.md. The path
 # exists because `--state` (core/radar.py) now makes that fix a two-line change

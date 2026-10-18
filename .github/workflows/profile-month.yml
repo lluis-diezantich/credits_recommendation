@@ -1,0 +1,98 @@
+# One month of listening, recorded. Monthly.
+#
+# The profile measures taste in ACTIVE MONTHS, and the months come from two
+# places: a 21 MB export zip seeds the years before it was downloaded, and this
+# job adds each month after it, one request at a time.
+#
+# This job exists because the snapshot is PERISHABLE. ListenBrainz's
+# `range=month` answers about one past calendar month and nothing can ask for
+# it again, so a month nobody fetched can only be recovered by downloading a
+# fresh export by hand. Running it here rather than on a laptop is what makes
+# the chain continuous.
+#
+# It commits data/listens_months/<month>.json, ~40 KB, and .gitignore
+# un-ignores that directory alone. The export-seeded months are NOT committed:
+# those rebuild from the zip with `--seed`, so they stay in cache/.
+#
+# Needs no secrets. The ListenBrainz stats endpoint is unauthenticated, which
+# is also why the username is an input rather than a secret -- it is in
+# docs/favourites.md already.
+name: "profile: record the month"
+
+on:
+  schedule:
+    # The 3rd at 06:23 UTC, not the 1st at midnight, for two reasons that are
+    # both measured. The stats are precomputed and lagged about 18 hours, so
+    # asking at 00:00 on the 1st can return the month before last or nothing at
+    # all. And :23 on the 3rd rather than :00 on the 1st because scheduled jobs
+    # queue, and every cron a human writes lands on the hour of the first.
+    #
+    # `range=month` is the last COMPLETE calendar month, so running late in the
+    # month is harmless -- it is the same window all month. Running early is
+    # not.
+    - cron: "23 6 3 * *"
+  workflow_dispatch:
+    inputs:
+      user:
+        description: "ListenBrainz username"
+        default: "lluisdiezantich"
+
+# contents: write, to commit the month back. The same lesson radar.yml records:
+# leaving this at read makes only the push 403 while every other step succeeds,
+# which is the quietest possible way to lose the data.
+permissions:
+  contents: write
+
+# Queued, not cancelled. Two runs racing means the loser's push is rejected,
+# and a cancelled run is a month that has to be recovered from a 21 MB export.
+concurrency:
+  group: profile-month
+  cancel-in-progress: false
+
+jobs:
+  month:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.lock
+
+      - name: Install
+        # The runtime lock, hashed, then the project with --no-deps so the lock
+        # stays authoritative. Same as radar.yml: no test tooling in this job's
+        # environment, so a pytest release cannot break it.
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r requirements.lock
+          pip install -e . --no-deps
+
+      - name: Fetch the month
+        env:
+          LB_USER: ${{ inputs.user || 'lluisdiezantich' }}
+        run: |
+          set -euo pipefail
+          python3 stages/profile.py --month --user "$LB_USER"
+
+      - name: Commit it
+        # The commit IS the record: `git log data/listens_months/` is a dated
+        # history of what was captured and when. Nothing to commit is a normal
+        # outcome -- a re-run in the same month rewrites an identical file.
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- data/listens_months
+          if git diff --cached --quiet; then
+            echo "no new month to record"
+            exit 0
+          fi
+          added="$(git diff --cached --name-only | tr '\n' ' ')"
+          git commit -m "profile: record ${added}"
+          # Another run may have pushed between checkout and here.
+          git pull --rebase --autostash
+          git push

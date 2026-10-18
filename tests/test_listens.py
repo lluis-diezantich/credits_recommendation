@@ -311,3 +311,57 @@ def test_one_export_is_chosen_whatever_it_is_called(tmp_path):
     (tmp_path / "listenbrainz_sample.zip").write_bytes(b"x" * 10)
     chosen = mod.newest_export(str(tmp_path / "listenbrainz_*.zip"))
     assert chosen is not None and chosen.name == "listenbrainz_sample.zip"
+
+
+# ---- the two directories ------------------------------------------------
+
+
+def test_a_snapshot_and_a_seeded_month_go_to_different_places(tmp_path, monkeypatch):
+    """.gitignore works on paths, so provenance has to BE a path."""
+    monkeypatch.setattr(mod, "SEEDED", tmp_path / "cache")
+    monkeypatch.setattr(mod, "SNAPSHOTS", tmp_path / "data")
+    snap = mod.write_month("2026-09", month([("mb-1", "A", 1)]), "stats")
+    seed = mod.write_month("2013-03", month([("mb-1", "A", 1)]), "export")
+    assert (snap.parent.name, seed.parent.name) == ("data", "cache")
+
+
+def test_both_directories_are_read(tmp_path, monkeypatch):
+    monkeypatch.setattr(mod, "SEEDED", tmp_path / "cache")
+    monkeypatch.setattr(mod, "SNAPSHOTS", tmp_path / "data")
+    mod.write_month("2013-03", month([("mb-1", "A", 1)]), "export")
+    mod.write_month("2026-09", month([("mb-1", "A", 1)]), "stats")
+    assert sorted(mod.read_months()) == ["2013-03", "2026-09"]
+
+
+def test_a_missing_directory_is_not_an_error(tmp_path, monkeypatch):
+    """Before the first --month there is no snapshot directory at all."""
+    monkeypatch.setattr(mod, "SEEDED", tmp_path / "cache")
+    monkeypatch.setattr(mod, "SNAPSHOTS", tmp_path / "never-created")
+    mod.write_month("2013-03", month([("mb-1", "A", 1)]), "export")
+    assert list(mod.read_months()) == ["2013-03"]
+
+
+def test_the_fuller_copy_of_a_month_wins_whichever_side_it_is_on(tmp_path, monkeypatch):
+    """A month can exist in both once a newer export covers a snapshotted one.
+
+    More plays wins, which is the only rule right in both directions: an export
+    month is complete where a snapshot is the top 1,000, and a snapshot is
+    complete where the export was downloaded mid-month and holds a partial one.
+    """
+    monkeypatch.setattr(mod, "SEEDED", tmp_path / "cache")
+    monkeypatch.setattr(mod, "SNAPSHOTS", tmp_path / "data")
+    mod.write_month("2026-09", month([("mb-1", "A", 500)]), "export")
+    mod.write_month("2026-09", month([("mb-1", "A", 9)]), "stats")
+    assert mod.read_months()["2026-09"][0]["plays"] == 500       # export fuller
+
+    mod.write_month("2026-10", month([("mb-1", "A", 3)]), "export")   # partial
+    mod.write_month("2026-10", month([("mb-1", "A", 400)]), "stats")
+    assert mod.read_months()["2026-10"][0]["plays"] == 400       # snapshot fuller
+
+
+def test_naming_a_directory_reads_only_that_one(tmp_path, monkeypatch):
+    monkeypatch.setattr(mod, "SEEDED", tmp_path / "cache")
+    monkeypatch.setattr(mod, "SNAPSHOTS", tmp_path / "data")
+    mod.write_month("2013-03", month([("mb-1", "A", 1)]), "export")
+    mod.write_month("2026-09", month([("mb-1", "A", 1)]), "stats")
+    assert list(mod.read_months(tmp_path / "data")) == ["2026-09"]

@@ -19,7 +19,7 @@ often as you like for nothing.
 | | | when | cost |
 |---|---|---|---|
 | `--seed` | the export zip → one file per month | once, then yearly to repair | 0 requests, reads 21 MB |
-| `--month` | the last calendar month, from the stats API | monthly | 1 request |
+| `--month` | the last calendar month, from the stats API | monthly, **in CI** | 1 request |
 | (default) | every month on disk → one row per artist | whenever | free |
 | `--json` | the verdicts, for `favourites.py --from-profile` | before resolving ids | free |
 
@@ -55,7 +55,19 @@ comment beside them.
 
 ## What is on disk
 
-`cache/listens_months/YYYY-MM.json` — one file per month, 2.6 MB for 137 months.
+One file per month, in **two directories**, because the two sources have
+different durability and `.gitignore` works on paths rather than contents.
+
+| | | |
+|---|---|---|
+| `cache/listens_months/` | `--seed`, from the export | ignored — `--seed` rebuilds it byte for byte |
+| `data/listens_months/` | `--month`, from the stats API | **committed** — nothing can refetch a past month |
+
+2.6 MB for the 137 seeded months; about 40 KB a month after that. A month can
+exist in both once a newer export covers one already snapshotted, and the copy
+with **more plays** wins — the only rule right in both directions, since an
+export month is complete where a snapshot is the top 1,000, and a snapshot is
+complete where the export was downloaded mid-month and holds a partial one.
 
 | field | |
 |---|---|
@@ -128,12 +140,15 @@ See [favourites.md](favourites.md) for what happens to the ids after that.
 
 ## Gotchas
 
-**A missed month is gone.** `range=month` only ever answers about one past
-calendar month; there is no way to ask for September once November starts.
-Re-download the export and `--seed` again to fill the hole.
+**A missed month is gone until the next export.** `range=month` only ever
+answers about one past calendar month; there is no way to ask for September once
+November starts. Re-download the export and `--seed` again to fill the hole —
+which is why the snapshots are committed and why the fetch runs in CI rather
+than when you remember.
 
-**Stats lag about 18 hours.** Run it a day or two into the month, not at
-midnight on the 1st.
+**Stats lag about 18 hours**, so `.github/workflows/profile-month.yml` runs on
+the 3rd, not at midnight on the 1st. `range=month` is the last *complete*
+calendar month, so running late is harmless and running early is not.
 
 **`total_artist_count` is not an artist count.** all_time reports 9,024 against
 the export's 6,405 distinct MBIDs, inflated by exactly the fragmentation the

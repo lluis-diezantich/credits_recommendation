@@ -26,13 +26,17 @@ import stages.profile as mod
 
 @pytest.fixture
 def store(monkeypatch, tmp_path):
-    """Point the month files at tmp_path and the watchlist at a list we control."""
-    months = tmp_path / "listens_months"
+    """Point both month directories at tmp_path, and the watchlist at a list."""
+    months = tmp_path / "seeded"
+    snapshots = tmp_path / "snapshots"
+    monkeypatch.setattr(listens, "SEEDED", months)
+    monkeypatch.setattr(listens, "SNAPSHOTS", snapshots)
     monkeypatch.setattr(listens, "MONTHS", months)
 
     class Handle:
         def __init__(self):
             self.dir = months
+            self.snapshots = snapshots
             self.entries: list[dict] = []
             self.replies: list[tuple] = []
             self.asked: list[str] = []
@@ -141,11 +145,13 @@ def test_seeding_a_zip_that_is_not_there_is_an_argument_error(store, tmp_path):
 
 
 def test_a_month_is_fetched_and_saved_under_the_window_it_covers(store, capsys):
+    """Into SNAPSHOTS, not the seeded directory: a snapshot cannot be refetched."""
     store.install()
     store.replies = [(200, payload([{"artist_mbid": "mb-1", "artist_name": "A",
                                      "listen_count": 7}]), {})]
     assert store.run("--month", "--user", "someone") == 0
-    assert (store.dir / "2026-09.json").exists()
+    assert (store.snapshots / "2026-09.json").exists()
+    assert not (store.dir / "2026-09.json").exists()
     assert "range=month&count=1000" in store.asked[0]
     assert "2026-09" in capsys.readouterr().out
 
@@ -155,7 +161,7 @@ def test_month_dry_run_fetches_but_writes_nothing(store):
     store.replies = [(200, payload([{"artist_mbid": "mb-1", "artist_name": "A",
                                      "listen_count": 7}]), {})]
     assert store.run("--month", "--user", "someone", "--dry-run") == 0
-    assert not store.dir.exists()
+    assert not store.snapshots.exists()
     assert store.asked                      # it still asked
 
 
@@ -172,7 +178,7 @@ def test_no_stats_yet_is_reported_and_writes_nothing(store):
     store.install()
     store.replies = [(204, "", {})]
     assert store.run("--month", "--user", "someone") == 1
-    assert not store.dir.exists()
+    assert not store.snapshots.exists()
 
 
 def test_an_unknown_user_is_fatal_rather_than_an_empty_month(store):
@@ -187,7 +193,7 @@ def test_a_server_error_fails_without_writing(store):
     store.install()
     store.replies = [(503, "down", {})]
     assert store.run("--month", "--user", "someone") == 1
-    assert not store.dir.exists()
+    assert not store.snapshots.exists()
 
 
 def test_month_without_a_user_is_an_argument_error(store):
