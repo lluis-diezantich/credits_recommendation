@@ -69,17 +69,18 @@ def rows(*pairs):
     return [{"mbid": m, "name": n, "plays": p} for m, n, p in pairs]
 
 
-def spread(handle, mbid, name, months, recent, now_year=2026):
+def spread(handle, mbid, name, months, recent, plays=10):
     """Write `months` active months, `recent` of them inside the last 24.
 
     Recent months are hung off 2026, older ones off 2015, so the two groups
-    cannot collide however many are asked for.
+    cannot collide however many are asked for. `plays` is per month, and a
+    short history needs recent * plays >= policy.EMERGING_PLAYS to be emerging.
     """
     for i in range(recent):
         handle.write(f"2026-{(i % 12) + 1:02d}" if i < 12 else f"2025-{(i % 12) + 1:02d}",
-                     rows((mbid, name, 10)))
+                     rows((mbid, name, plays)))
     for i in range(months - recent):
-        handle.write(f"{2015 + i // 12}-{(i % 12) + 1:02d}", rows((mbid, name, 10)))
+        handle.write(f"{2015 + i // 12}-{(i % 12) + 1:02d}", rows((mbid, name, plays)))
 
 
 def payload(artists, from_ts=1788220800, total=None):
@@ -229,7 +230,7 @@ def test_each_band_is_named_and_counted(store, capsys):
     store.install()
     spread(store, "mb-core", "Deep Current", months=30, recent=12)
     spread(store, "mb-lapsed", "Deep Cooled", months=30, recent=2)
-    spread(store, "mb-new", "Just Found", months=4, recent=4)
+    spread(store, "mb-new", "Just Found", months=4, recent=4, plays=40)
     assert store.run() == 0
     out = capsys.readouterr().out
     assert "core 1" in out and "lapsed 1" in out and "emerging 1" in out
@@ -276,7 +277,7 @@ def test_thin_artists_are_hidden_until_asked_for(store, capsys):
 
 def test_min_months_hides_the_short_histories(store, capsys):
     store.install()
-    spread(store, "mb-new", "Just Found", months=4, recent=4)
+    spread(store, "mb-new", "Just Found", months=4, recent=4, plays=40)
     assert store.run("--min-months", "6") == 0
     assert "Just Found" not in capsys.readouterr().out
     assert store.run("--min-months", "2") == 0
@@ -312,3 +313,60 @@ def test_a_thin_artist_with_a_long_enough_history_is_still_hidden(store, capsys)
     assert "Long Gone" not in capsys.readouterr().out
     assert store.run("--all") == 0
     assert "Long Gone" in capsys.readouterr().out
+
+
+# ---- --json, the handoff to favourites.py -------------------------------
+
+
+def verdicts(path):
+    return {a["name"]: a for a in json.loads(path.read_text())["artists"]}
+
+
+def test_the_verdict_file_carries_the_three_actionable_bands_only(store, tmp_path):
+    """thin is 5,608 of 7,807 rows and nothing consumes it."""
+    store.install()
+    spread(store, "mb-core", "Deep Current", months=30, recent=12)
+    spread(store, "mb-lapsed", "Deep Cooled", months=30, recent=2)
+    spread(store, "mb-new", "Just Found", months=4, recent=4, plays=40)
+    spread(store, "mb-thin", "One Listen", months=4, recent=1, plays=1)
+    out = tmp_path / "profile.json"
+    assert store.run("--json", str(out)) == 0
+    assert set(verdicts(out)) == {"Deep Current", "Deep Cooled", "Just Found"}
+
+
+def test_a_verdict_row_carries_what_a_decision_needs(store, tmp_path):
+    store.install()
+    spread(store, "mb-core", "Deep Current", months=30, recent=12)
+    out = tmp_path / "profile.json"
+    store.run("--json", str(out))
+    row = verdicts(out)["Deep Current"]
+    assert row["band"] == "core" and row["mbid"] == "mb-core"
+    assert set(row) == {"name", "mbid", "band", "months", "recent", "plays",
+                        "recent_plays", "first", "last"}
+
+
+def test_the_verdict_file_records_the_floors_it_was_written_with(store, tmp_path):
+    """A verdict is only readable next to the numbers that produced it."""
+    store.install()
+    spread(store, "mb-core", "Deep Current", months=30, recent=12)
+    out = tmp_path / "profile.json"
+    store.run("--json", str(out))
+    data = json.loads(out.read_text())
+    assert data["floors"] == {"m24": policy.M24_FLOOR, "deep": policy.DEEP_FLOOR,
+                              "emerging_plays": policy.EMERGING_PLAYS}
+    assert data["through"] == "2026-12"
+
+
+def test_no_json_flag_writes_no_file(store, tmp_path):
+    store.install()
+    spread(store, "mb-core", "Deep Current", months=30, recent=12)
+    assert store.run() == 0
+    assert not (tmp_path / "profile.json").exists()
+
+
+def test_dry_run_suppresses_the_verdict_file(store, tmp_path):
+    store.install()
+    spread(store, "mb-core", "Deep Current", months=30, recent=12)
+    out = tmp_path / "profile.json"
+    assert store.run("--json", str(out), "--dry-run") == 0
+    assert not out.exists()

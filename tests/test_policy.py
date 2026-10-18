@@ -365,14 +365,15 @@ def test_the_covers_mill_hints_are_lowercase_substrings():
 # ---- the watchlist bands ------------------------------------------------
 
 
-def test_the_four_measured_artists_land_where_they_were_judged_to():
+def test_the_measured_artists_land_where_they_were_judged_to():
     """The calibration set, confirmed by hand on the 2026-05 export."""
-    assert policy.band(66, 23) == "core"        # Drexler
-    assert policy.band(73, 3) == "lapsed"       # Radiohead
-    assert policy.band(58, 3) == "lapsed"       # Mogwai
-    assert policy.band(47, 7) == "lapsed"       # Interpol
-    assert policy.band(3, 3) == "emerging"      # j milo
-    assert policy.band(1, 0) == "thin"
+    assert policy.band(66, 23, 3267) == "core"       # Drexler
+    assert policy.band(60, 16, 52) == "core"         # Sparklehorse, on few plays
+    assert policy.band(73, 3, 22) == "lapsed"        # Radiohead
+    assert policy.band(58, 3, 7) == "lapsed"         # Mogwai
+    assert policy.band(47, 7, 80) == "lapsed"        # Interpol
+    assert policy.band(3, 3, 335) == "emerging"      # Milo j
+    assert policy.band(1, 1, 2) == "thin"            # Camilo, two plays
 
 
 def test_the_floor_sits_in_the_measured_gap():
@@ -383,23 +384,39 @@ def test_the_floor_sits_in_the_measured_gap():
 def test_a_short_history_is_judged_against_itself():
     """An artist found four months ago cannot have ten recent months, so the
     currency test scales -- otherwise every new artist is thin forever."""
-    assert policy.band(4, 4) == "emerging"
-    assert policy.band(4, 1) == "thin"
+    assert policy.band(4, 4, 500) == "emerging"
+    assert policy.band(4, 1, 500) == "thin"
+
+
+def test_a_short_history_still_has_to_clear_the_plays_floor():
+    """What the scaling let in: 2,006 artists were emerging, Camilo among them
+    on two plays. The floor is what makes the candidate list reviewable."""
+    assert policy.band(3, 3, policy.EMERGING_PLAYS) == "emerging"
+    assert policy.band(3, 3, policy.EMERGING_PLAYS - 1) == "thin"
+
+
+def test_the_plays_floor_does_not_apply_to_a_deep_history():
+    """Sparklehorse: 60 lifetime months, 52 recent plays. Months carry it, and
+    a second constraint would demote him on no evidence."""
+    assert policy.band(60, 16, 1) == "core"
+    assert policy.band(60, 2, 1) == "lapsed"
 
 
 def test_depth_alone_never_makes_an_artist_core():
     """The whole point: 2,542 Radiohead plays over 73 months do not outvote
     three active months in two years."""
-    assert policy.band(100, 0) == "lapsed"
+    assert policy.band(100, 0, 9999) == "lapsed"
 
 
 def test_recency_alone_never_makes_an_artist_core():
     """Below DEEP_FLOOR it is emerging, which is watched but not established."""
-    assert policy.band(policy.DEEP_FLOOR - 1, 20) == "emerging"
-    assert policy.band(policy.DEEP_FLOOR, 20) == "core"
+    assert policy.band(policy.DEEP_FLOOR - 1, 20, 500) == "emerging"
+    assert policy.band(policy.DEEP_FLOOR, 20, 500) == "core"
 
 
 def test_every_band_is_one_of_the_four_names():
     for months in range(0, 60, 7):
         for recent in range(0, months + 1, 3):
-            assert policy.band(months, recent) in {"core", "lapsed", "emerging", "thin"}
+            for plays in (0, 50, 5000):
+                assert policy.band(months, recent, plays) in {
+                    "core", "lapsed", "emerging", "thin"}

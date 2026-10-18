@@ -43,10 +43,12 @@ import datetime as dt
 import json
 import sys
 import time
+from pathlib import Path
 
 from core import favourites
 from core.http import get as _http_get
 from core.names import normalise
+from core.paths import DATA
 
 # pick() refuses fuzzy matches on purpose, which is why unresolved names are
 # reported for hand-filling instead of being guessed at.
@@ -117,6 +119,31 @@ def collect(user: str, periods: list[str], count: int) -> dict[str, dict]:
             found["plays"] = max(found["plays"] or 0, row.get("listen_count") or 0)
             found["ranks"][period] = rank
     return merged
+
+
+# The bands worth WATCHING. `lapsed` is deliberately absent: it means real past
+# interest with nothing current, so adding it would undo the profile's point.
+WATCH_BANDS = ("core", "emerging")
+
+
+def candidates_from_profile(path: Path, bands=WATCH_BANDS) -> dict[str, dict]:
+    """The same shape collect() returns, from stages/profile.py --json instead.
+
+    Measured persistence rather than a top-100 ranking: the windows admit an
+    artist on play count, which is the confidence-weighting bug roadmap.md
+    names, and they missed 140 artists with 24+ active months. `ranks` is empty
+    because there is no ranking here -- the resolve loop reads it and writes
+    `rank: None`, which sorts these after anything the windows did chart.
+    """
+    if not path.exists():
+        sys.exit(f"no {path.name} - run ./stages/profile.py --json first")
+    data = json.loads(path.read_text())
+    wanted = [a for a in data.get("artists") or [] if a.get("band") in bands]
+    print(f"{path.name}: through {data.get('through')}, "
+          f"{len(wanted)} artists in {', '.join(bands)}", file=sys.stderr)
+    return {normalise(a["name"]): {"name": a["name"], "mbid": a.get("mbid"),
+                                  "plays": a.get("plays") or 0, "ranks": {}}
+            for a in wanted if a.get("name")}
 
 
 def set_watch(names: list[str], watching: bool, dry_run: bool) -> int:
@@ -299,6 +326,10 @@ def main() -> int:
     parser.add_argument("--refresh", action="store_true",
                         help="re-resolve artists that already have a Qobuz id, except the "
                              "ones you picked by hand")
+    parser.add_argument("--from-profile", nargs="?", const=str(DATA / "profile.json"),
+                        metavar="PATH", help="take the candidate names from "
+                        "stages/profile.py --json instead of the ListenBrainz "
+                        "windows (default: data/profile.json)")
     parser.add_argument("--review", action="store_true",
                         help="walk the entries that did not resolve cleanly and pick by hand")
     parser.add_argument("--mute", nargs="+", metavar="NAME",
@@ -316,10 +347,13 @@ def main() -> int:
         return set_watch(args.mute or args.unmute, bool(args.unmute), args.dry_run)
     if args.review:
         return review(args.store, args.dry_run)
-    if not args.user:
-        parser.error("--user is required (or use --review)")
+    if not args.user and not args.from_profile:
+        parser.error("--user is required (or use --review, or --from-profile)")
 
-    if args.period == "all":
+    if args.from_profile:
+        merged = candidates_from_profile(Path(args.from_profile))
+        periods = []
+    elif args.period == "all":
         periods = list(RANGES)
     else:
         periods = [p.strip() for p in args.period.split(",") if p.strip()]
@@ -327,12 +361,15 @@ def main() -> int:
         if unknown:
             parser.error(f"unknown range(s): {', '.join(unknown)}. Valid: {', '.join(RANGES)}")
 
-    print(f"asking ListenBrainz for the top {args.count} in "
-          f"{len(periods)} window{'s' if len(periods) != 1 else ''}:", file=sys.stderr)
-    merged = collect(args.user, periods, args.count)
+    if not args.from_profile:
+        print(f"asking ListenBrainz for the top {args.count} in "
+              f"{len(periods)} window{'s' if len(periods) != 1 else ''}:", file=sys.stderr)
+        merged = collect(args.user, periods, args.count)
+        if not merged:
+            sys.exit(f"ListenBrainz returned no artists for {args.user!r} in any of: "
+                     f"{', '.join(periods)}")
     if not merged:
-        sys.exit(f"ListenBrainz returned no artists for {args.user!r} in any of: "
-                 f"{', '.join(periods)}")
+        sys.exit("no candidates to resolve")
 
     # Existing entries win on ids: a hand-corrected or hand-filled id has to
     # survive every later run, which is the whole reason this file is merged
@@ -350,7 +387,8 @@ def main() -> int:
         return args.refresh and entry.get("qobuz_match") != "manual"
 
     needs_resolving = sum(1 for key in merged if still_open(existing.get(key) or {}))
-    print(f"\n{len(merged)} unique artists across {len(periods)} windows, "
+    source = (f"{len(periods)} windows" if periods else "the profile")
+    print(f"\n{len(merged)} unique artists from {source}, "
           f"{needs_resolving} to resolve "
           f"({needs_resolving} Qobuz request{'s' if needs_resolving != 1 else ''}).",
           file=sys.stderr)
@@ -398,7 +436,8 @@ def main() -> int:
           f"{kept} already had a Qobuz id, {unresolved} unresolved.")
 
     if existing:
-        print(f"{len(existing)} kept from a previous run, no longer in any window.")
+        where = "in any window" if periods else "in the profile"
+        print(f"{len(existing)} kept from a previous run, no longer {where}.")
     if unresolved:
         print(f"Fill ids in by hand in {favourites.FILE.name}, or find one with:\n"
               f"  ./radars/qobuz.py --find \"Artist Name\"")
