@@ -299,3 +299,42 @@ COVERS_MILL_HINTS = (
 # Four people is thin next to the 54 that tuned MIN_ROLE_WEIGHT and MIN_SIGNAL.
 # Anyone genuinely between 0.15 and 0.35 is unclassified by this evidence.
 MIN_WRITING_SHARE = 0.35
+
+
+# ---------------------------------------------------------------------------
+# WATCHLIST PROFILE (stages/profile.py)
+#
+# Two numbers, no ratio: lifetime active months is depth, months inside the
+# window is currency. A ratio was tried and dropped -- dividing by lifetime
+# months made a revival take ten months for a deep artist and five for a new
+# one, punishing an artist for having mattered once.
+# ---------------------------------------------------------------------------
+
+RECENT_WINDOW = 24       # months that count as recent
+M24_FLOOR = 10           # active months inside the window to count as current
+DEEP_FLOOR = 24          # lifetime active months to count as established
+
+# Measured on the 2026-05 export (190,131 listens, 159 months):
+#
+#     Drexler 23   Bjork 20   ROSALIA 19   Mars Volta 17   Waits 13   Extremoduro 12
+#     Interpol 7   Mogwai 3   Animal Collective 3   Bob Dylan 3   Radiohead 3
+#
+# The floor sits in that gap, and the four below it were confirmed by hand as
+# tastes that cooled. A 12-month window was worse: Interpol ties Nine Inch
+# Nails, and Extremoduro drops out.
+
+
+def band(months: int, recent: int) -> str:
+    """core | lapsed | emerging | thin.
+
+    `lapsed` is the one that earns the design: real past interest, nothing now.
+    Do not watch it for new releases, but keep the credit-graph edge -- that is
+    roadmap.md's "prune the first, never the second".
+
+    The min() scales the currency test to a short history, since an artist you
+    found four months ago cannot have ten recent months.
+    """
+    current = recent >= min(M24_FLOOR, months)
+    if months >= DEEP_FLOOR:
+        return "core" if current else "lapsed"
+    return "emerging" if current else "thin"
