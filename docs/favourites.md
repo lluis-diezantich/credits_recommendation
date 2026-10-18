@@ -4,6 +4,7 @@
 The radars read it instead of each hardcoding their own list.
 
     ./stages/favourites.py --from-profile                # who is worth watching
+    ./stages/favourites.py --check-active                # who has stopped releasing
     ./stages/favourites.py --user <listenbrainz-user>    # the older, ranked source
     ./radars/qobuz.py --days 90                          # what came out
 
@@ -34,7 +35,8 @@ match nobody looked at would otherwise poison the radar quietly.
     # 2. fix whatever did not resolve cleanly
     ./stages/favourites.py --review
 
-    # 3. stop watching someone
+    # 3. drop the ones who will never release again, and mute by hand
+    ./stages/favourites.py --check-active
     ./stages/favourites.py --mute "Bobby Cruz" "Feli Colina"
 
     # 4. the actual point
@@ -76,7 +78,40 @@ it. That is deliberate and one-way.
 | `plays` | largest listen count any window reported |
 | `rank`, `ranks` | best rank, and the rank in every window it charted in. `null`/`{}` means it charted in none this run |
 | `qobuz_match` | `exact`, `ambiguous`, `manual`, `not_found`, `no_exact_match` |
-| `watch` | absent means watched. `false` mutes |
+| `watch` | absent means watched. `false` mutes — **your** decision |
+| `ended` | a death or split date from MusicBrainz, or `true` when the date is unknown. A **fact**, not a decision |
+
+## Who has stopped releasing
+
+`--check-active` asks MusicBrainz one question per watched artist —
+`life-span.ended` — and stamps the answer in. On the 2026-10 watchlist it found
+six the radar had been querying every week:
+
+    died   Frankie Ruiz             1998-08-09
+    died   Fela Kuti                1997-08-02
+    died   Enrique Morente          2010-12-13
+    died   Joe Arroyo               2011-07-26
+    split  Extremoduro              2019-12-17
+    split  Los Abuelos de la Nada   1988
+
+**MusicBrainz, not the release dates.** The obvious alternative — "has anyone
+released nothing lately" — fails on exactly these artists, because a dead one
+keeps putting out compilations and remasters. MusicBrainz states it outright and
+says which it was. What it *cannot* say is whether a living artist who never
+formally stopped has quietly finished; for that the release dates are still the
+only signal, and nothing reads them yet.
+
+**`ended` is not `watch`, on purpose.** A mute is yours and you can lift it; a
+death is not yours to lift. Both skip the artist in `favourites.ids_for`, which
+is the single place all three radars read, so one field refreshes without
+disturbing the other. Two of these six are `core` in the profile — Fela Kuti and
+Extremoduro are genuinely played, and genuinely never releasing again. That is
+the fact a listening history can never contain.
+
+One request per artist at 1.2s, cached in `cache/musicbrainz/` effectively
+forever, since a death date does not change. `--refresh-active` re-asks. Four
+watched artists have no MBID and are reported rather than assumed active: an
+unanswerable lookup must not read as a yes.
 
 ## Two conventions
 

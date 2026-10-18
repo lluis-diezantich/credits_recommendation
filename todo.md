@@ -73,6 +73,19 @@ The gap between "a credits database" and "recommends music".
   either — every artist sits between 0.50 and 1.0 tracks per play, so it
   discriminates nothing.
 
+- **~~Filter artists who will never release again.~~** Done:
+  `./stages/favourites.py --check-active` asks MusicBrainz `life-span.ended`
+  per watched artist and stamps `ended` in, which `favourites.ids_for` skips
+  alongside `watch: false`. Six of 93 were found — four dead, two split — so
+  the Friday radar had been spending six of its 91 requests on artists who
+  cannot produce a row. [favourites.md](docs/favourites.md) has them.
+
+  MusicBrainz rather than the release dates, because the obvious test fails on
+  exactly these artists: a dead one keeps putting out compilations. What is
+  still open is the living artist who never formally stopped and has quietly
+  finished — only the release dates can see that, and the radar currently
+  fetches every one and then discards it into a bare id list.
+
 - **A radar for people, not artists.** The thesis, and the one thing this cannot
   do: alert on records made by *people* you follow. The pools hold 7,860
   candidate releases and nothing consumes them. One `album/get` per fresh

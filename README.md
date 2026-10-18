@@ -37,7 +37,7 @@ resumes a run that died partway through its fan-out.
 
     policy.py          scoring judgement calls - ONE copy, at the root, on purpose
     core/              plumbing - http, names, credits, qobuz, discogs, favourites,
-                       listens, state, paths, radar (the shared radar run)
+                       listens, musicbrainz, state, paths, radar
     stages/            the pipeline, in order
       favourites.py      ListenBrainz top artists -> Qobuz ids -> favourites.json
       profile.py         listens -> who you still play, in months  [DERIVED]
