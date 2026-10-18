@@ -1,0 +1,314 @@
+"""stages/profile.py: the three jobs, with the network and the store stubbed.
+
+Two of the cases here are defects this stage exists to avoid:
+
+  the sample zip   stages/load.py takes sorted(glob)[-1], and
+                   "listenbrainz_sample.zip" sorts AFTER the real export, so a
+                   2,000-listen sample silently shadowed 190,131 listens.
+                   --seed picks the largest file instead.
+  a missing month  `range=month` only answers about one past month, so a month
+                   nobody fetched can never be recovered from the API. One file
+                   per month makes the hole visible.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+import zipfile
+
+import pytest
+
+import core.listens as listens
+import policy
+import stages.profile as mod
+
+
+@pytest.fixture
+def store(monkeypatch, tmp_path):
+    """Point the month files at tmp_path and the watchlist at a list we control."""
+    months = tmp_path / "listens_months"
+    monkeypatch.setattr(listens, "MONTHS", months)
+
+    class Handle:
+        def __init__(self):
+            self.dir = months
+            self.entries: list[dict] = []
+            self.replies: list[tuple] = []
+            self.asked: list[str] = []
+
+        def install(self):
+            handle = self
+
+            class Favourites:
+                @staticmethod
+                def load(*a, **k):
+                    return handle.entries
+
+            monkeypatch.setattr(mod, "favourites", Favourites())
+            monkeypatch.setattr(mod, "http_get", self._get)
+            return mod
+
+        def _get(self, url, **kwargs):
+            self.asked.append(url)
+            return self.replies.pop(0)
+
+        def write(self, month, new_rows, source="export"):
+            """Merge into the month, since each artist is written separately."""
+            existing = listens.read_months(self.dir).get(month, [])
+            listens.write_month(month, existing + list(new_rows), source, self.dir)
+
+        def run(self, *argv):
+            monkeypatch.setattr(sys, "argv", ["profile.py", *argv])
+            return mod.main()
+
+    return Handle()
+
+
+def rows(*pairs):
+    return [{"mbid": m, "name": n, "plays": p} for m, n, p in pairs]
+
+
+def spread(handle, mbid, name, months, recent, now_year=2026):
+    """Write `months` active months, `recent` of them inside the last 24.
+
+    Recent months are hung off 2026, older ones off 2015, so the two groups
+    cannot collide however many are asked for.
+    """
+    for i in range(recent):
+        handle.write(f"2026-{(i % 12) + 1:02d}" if i < 12 else f"2025-{(i % 12) + 1:02d}",
+                     rows((mbid, name, 10)))
+    for i in range(months - recent):
+        handle.write(f"{2015 + i // 12}-{(i % 12) + 1:02d}", rows((mbid, name, 10)))
+
+
+def payload(artists, from_ts=1788220800, total=None):
+    return json.dumps({"payload": {"from_ts": from_ts, "to_ts": from_ts + 2592000,
+                                   "total_artist_count": total or len(artists),
+                                   "artists": artists}})
+
+
+# ---- newest_export ------------------------------------------------------
+
+
+def test_the_sample_zip_does_not_shadow_the_real_export(monkeypatch, tmp_path):
+    """The load.py defect, stated as a test: largest wins, not last alphabetically."""
+    (tmp_path / "listenbrainz_lluisdiezantich_1779441720.zip").write_bytes(b"x" * 5000)
+    (tmp_path / "listenbrainz_sample.zip").write_bytes(b"x" * 100)
+    monkeypatch.setattr(mod, "EXPORT_GLOB", str(tmp_path / "listenbrainz_*.zip"))
+    assert mod.newest_export().name.startswith("listenbrainz_lluisdiezantich")
+
+
+def test_no_export_anywhere_is_not_a_crash(monkeypatch, tmp_path):
+    monkeypatch.setattr(mod, "EXPORT_GLOB", str(tmp_path / "nothing_*.zip"))
+    assert mod.newest_export() is None
+
+
+# ---- --seed -------------------------------------------------------------
+
+
+def zip_with(tmp_path, stamps):
+    path = tmp_path / "listenbrainz_x.zip"
+    with zipfile.ZipFile(path, "w") as zf:
+        lines = [json.dumps({"listened_at": s, "track_metadata": {
+            "artist_name": "Mogwai",
+            "mbid_mapping": {"artist_mbids": ["mb-mog"],
+                             "artists": [{"artist_mbid": "mb-mog",
+                                          "artist_credit_name": "Mogwai"}]}}})
+                 for s in stamps]
+        zf.writestr("listens/2026/5.jsonl", "\n".join(lines) + "\n")
+    return path
+
+
+def test_seed_writes_one_file_per_month(store, tmp_path, capsys):
+    store.install()
+    path = zip_with(tmp_path, [1777000000, 1764000000])
+    assert store.run("--seed", "--export", str(path)) == 0
+    assert sorted(p.name for p in store.dir.glob("*.json")) == ["2025-11.json",
+                                                               "2026-04.json"]
+    assert "2 months" in capsys.readouterr().out
+
+
+def test_seed_dry_run_writes_nothing(store, tmp_path, capsys):
+    store.install()
+    path = zip_with(tmp_path, [1777000000])
+    assert store.run("--seed", "--export", str(path), "--dry-run") == 0
+    assert not store.dir.exists()
+    assert "1 months" in capsys.readouterr().out
+
+
+def test_seeding_an_export_with_no_listens_fails_rather_than_writing_nothing(
+        store, tmp_path):
+    store.install()
+    path = tmp_path / "empty.zip"
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("user.json", "{}")
+    assert store.run("--seed", "--export", str(path)) == 1
+
+
+def test_seeding_a_zip_that_is_not_there_is_an_argument_error(store, tmp_path):
+    store.install()
+    with pytest.raises(SystemExit):
+        store.run("--seed", "--export", str(tmp_path / "absent.zip"))
+
+
+# ---- --month ------------------------------------------------------------
+
+
+def test_a_month_is_fetched_and_saved_under_the_window_it_covers(store, capsys):
+    store.install()
+    store.replies = [(200, payload([{"artist_mbid": "mb-1", "artist_name": "A",
+                                     "listen_count": 7}]), {})]
+    assert store.run("--month", "--user", "someone") == 0
+    assert (store.dir / "2026-09.json").exists()
+    assert "range=month&count=1000" in store.asked[0]
+    assert "2026-09" in capsys.readouterr().out
+
+
+def test_month_dry_run_fetches_but_writes_nothing(store):
+    store.install()
+    store.replies = [(200, payload([{"artist_mbid": "mb-1", "artist_name": "A",
+                                     "listen_count": 7}]), {})]
+    assert store.run("--month", "--user", "someone", "--dry-run") == 0
+    assert not store.dir.exists()
+    assert store.asked                      # it still asked
+
+
+def test_a_truncated_answer_warns_because_the_month_would_be_incomplete(store, capsys):
+    """total_artist_count above what came back means the count must go up."""
+    store.install()
+    store.replies = [(200, payload([{"artist_mbid": "mb-1", "artist_name": "A",
+                                     "listen_count": 7}], total=900), {})]
+    assert store.run("--month", "--user", "someone") == 0
+    assert "got 1 of 900" in capsys.readouterr().err
+
+
+def test_no_stats_yet_is_reported_and_writes_nothing(store):
+    store.install()
+    store.replies = [(204, "", {})]
+    assert store.run("--month", "--user", "someone") == 1
+    assert not store.dir.exists()
+
+
+def test_an_unknown_user_is_fatal_rather_than_an_empty_month(store):
+    """Unlike a quiet window, a 404 means every later run is wrong too."""
+    store.install()
+    store.replies = [(404, "not found", {})]
+    with pytest.raises(SystemExit):
+        store.run("--month", "--user", "nobody")
+
+
+def test_a_server_error_fails_without_writing(store):
+    store.install()
+    store.replies = [(503, "down", {})]
+    assert store.run("--month", "--user", "someone") == 1
+    assert not store.dir.exists()
+
+
+def test_month_without_a_user_is_an_argument_error(store):
+    store.install()
+    with pytest.raises(SystemExit):
+        store.run("--month")
+
+
+def test_seed_and_month_are_separate_runs(store):
+    store.install()
+    with pytest.raises(SystemExit):
+        store.run("--seed", "--month")
+
+
+# ---- the report ---------------------------------------------------------
+
+
+def test_profiling_before_seeding_says_so(store):
+    store.install()
+    assert store.run() == 1
+
+
+def test_each_band_is_named_and_counted(store, capsys):
+    store.install()
+    spread(store, "mb-core", "Deep Current", months=30, recent=12)
+    spread(store, "mb-lapsed", "Deep Cooled", months=30, recent=2)
+    spread(store, "mb-new", "Just Found", months=4, recent=4)
+    assert store.run() == 0
+    out = capsys.readouterr().out
+    assert "core 1" in out and "lapsed 1" in out and "emerging 1" in out
+    assert "Deep Current" in out and "Deep Cooled" in out
+
+
+def test_a_watched_artist_is_marked_and_a_muted_one_is_shouted_about(store, capsys):
+    store.install()
+    store.entries = [{"name": "Deep Current", "mbid": "mb-core"},
+                     {"name": "Dead Legend", "mbid": "mb-dead", "watch": False}]
+    spread(store, "mb-core", "Deep Current", months=30, recent=12)
+    spread(store, "mb-dead", "Dead Legend", months=30, recent=12)
+    assert store.run() == 0
+    marks = {line.split()[1] + line.split()[2]: line.split()[-1]
+             for line in capsys.readouterr().out.splitlines() if line.startswith("core ")}
+    assert marks == {"DeepCurrent": "yes", "DeadLegend": "MUTED"}
+
+
+def test_the_three_action_sets_are_counted(store, capsys):
+    """A lapsed artist you watch, and a core artist you muted -- Celia Cruz's case."""
+    store.install()
+    store.entries = [{"name": "Deep Cooled", "mbid": "mb-lapsed"},
+                     {"name": "Dead Legend", "mbid": "mb-dead", "watch": False}]
+    spread(store, "mb-lapsed", "Deep Cooled", months=30, recent=2)
+    spread(store, "mb-dead", "Dead Legend", months=30, recent=12)
+    spread(store, "mb-unwatched", "Worth Watching", months=30, recent=12)
+    assert store.run() == 0
+    out = capsys.readouterr().out
+    assert "watch these, not watched yet : 1" in out
+    assert "watched but lapsed           : 1" in out
+    assert "muted but still core         : 1" in out
+
+
+def test_thin_artists_are_hidden_until_asked_for(store, capsys):
+    store.install()
+    store.write("2026-05", rows(("mb-1", "Deep Current", 10)))
+    store.write("2015-01", rows(("mb-2", "One Off", 1)))
+    spread(store, "mb-1", "Deep Current", months=30, recent=12)
+    assert store.run() == 0
+    assert "One Off" not in capsys.readouterr().out
+    assert store.run("--all") == 0
+    assert "One Off" in capsys.readouterr().out
+
+
+def test_min_months_hides_the_short_histories(store, capsys):
+    store.install()
+    spread(store, "mb-new", "Just Found", months=4, recent=4)
+    assert store.run("--min-months", "6") == 0
+    assert "Just Found" not in capsys.readouterr().out
+    assert store.run("--min-months", "2") == 0
+    assert "Just Found" in capsys.readouterr().out
+
+
+def test_the_window_is_overridable_without_touching_policy(store, capsys):
+    """A narrower window must move a verdict, or the flag is decoration."""
+    store.install()
+    spread(store, "mb-1", "Deep Current", months=30, recent=12)
+    assert store.run("--window", "6") == 0
+    assert "lapsed" in capsys.readouterr().out
+
+
+def test_the_header_states_the_floors_it_judged_with(store, capsys):
+    store.install()
+    spread(store, "mb-1", "Deep Current", months=30, recent=12)
+    store.run()
+    assert f"floors {policy.M24_FLOOR}/{policy.DEEP_FLOOR}" in capsys.readouterr().out
+
+
+def test_a_thin_artist_with_a_long_enough_history_is_still_hidden(store, capsys):
+    """min_months lets it through; the band is what hides it, until --all.
+
+    The current artist is not decoration: the window counts back from the
+    newest month on disk, so without one "Long Gone" would be recent relative
+    to itself.
+    """
+    store.install()
+    spread(store, "mb-cur", "Still Here", months=30, recent=12)
+    spread(store, "mb-old", "Long Gone", months=5, recent=0)
+    assert store.run() == 0
+    assert "Long Gone" not in capsys.readouterr().out
+    assert store.run("--all") == 0
+    assert "Long Gone" in capsys.readouterr().out

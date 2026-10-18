@@ -360,3 +360,46 @@ def test_the_covers_mill_hints_are_lowercase_substrings():
     padded hint would never fire."""
     for hint in policy.COVERS_MILL_HINTS:
         assert hint == hint.lower().strip(), hint
+
+
+# ---- the watchlist bands ------------------------------------------------
+
+
+def test_the_four_measured_artists_land_where_they_were_judged_to():
+    """The calibration set, confirmed by hand on the 2026-05 export."""
+    assert policy.band(66, 23) == "core"        # Drexler
+    assert policy.band(73, 3) == "lapsed"       # Radiohead
+    assert policy.band(58, 3) == "lapsed"       # Mogwai
+    assert policy.band(47, 7) == "lapsed"       # Interpol
+    assert policy.band(3, 3) == "emerging"      # j milo
+    assert policy.band(1, 0) == "thin"
+
+
+def test_the_floor_sits_in_the_measured_gap():
+    """Nothing judged current was below 12 recent months; nothing cooled was above 7."""
+    assert 7 < policy.M24_FLOOR <= 12
+
+
+def test_a_short_history_is_judged_against_itself():
+    """An artist found four months ago cannot have ten recent months, so the
+    currency test scales -- otherwise every new artist is thin forever."""
+    assert policy.band(4, 4) == "emerging"
+    assert policy.band(4, 1) == "thin"
+
+
+def test_depth_alone_never_makes_an_artist_core():
+    """The whole point: 2,542 Radiohead plays over 73 months do not outvote
+    three active months in two years."""
+    assert policy.band(100, 0) == "lapsed"
+
+
+def test_recency_alone_never_makes_an_artist_core():
+    """Below DEEP_FLOOR it is emerging, which is watched but not established."""
+    assert policy.band(policy.DEEP_FLOOR - 1, 20) == "emerging"
+    assert policy.band(policy.DEEP_FLOOR, 20) == "core"
+
+
+def test_every_band_is_one_of_the_four_names():
+    for months in range(0, 60, 7):
+        for recent in range(0, months + 1, 3):
+            assert policy.band(months, recent) in {"core", "lapsed", "emerging", "thin"}

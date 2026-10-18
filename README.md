@@ -22,16 +22,13 @@ CI installs from `requirements.lock` (runtime) and `requirements-dev.lock`
 cannot turn the Friday radar red. Both are generated — regenerate with the
 `uv pip compile` line in their headers after changing `pyproject.toml`.
 
-
 ## Running it
 
-    ./stages/favourites.py --user <lb-user>    # your top artists -> Qobuz ids
-    ./stages/favourites.py --review            # fix what did not resolve cleanly
-    ./radars/qobuz.py --days 10                # what came out
-    ./stages/load.py                           # everything on disk -> data/music.db
-    pytest -q                                  # 493 cases, offline
+    pytest -q                                  # the suite, offline
 
-`python -m stages.favourites` works too. Each stage reads and writes JSON in
+Each feature's own doc carries its commands and the reasons they are shaped that
+way; the table under [Docs](#docs) is the index. `python -m stages.favourites`
+works as well as `./stages/favourites.py`. Every stage reads and writes JSON in
 `data/`, so any stage can be rerun alone, and `resolve_discogs.py --pool-only`
 resumes a run that died partway through its fan-out.
 
@@ -39,9 +36,10 @@ resumes a run that died partway through its fan-out.
 
     policy.py          scoring judgement calls - ONE copy, at the root, on purpose
     core/              plumbing - http, names, credits, qobuz, discogs, favourites,
-                       state, paths, radar (the shared radar run)
+                       listens, state, paths, radar (the shared radar run)
     stages/            the pipeline, in order
       favourites.py      ListenBrainz top artists -> Qobuz ids -> favourites.json
+      profile.py         listens -> who you still play, in months  [DERIVED]
       discover.py        seed artist -> credits -> people          [EXACT]
       resolve_qobuz.py   people -> Qobuz artist ids -> pool.json   [LOSSY]
       resolve_discogs.py the ones Qobuz cannot see -> pool_discogs  [LOSSY]
@@ -52,8 +50,7 @@ resumes a run that died partway through its fan-out.
       remezcla.py        a blog, not an id namespace - its own script
       report.py          a radar's JSON -> markdown, for the weekly issue
     tests/             pytest, offline - every network call stubbed at the seam
-                       67% covered; two files are still at zero and
-                       `pytest --cov` names them
+                       `pytest --cov` names what is uncovered; todo.md tracks it
     data/              generated JSON, gitignored except favourites.json
     cache/             API responses - the source of truth, never regenerated
     .github/workflows/ radar.yml runs any radar; one caller per schedule
@@ -71,6 +68,7 @@ matters, and todo.md has the measurement.
 | | |
 |---|---|
 | [favourites.md](docs/favourites.md) | the watchlist and the release radar, and why their cadences differ |
+| [profile.md](docs/profile.md) | who you still listen to, in active months rather than plays |
 | [radars.md](docs/radars.md) | what a radar is, and how to write another one |
 | [architecture.md](docs/architecture.md) | the module map, and the one module the rest waits on |
 | [roadmap.md](docs/roadmap.md) | what this is and is not as a recommender, stage by stage |
