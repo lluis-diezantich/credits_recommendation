@@ -45,7 +45,7 @@ import sys
 import time
 from pathlib import Path
 
-from core import favourites
+from core import favourites, musicbrainz
 from core.http import get as _http_get
 from core.names import normalise
 from core.paths import DATA
@@ -144,6 +144,61 @@ def candidates_from_profile(path: Path, bands=WATCH_BANDS) -> dict[str, dict]:
     return {normalise(a["name"]): {"name": a["name"], "mbid": a.get("mbid"),
                                   "plays": a.get("plays") or 0, "ranks": {}}
             for a in wanted if a.get("name")}
+
+
+def check_active(refresh: bool, dry_run: bool) -> int:
+    """Ask MusicBrainz which watched artists have stopped, and stamp it in.
+
+    One request per artist with an MBID, at 1/s, cached forever after -- a
+    death date does not change. Artists with no MBID are reported rather than
+    assumed active, because an unanswerable lookup must not read as a yes.
+    """
+    entries = favourites.load()
+    if not entries:
+        sys.exit(f"no {favourites.FILE.name} yet - run the resolve first")
+
+    watched = [e for e in entries if e.get("watch", True)]
+    askable = [e for e in watched if e.get("mbid")]
+    print(f"{len(askable)} of {len(watched)} watched artists have an MBID "
+          f"({len(askable)} requests at {musicbrainz.PAUSE}s)", file=sys.stderr)
+
+    stopped = changed = unknown = 0
+    for entry in askable:
+        document = musicbrainz.artist(entry["mbid"], refresh=refresh)
+        if document is None:
+            unknown += 1
+            print(f"  no answer   {entry['name']}", file=sys.stderr)
+            continue
+        over, when = musicbrainz.ended(document)
+        was = entry.get("ended")
+        if over:
+            stopped += 1
+            entry["ended"] = when or True
+            if not was:
+                changed += 1
+                print(f"  {musicbrainz.why(document):<6} {entry['name']}"
+                      f"{f' ({when})' if when else ''}")
+        elif was:
+            # MusicBrainz corrected itself, or the MBID was wrong before.
+            entry.pop("ended", None)
+            changed += 1
+            print(f"  active again  {entry['name']}")
+
+    noidea = [e["name"] for e in watched if not e.get("mbid")]
+    print(f"\n{stopped} stopped, {len(askable) - stopped} active, "
+          f"{unknown} unanswered.")
+    if noidea:
+        print(f"{len(noidea)} watched with no MBID, so unchecked: "
+              f"{', '.join(noidea)}")
+    if not changed:
+        print("nothing changed.")
+        return 0
+    if dry_run:
+        print("--dry-run: nothing written.")
+        return 0
+    favourites.save(entries, dt.datetime.now(dt.UTC).isoformat(timespec="seconds"))
+    print(f"wrote {favourites.FILE} ({changed} changed)")
+    return 0
 
 
 def set_watch(names: list[str], watching: bool, dry_run: bool) -> int:
@@ -330,6 +385,12 @@ def main() -> int:
                         metavar="PATH", help="take the candidate names from "
                         "stages/profile.py --json instead of the ListenBrainz "
                         "windows (default: data/profile.json)")
+    parser.add_argument("--check-active", action="store_true",
+                        help="ask MusicBrainz which watched artists have died or "
+                             "split, and stamp \"ended\" in so the radars skip them")
+    parser.add_argument("--refresh-active", action="store_true",
+                        help="with --check-active, re-ask MusicBrainz instead of "
+                             "reading the cache")
     parser.add_argument("--review", action="store_true",
                         help="walk the entries that did not resolve cleanly and pick by hand")
     parser.add_argument("--mute", nargs="+", metavar="NAME",
@@ -345,6 +406,8 @@ def main() -> int:
         parser.error("--mute and --unmute are separate runs")
     if args.mute or args.unmute:
         return set_watch(args.mute or args.unmute, bool(args.unmute), args.dry_run)
+    if args.check_active:
+        return check_active(args.refresh_active, args.dry_run)
     if args.review:
         return review(args.store, args.dry_run)
     if not args.user and not args.from_profile:

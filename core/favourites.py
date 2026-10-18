@@ -19,6 +19,12 @@ A null id means "not resolved", not "no such artist", so a radar skips that row
 rather than guessing. Hand-edit an id in and the next resolve run keeps it.
 `"watch": false` mutes an artist without deleting the entry -- the same
 convention stages/resolve_qobuz.py uses for people.
+
+`"ended"` is a FACT from MusicBrainz, not a decision, and that is why it is a
+separate field from `watch`. A mute is yours and you can lift it; an artist who
+died or a band that split will not release again whatever you think about it.
+Both skip the artist, and keeping them apart is what lets `--check-active`
+refresh one without touching the other.
 """
 from __future__ import annotations
 
@@ -72,7 +78,7 @@ def ids_for(key: str, fallback: dict, path: Path = FILE) -> dict:
     found = {
         entry[key]: entry["name"]
         for entry in entries
-        if entry.get(key) and entry.get("watch", True)
+        if entry.get(key) and entry.get("watch", True) and not entry.get("ended")
     }
     if not found:
         # Silent when there is no file at all -- that is just today's behaviour.
