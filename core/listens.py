@@ -16,9 +16,23 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from core.names import normalise
-from core.paths import CACHE, ROOT
+from core.paths import CACHE, DATA, ROOT
 
-MONTHS = CACHE / "listens_months"
+# TWO directories, because the two sources have different durability and
+# .gitignore works on paths rather than contents.
+#
+#   SEEDED     written by --seed from the export zip. Reproducible: delete it
+#              and `--seed` rebuilds it byte for byte. Stays in cache/, which
+#              .gitignore calls "API response cache - means nothing to anyone
+#              else", and for these that is true.
+#   SNAPSHOTS  written by --month. NOT reproducible: `range=month` answers
+#              about one past calendar month and nothing can ask for it again,
+#              so losing one costs a 21 MB manual export download. Committed,
+#              for the same reason data/favourites.json is.
+SEEDED = CACHE / "listens_months"
+SNAPSHOTS = DATA / "listens_months"
+
+MONTHS = SEEDED          # kept: the seeded set is still the bulk of the history
 
 # The export lives OUTSIDE the repo, and is found rather than required.
 EXPORT_GLOB = str(ROOT.parent / "listenbrainz_*.zip")
@@ -122,10 +136,15 @@ def from_stats(payload: dict) -> tuple[str, list[dict]]:
     return start.isoformat()[:7], rows
 
 
+def directory_for(source: str) -> Path:
+    """Where a month of this provenance belongs. See SEEDED / SNAPSHOTS above."""
+    return SNAPSHOTS if source == "stats" else SEEDED
+
+
 def write_month(month: str, rows: list[dict], source: str,
                 directory: Path | None = None) -> Path:
     """One file per month, so a month that was never fetched is a missing file."""
-    directory = directory or MONTHS       # resolved per call, so tests can redirect it
+    directory = directory or directory_for(source)
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{month}.json"
     path.write_text(json.dumps({"month": month, "source": source, "artists": rows},
@@ -133,13 +152,33 @@ def write_month(month: str, rows: list[dict], source: str,
     return path
 
 
-def read_months(directory: Path | None = None) -> dict[str, list[dict]]:
+def read_one_directory(directory: Path) -> dict[str, list[dict]]:
     months = {}
-    directory = directory or MONTHS
+    if not directory.exists():
+        return months
     for path in sorted(directory.glob("[0-9]*.json")):
         data = json.loads(path.read_text())
         months[data["month"]] = data["artists"]
     return months
+
+
+def read_months(directory: Path | None = None) -> dict[str, list[dict]]:
+    """Every month on disk. Both directories unless one is named.
+
+    A month can exist in both -- re-seeding a newer export covers months
+    already snapshotted -- and the one with MORE plays wins. That is not a
+    preference for either source but the only rule correct in both directions:
+    an export month is complete where a snapshot is the top 1,000, and a
+    snapshot is complete where an export was downloaded mid-month and holds a
+    partial one.
+    """
+    if directory is not None:
+        return read_one_directory(directory)
+    months = read_one_directory(SEEDED)
+    for month, rows in read_one_directory(SNAPSHOTS).items():
+        if sum(r["plays"] for r in rows) > sum(r["plays"] for r in months.get(month, [])):
+            months[month] = rows
+    return dict(sorted(months.items()))
 
 
 def fold(months: dict[str, list[dict]]) -> dict[str, list[dict]]:

@@ -19,6 +19,25 @@ import sys
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def no_real_month_store(monkeypatch, tmp_path):
+    """Nothing may write core.listens' real month directories, patched or not.
+
+    This file's own docstring promises "nothing can touch data/", and for
+    core.listens that was briefly untrue. write_month resolves its directory
+    PER CALL from the module globals, so a test that patched only one of the
+    two names wrote fake months into the real cache/ and data/ and clobbered
+    two months of real listening -- which then moved every band in the report.
+    Redirecting both by default makes forgetting harmless; a test that wants a
+    specific directory patches it afterwards and wins.
+    """
+    import core.listens as listens
+
+    monkeypatch.setattr(listens, "SEEDED", tmp_path / "_seeded")
+    monkeypatch.setattr(listens, "SNAPSHOTS", tmp_path / "_snapshots")
+    monkeypatch.setattr(listens, "MONTHS", tmp_path / "_seeded")
+
+
 @pytest.fixture
 def album():
     """A Qobuz album row, in the shape artist/get returns.

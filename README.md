@@ -10,6 +10,7 @@ cannot: sharing a producer means something, sharing a mastering house does not.
 | | | |
 |---|---|---|
 | new releases from artists you already know | `radars/qobuz.py` over `data/favourites.json` | Fridays, as a GitHub issue |
+| one month of listening, recorded | `stages/profile.py --month` | monthly, committed to `data/listens_months/` |
 | the test suite | `pytest` | every push and pull request |
 
 ## Install

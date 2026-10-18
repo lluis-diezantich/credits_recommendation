@@ -74,7 +74,7 @@ def seed(path: Path, dry_run: bool) -> int:
         return 0
     for month, rows in months.items():
         listens.write_month(month, rows, "export")
-    print(f"wrote {len(months)} files to {shorten(listens.MONTHS)}/")
+    print(f"wrote {len(months)} files to {shorten(listens.SEEDED)}/")
     return 0
 
 
