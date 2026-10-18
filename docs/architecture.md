@@ -35,8 +35,8 @@ nothing about the others.
 | cross-cutting | `policy.py` — contestable numbers | **yes** |
 | cross-cutting | `core/` — http, names, credits, state, paths | **yes** |
 | cross-cutting | `core/model.py` — one record shape | **no — everything waits here** |
-| taste | `taste/watchlist.py` — listens -> artists worth watching | no |
-| taste | `taste/affinity.py` — plays -> weight, with temporal decay | no |
+| taste | watchlist — listens -> artists worth watching | **yes** — see below |
+| taste | affinity — plays -> weight, with temporal decay | **yes** — see below |
 | retrieval | `graph/` — the credits thesis (today's `stages/`) | **yes** |
 | retrieval | `sources/fresh_releases.py` — what came out this week | **partial** — `radars/listenbrainz.py` watches one hardcoded MBID |
 | retrieval | `sources/remezcla.py`, `songmess.py`, `kexp.py`, `nts.py` | **1 of 4** — `radars/remezcla.py` |
@@ -51,8 +51,8 @@ nothing about the others.
 ## The tree
 
     policy.py
-    core/          http names credits qobuz discogs state paths model
-    taste/         watchlist affinity
+    core/          http names credits qobuz discogs state paths listens model
+    taste/         watchlist affinity      -- built, but NOT here; see below
     graph/         discover resolve_qobuz resolve_discogs writing
     sources/       fresh_releases itunes qobuz remezcla songmess kexp nts
     resolve/       names -> mbid, one hit rate, one place to improve
@@ -62,6 +62,33 @@ nothing about the others.
     eval/
     store/         load
     data/ cache/ docs/ notebooks/
+
+## Where taste/ actually landed, and why not in taste/
+
+Both taste rows are done. Neither is in a `taste/` package, and that is a
+deviation from this doc rather than an accident:
+
+    policy.py            RECENT_WINDOW, M24_FLOOR, DEEP_FLOOR, band()
+    core/listens.py      export + monthly snapshots -> months per artist
+    stages/profile.py    --seed / --month / the table
+
+The proposed split put the thresholds inside `taste/affinity.py`, which
+contradicts the reason `policy.py` exists at all — see *Why policy.py is not in
+core/* below. A band floor is a contestable number, so it belongs in the one
+visible file, not in the module that consumes it. With the floors out, what
+remained was one pure counter and one CLI, which are already what `core/` and
+`stages/` mean here. A package for two files would have been the folder, not the
+structure.
+
+It also came out smaller than the two rows imply: `affinity` is not a weight
+with temporal decay. A decay coefficient was tried and dropped — it produces a
+number nobody can argue with, and policy.py's stance is bands over formulas. The
+verdict is two counts and a lookup table. [profile.md](profile.md) has the
+measurements.
+
+So the open question is not "build `taste/`" but "does a third taste feature
+appear". If it does, these three files move together; until then the rename is
+the same bet as `radars/` -> `sources/`, which this doc already says can wait.
 
 ## core/model.py — the keystone
 
@@ -154,7 +181,7 @@ Two speeds, and the split is not cosmetic:
 
 | | runs | may depend on |
 |---|---|---|
-| **slow** — `taste/`, `graph/`, `store/` | occasionally, locally, by hand | anything: pandas, parquet, DuckDB |
+| **slow** — the taste files, `graph/`, `store/` | occasionally, locally, by hand | anything: pandas, parquet, DuckDB |
 | **fast** — `sources/` -> `filters/` -> `report/` | weekly, unattended | **stdlib only** |
 
 The fast path must stay dependency-free because that is what makes free hosting
@@ -173,14 +200,19 @@ They exchange **files, not imports**. Importing across would drag pandas into
 the weekly job and cost the property above. `MIN_PLAYS = 50` lives on that side
 and must not travel: it belongs to ranking, it conflates play count with
 usefulness-as-a-graph-edge, and 6,922 of 7,533 artists (91.9%) sit below it.
-`taste/watchlist.py` carries `plays` as a field and filters on nothing.
+`core/listens.py` carries `plays` as a field and `policy.band()` filters on
+months, never on plays — which is the same lesson, honoured rather than quoted.
 
 ## Build order
 
 1. `core/model.py` — everything above is blocked on it, and every day it does
    not exist, a new JSON dialect gets written
-2. `taste/watchlist.py` — turns the radar from one hardcoded MBID into the
-   feature the project is for
+2. ~~the taste files — turn the radar from a rank-ordered list into a measured
+   one~~ Half done. The measurement exists (`core/listens.py`,
+   `stages/profile.py`, [profile.md](profile.md)); nothing yet writes a verdict
+   back into `data/favourites.json`, so the radar still watches whatever
+   ListenBrainz ranked. That wiring is the remaining half, and it is where the
+   duplicate-`qobuz_id` grain in todo.md has to be settled
 3. `filters/seen.py` — cheap, and it is what makes the output trustworthy
    enough to read weekly
 4. `report/` **and** impression logging, together, per rule 6

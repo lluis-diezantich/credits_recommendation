@@ -33,11 +33,24 @@ on top of it until that is fixed, and fixing it costs no requests.
 
 The gap between "a credits database" and "recommends music".
 
-- **Profile the watchlist, instead of trusting a play count.** The best next
-  thing to build: free, small, and it improves the one pipeline being kept
-  rather than adding another. `data/favourites.json` is 108 entries with 15
-  muted, admitted by ListenBrainz rank, and there is no stated rule for who
-  qualifies.
+- **~~Profile the watchlist, instead of trusting a play count.~~** Done, and
+  documented in [profile.md](docs/profile.md): `core/listens.py`,
+  `stages/profile.py` and three floors in `policy.py`, at 100% coverage.
+
+  Two numbers, no ratio — lifetime active months and months in the last 24 —
+  which puts 80 artists in `core`, 113 in `lapsed` and names 140 deep artists
+  the ListenBrainz ranking never surfaced. Radiohead lands `lapsed` on 73
+  lifetime months against 3 recent, confirmed by hand.
+
+  **What is still open**, and it is the half that changes behaviour: nothing
+  writes a verdict back into `data/favourites.json`, so the radar still watches
+  whatever ListenBrainz ranked. Two things block a clean write, both measured:
+
+  - `emerging` is 2,006 artists, because the currency test scales to a short
+    history and three recent months out of three qualifies. Right as a verdict,
+    useless as a list. It needs a floor nobody has set.
+  - a burst reads as decay. Omar Rodríguez-López has 3 recent months and 154
+    plays inside them, last played this month, and lands `lapsed`.
 
   It also has two answers to "how many artists do I watch". 93 entries are
   un-muted but the radar watches **91**, because `favourites.ids_for` keys on
@@ -46,21 +59,13 @@ The gap between "a credits database" and "recommends music".
   correct — but a profile that reports per-artist numbers has to pick which
   grain it means, and duplicate spellings are the first thing it should surface.
 
-  [roadmap.md](docs/roadmap.md) already names the trap — `MIN_PLAYS = 50` is
-  "a confidence-weighting bug rather than a threshold", because play count and
-  usefulness are not one number. The fix is to measure PERSISTENCE, which the
-  listens already carry: plays, distinct months, year span, distinct tracks,
-  last played. From the export:
-
-        Bad Bunny    43 plays   13 months   2024-2026
-        Tom Waits    34 plays   23 months   2013-2024
-
-  Bad Bunny wins on plays and Waits is plainly the more settled taste — eleven
-  years against two. Tracks against plays separates them further: Drexler is 56
-  tracks over 68 plays, a catalogue, while 50 plays of 2 tracks is a song
-  somebody liked. A `--profile` mode printing those columns with a proposed
-  verdict, and the thresholds in `policy.py` where they can be argued with, is
-  the shape. Costs no requests.
+  The numbers that used to be in this entry came from `listenbrainz_sample.zip`,
+  1% of the export, and two of them were wrong: `load.py` takes
+  `sorted(glob)[-1]`, and "sample" sorts after the real export, so the sample
+  had been shadowing 190,131 listens. `--seed` picks the largest file instead;
+  **`load.py` still has the defect.** The tracks-against-plays rule also did not
+  survive contact with the full file — every artist sits between 0.50 and 1.0
+  tracks per play, so it discriminates nothing.
 
 - **A radar for people, not artists.** The thesis, and the one thing this cannot
   do: alert on records made by *people* you follow. The pools hold 7,860
@@ -378,7 +383,7 @@ both still under an hour.
   notice. Measured 2026-10-17.
 - **`--review` cannot re-ask about a row that resolved `exact`.** A wrong id
   that looked confident can only be fixed by editing the JSON.
-- **~~`README.md` says `65 cases`.~~** It says 493, which is what it is. Worth
+- **~~`README.md` says `65 cases`.~~** It says 551, which is what it is. Worth
   a glance whenever a batch of tests lands — it has been wrong twice now.
 
 ## Not yet, on purpose
