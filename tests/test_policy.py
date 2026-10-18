@@ -448,3 +448,37 @@ def test_nothing_recent_cannot_burst():
     """Guards the division, and says the right thing: no recent plays, no doubt."""
     assert policy.burst(0, 0) is False
     assert policy.burst(0, 500) is False
+
+
+# ---- match plausibility -------------------------------------------------
+
+
+def test_a_clean_row_keeps_its_score():
+    assert policy.match_confidence([]) == 1.0
+    assert policy.ranked_score(0.8, []) == 0.8
+    assert policy.ranked_score(0.8, None) == 0.8
+
+
+def test_a_single_token_match_is_demoted_not_deleted():
+    """"Morgan" carries 323 releases at 1.00 because the score comes from the
+    referrer. It keeps its provenance and loses the top of the list."""
+    assert policy.ranked_score(1.0, ["single_token_name"]) == 0.1
+
+
+def test_the_penalty_puts_the_worst_flagged_row_below_the_best_clean_one():
+    """0.80 is the highest clean score in the committed pools."""
+    assert policy.ranked_score(1.0, ["single_token_name"]) < 0.80
+
+
+def test_a_strong_flagged_match_still_outranks_a_weak_clean_one():
+    """A penalty, not a drop: the flag is suspicion, never proof."""
+    assert policy.ranked_score(1.0, ["single_token_name"]) > policy.ranked_score(0.05, [])
+
+
+def test_an_unknown_flag_is_not_silently_a_penalty():
+    """A flag nobody has ruled on must not change an order by accident."""
+    assert policy.match_confidence(["covers_mill"]) == 1.0
+
+
+def test_doubts_compound():
+    assert policy.match_confidence(["single_token_name", "single_token_name"]) == 0.1 ** 2

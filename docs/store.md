@@ -213,6 +213,50 @@ GROUP BY f.y ORDER BY f.y;
 Read the caveat under *Numbers that disagree with the README* before trusting the
 output of that one.
 
+**The shortlist** — the credits thesis, as something a person can actually read.
+Unheard, recent, and discounted by how plausible the match behind it was.
+
+```sql
+WITH ranked AS (
+  SELECT album_id, source, date, title, via_through,
+         -- policy.ranked_score: a single-token name match is suspicion, not
+         -- proof, so it loses its place in the order and keeps its row.
+         sig_score * CASE WHEN sig_flags LIKE '%single_token_name%'
+                          THEN 0.1 ELSE 1.0 END AS score
+  FROM releases
+  WHERE date >= '2015-01-01' AND streamable
+)
+SELECT ROUND(score, 2) AS score, date, title, via_through,
+       (SELECT name FROM release_artists ra
+        WHERE ra.album_id = ranked.album_id AND ra.source = ranked.source
+        LIMIT 1) AS artist
+FROM ranked
+WHERE NOT EXISTS (
+  SELECT 1 FROM release_artists ra
+  JOIN listens l ON l.artist_key = ra.name_key
+  WHERE ra.album_id = ranked.album_id AND ra.source = ranked.source)
+ORDER BY score DESC, date
+LIMIT 20;
+```
+
+Three things to know before trusting it.
+
+**Join on `name_key`, never `lower(name)`.** `name_key` is `normalise(name)`, the
+key `listens.artist_key` already carries. `lower(name)` matches 250 of 2,773
+pooled names against 313, because it cannot see an accent — it called Xoel López
+unheard, and he is in the export 331 times. That column exists for this query.
+
+**The penalty is the whole reason the list is readable.** Without it the top is
+`single_token_name` rows: "Morgan" carries 323 releases at the maximum 1.00
+because `sig_score` is computed from the referrer and never from the match. 47%
+of the pool carries that flag.
+
+**It does not diversify.** The uncapped top 20 comes through five of the seed's
+people and Juan Campodónico supplies 11 of them, so the list tests one producer
+rather than the graph. Capping at two per `via_through` is a post-processing
+decision nothing here makes yet — `roadmap.md` lists it as missing. `artist` is
+also an arbitrary one of the credited names, since `LIMIT 1` has no ordering.
+
 **Where the identifiers are** — 92.6% of listens carry a `recording_mbid`, which
 is the only MusicBrainz identifier anywhere in this project.
 

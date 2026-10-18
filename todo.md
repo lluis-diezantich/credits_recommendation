@@ -86,6 +86,71 @@ The gap between "a credits database" and "recommends music".
   finished — only the release dates can see that, and the radar currently
   fetches every one and then discards it into a bare id list.
 
+- **Co-appearance beats the crew graph by 6x, and the data is already cached.**
+  Measured 2026-10-18, two seeds. THE most important finding of that session.
+
+  | | hit rate |
+  |---|---|
+  | "who made a record WITH the seed" | **6 of 15 are artists you play (40%)** |
+  | "who worked ON the seed's records" | 82 of 1,184 (7%) |
+
+  7% is the baseline — the pool contains ~7% of your artists whenever you found
+  them, so the crew graph predicts nothing. 40% is a signal.
+
+  **The cause is a leak in `discover.py`.** Qobuz files guest spots inside an
+  artist's own discography, and discovery does not distinguish them: **15 of the
+  62 albums it walked are not Drexler's records**, only 5 of which say "feat."
+  in the title. Everyone on those 15 enters the graph as if they had worked on
+  his records, when he worked on theirs. Lau Noah and Salvador Sobral — the two
+  rows that read as good recommendations — arrived that way.
+
+  **The fix costs no requests.** The test is "who holds `MainArtist` on this
+  album, and is it the seed?", and `cache/credits` already holds the per-track
+  performers. Label the album own/guest, then make "who has this artist made
+  records with" its own output.
+
+  From two seeds it already names seven artists you have never played: Calequi y
+  Las Panteras, Kanaku y El Tigre, Leiton, Marcela Ferrari, Sebastian Jantos,
+  Caamaño & Ameixeiras, Hirahi Afonso.
+
+  Caveat: partly circular, since a guest spot also exposed you to that record.
+  But 6-of-15 against 82-of-1,184 is too wide to be only that.
+
+- **The credits pool itself has four defects, all measured 2026-10-18.**
+
+  | | |
+  |---|---|
+  | 75% of rows are the person's OWN release | 5,862 primary vs 1,998 side credits. The thesis is "they shaped it" |
+  | 73% of referrals come through MIXING | 5,347 mixed-by vs 1,678 producer, in the discogs pool |
+  | the two pools' scores are not comparable | pool.json has no selectivity and caps at 0.80; pool_discogs reaches 1.00. Ranking them together lets the source decide the top |
+  | name collisions are not only single-token | "Alex Cooper", "Sexy Sadie", "Solid Ice" all escape the flag and return electronic pop |
+
+  **The Discogs path is the broken half**: 81% of the rows, 84% of them
+  engineering-referred, and every junk row traced to it. The Qobuz path takes
+  people from Qobuz's own credits with no name re-matched.
+
+  Filtering to musician/producer referrals + side credits + Qobuz-native takes
+  **7,860 rows to 148**, and the top reads coherently — Latin America, World,
+  Bolero, Flamenco, Classical. Those filters are free and none is written down
+  in code yet.
+
+- **Seeds are cheap once the Discogs path is dropped.** This entry used to say
+  growing the graph was expensive; that was measured on the full chain. Sílvia
+  Pérez Cruz cost **45 requests** (44 albums + 1 discography) and added 149
+  people. `data/discovery_656411.json` exists locally and is gitignored like
+  the rest of `data/*.json`, so it is regenerable rather than kept — one
+  `./stages/discover.py --artist 656411` rebuilds it, and `cache/credits` makes
+  that nearly free. Four more seeds is under a month of the Friday radar's own
+  traffic.
+
+  But **graph intersection is thinner than roadmap.md assumes**. Two artists
+  from the same scene share 8 of 157 people, 4 after dropping technical roles.
+  So "keep people in 3+ graphs" as a hard filter will probably starve. Worse,
+  the people most likely to appear in every graph are the industrial services —
+  Fred Kevorkian masters 1,070 records and is in both — so an intersection count
+  must be multiplied by `selectivity()`, never used raw. A weighted gradient
+  needs 4-5 seeds before it has any range.
+
 - **A radar for people, not artists.** The thesis, and the one thing this cannot
   do: alert on records made by *people* you follow. The pools hold 7,860
   candidate releases and nothing consumes them. One `album/get` per fresh
@@ -334,6 +399,13 @@ Where the code can be wrong without anything noticing.
 ~~Each of these is under an hour, and each is something a reviewer would
 expect.~~ The original six are done. Two more have since become worth having,
 both still under an hour.
+
+- **The `ruff-format` pre-commit hook can never pass.** It runs with `--diff`,
+  which exits non-zero whenever a diff exists, and `policy.py`'s aligned columns
+  are deliberate — so it fails on the committed `policy.py`, on main, with no
+  changes at all. The hook was installed into `.git/hooks` on 2026-10-18 and
+  blocked the first commit that hit it. Either exclude `policy.py` and
+  `stages/load.py`, or drop the hook and let `ruff check` gate alone.
 
 - **No vulnerability scanning.** `dependabot.yml` bumps versions; it does not
   know which of them are vulnerable. `pip-audit` against the two lockfiles is

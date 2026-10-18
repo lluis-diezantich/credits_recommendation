@@ -102,7 +102,7 @@ def test_every_index_is_created_after_the_rows_not_in_the_schema(store):
     """The 2s rebuild depends on it: an index in SCHEMA is maintained per
     INSERT across 216k rows. If one migrates into SCHEMA this fails."""
     assert "CREATE INDEX" not in load.SCHEMA
-    assert load.INDEXES.count("CREATE INDEX") == 30
+    assert load.INDEXES.count("CREATE INDEX") == 31
 
 
 def test_the_indexes_name_only_real_columns(store):
@@ -673,9 +673,11 @@ def test_summarise_prints_a_row_per_loaded_table(store, capsys):
 
 
 def test_a_full_build_from_nothing_produces_an_empty_but_valid_store(store, monkeypatch):
-    """main() end to end with no inputs at all: the tables, the 45 indexes and
+    """main() end to end with no inputs at all: the tables, the 46 indexes and
     the views all exist, and nothing raised. This is the contract -- the build
-    runs over whatever happens to be on disk."""
+    runs over whatever happens to be on disk.
+
+    46, not 31: 15 of the primary keys are themselves unique indexes."""
     db = store.tmp / "out.db"
     monkeypatch.setattr(load, "LISTENS_GLOB", str(store.tmp / "no_such_*.zip"))
     monkeypatch.setattr("sys.argv", ["load.py", "--db", str(db)])
@@ -684,7 +686,7 @@ def test_a_full_build_from_nothing_produces_an_empty_but_valid_store(store, monk
     con = sqlite3.connect(db)
     kinds = con.execute("SELECT type, COUNT(*) FROM sqlite_master GROUP BY type"
                         ).fetchall()
-    assert dict(kinds)["index"] == 45
+    assert dict(kinds)["index"] == 46
     assert dict(kinds)["view"] == 4
 
 

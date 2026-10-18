@@ -374,3 +374,56 @@ def burst(recent: int, recent_plays: int) -> bool:
     still watches -- which is exactly where a verdict is worth doubting.
     """
     return bool(recent) and recent_plays / recent >= BURST_RATE
+
+
+# ---------------------------------------------------------------------------
+# MATCH PLAUSIBILITY (the pools, on the READ side)
+#
+# sig_score is computed entirely from the REFERRER -- role weight x selectivity
+# x how embedded that person is in the seed's catalogue -- and says nothing
+# about whether that person was matched to the right Qobuz artist. So a shaky
+# resolve inherits a strong referrer's weight, and the junk is not merely
+# present but ranked first.
+#
+# Measured on the committed pools, 2026-10-18:
+#
+#     single_token_name  3,673 of 7,860 rows (47%)
+#     Morgan               323 rows at score 1.00, the maximum
+#     Henry Mancini        459 rows -- the Peter Gunn soundtracks, 1958-60,
+#                              reached through a Spanish engineer who worked on
+#                              Drexler records and not on Peter Gunn
+#     Arcangel 309, Mama 291, Cooper 261, Francisco 244, Paulina 230
+#
+# A PENALTY rather than a drop, because the flag is not proof. An exact match on
+# one common token is indistinguishable from a correct one at the layer that
+# made it -- the name is all the evidence there is -- so "Morgan" may be a real
+# collaborator. The row keeps its provenance and loses its place in the order,
+# which is the same stance as COVERS_MILL_HINTS.
+#
+# 0.1 puts the worst of them (1.00) below the best clean row (0.80) without
+# deleting anything, so a strong flagged match still outranks a weak clean one.
+#
+# Applied on READ, so the committed pools are not rewritten. Folding it into the
+# stored score is the better fix and costs a full regeneration; this is what
+# makes the list readable today.
+# ---------------------------------------------------------------------------
+
+MATCH_PENALTY: dict[str, float] = {"single_token_name": 0.1}
+
+
+def match_confidence(flags) -> float:
+    """How much to trust that this row's person was matched to the right artist.
+
+    1.0 when nothing is suspect. Multiplicative, so two doubts compound rather
+    than the worse one winning -- there is only one flag today, and a second
+    would mean two independent reasons to disbelieve the same match.
+    """
+    confidence = 1.0
+    for flag in flags or []:
+        confidence *= MATCH_PENALTY.get(flag, 1.0)
+    return confidence
+
+
+def ranked_score(score: float, flags) -> float:
+    """sig_score discounted by how plausible the match behind it is."""
+    return score * match_confidence(flags)
