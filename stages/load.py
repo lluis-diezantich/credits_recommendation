@@ -50,14 +50,16 @@ import sys
 import zipfile
 from pathlib import Path
 
+from core import listens
 from core.credits import parse_performers
 from core.names import normalise
 from core.paths import DATA, ROOT
 from policy import role_class, role_key, role_weight
 
 DB_DEFAULT = DATA / "music.db"
-# The export lives OUTSIDE the repo (README:78). Found, not required.
-LISTENS_GLOB = str(ROOT.parent / "listenbrainz_*.zip")
+# The export lives OUTSIDE the repo (README:78). Found, not required, and
+# picked by size -- see core.listens.newest_export for what that fixes.
+LISTENS_GLOB = listens.EXPORT_GLOB
 
 
 # ---- engine --------------------------------------------------------------
@@ -844,10 +846,7 @@ def main() -> int:
     load_cache(ld)
 
     if not args.no_listens:
-        chosen = Path(args.listens) if args.listens else None
-        if chosen is None:
-            found = sorted(glob.glob(LISTENS_GLOB))
-            chosen = Path(found[-1]) if found else None
+        chosen = Path(args.listens) if args.listens else listens.newest_export(LISTENS_GLOB)
         if chosen and chosen.exists():
             print(f"listens: {chosen.name}", file=sys.stderr)
             load_listens(ld, chosen)

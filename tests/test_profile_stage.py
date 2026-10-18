@@ -89,22 +89,6 @@ def payload(artists, from_ts=1788220800, total=None):
                                    "artists": artists}})
 
 
-# ---- newest_export ------------------------------------------------------
-
-
-def test_the_sample_zip_does_not_shadow_the_real_export(monkeypatch, tmp_path):
-    """The load.py defect, stated as a test: largest wins, not last alphabetically."""
-    (tmp_path / "listenbrainz_lluisdiezantich_1779441720.zip").write_bytes(b"x" * 5000)
-    (tmp_path / "listenbrainz_sample.zip").write_bytes(b"x" * 100)
-    monkeypatch.setattr(mod, "EXPORT_GLOB", str(tmp_path / "listenbrainz_*.zip"))
-    assert mod.newest_export().name.startswith("listenbrainz_lluisdiezantich")
-
-
-def test_no_export_anywhere_is_not_a_crash(monkeypatch, tmp_path):
-    monkeypatch.setattr(mod, "EXPORT_GLOB", str(tmp_path / "nothing_*.zip"))
-    assert mod.newest_export() is None
-
-
 # ---- --seed -------------------------------------------------------------
 
 
@@ -370,3 +354,50 @@ def test_dry_run_suppresses_the_verdict_file(store, tmp_path):
     out = tmp_path / "profile.json"
     assert store.run("--json", str(out), "--dry-run") == 0
     assert not out.exists()
+
+
+# ---- the burst flag -----------------------------------------------------
+
+
+def test_an_intense_lapse_is_flagged_in_the_table_and_the_file(store, tmp_path, capsys):
+    """Omar's shape: deep, few recent months, many plays inside them."""
+    store.install()
+    spread(store, "mb-burst", "Went Back To", months=30, recent=4, plays=50)
+    out = tmp_path / "profile.json"
+    assert store.run("--json", str(out)) == 0
+    printed = capsys.readouterr().out
+    assert "burst?" in printed
+    assert verdicts(out)["Went Back To"]["burst"] is True
+    assert verdicts(out)["Went Back To"]["band"] == "lapsed"
+
+
+def test_an_ordinary_lapse_carries_no_flag(store, tmp_path, capsys):
+    store.install()
+    spread(store, "mb-cold", "Gone Quiet", months=30, recent=3, plays=2)
+    out = tmp_path / "profile.json"
+    store.run("--json", str(out))
+    assert "burst?" not in capsys.readouterr().out
+    assert "burst" not in verdicts(out)["Gone Quiet"]
+
+
+def test_a_core_artist_is_never_flagged_however_intensely_played(store, tmp_path):
+    """The flag is doubt about a lapse. Drexler plays 136 a month and is core."""
+    store.install()
+    spread(store, "mb-core", "Deep Current", months=30, recent=12, plays=200)
+    out = tmp_path / "profile.json"
+    store.run("--json", str(out))
+    row = verdicts(out)["Deep Current"]
+    assert row["band"] == "core" and "burst" not in row
+
+
+def test_a_watched_artist_whose_lapse_is_doubtful_is_called_out(store, capsys):
+    """So "watched but lapsed" is not read as five names to mute."""
+    store.install()
+    store.entries = [{"name": "Went Back To", "mbid": "mb-burst"},
+                     {"name": "Gone Quiet", "mbid": "mb-cold"}]
+    spread(store, "mb-burst", "Went Back To", months=30, recent=4, plays=50)
+    spread(store, "mb-cold", "Gone Quiet", months=30, recent=3, plays=2)
+    assert store.run() == 0
+    out = capsys.readouterr().out
+    assert "watched but lapsed           : 2" in out
+    assert "played intensely : 1  (Went Back To)" in out

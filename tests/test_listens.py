@@ -283,3 +283,31 @@ def test_a_credit_with_neither_an_mbid_nor_a_name_is_dropped(tmp_path):
                             {"artist_mbid": "mb-1", "artist_credit_name": "Real"}]}}}) + "\n")
     assert mod.read_export(path)["2026-04"] == [{"mbid": "mb-1", "name": "Real",
                                                 "plays": 1}]
+
+
+# ---- newest_export ------------------------------------------------------
+
+
+def test_the_sample_zip_does_not_shadow_the_real_export(tmp_path):
+    """The defect this picker exists for, stated as a test.
+
+    stages/load.py took sorted(glob)[-1], and "listenbrainz_sample.zip" sorts
+    after "listenbrainz_<user>_<stamp>.zip" -- so 2,000 listens shadowed
+    190,131, and every number measured off it was wrong by 95x.
+    """
+    (tmp_path / "listenbrainz_lluisdiezantich_1779441720.zip").write_bytes(b"x" * 5000)
+    (tmp_path / "listenbrainz_sample.zip").write_bytes(b"x" * 100)
+    chosen = mod.newest_export(str(tmp_path / "listenbrainz_*.zip"))
+    assert chosen is not None
+    assert chosen.name.startswith("listenbrainz_lluisdiezantich")
+
+
+def test_no_export_anywhere_is_not_a_crash(tmp_path):
+    """Found, not required: both callers degrade rather than exit."""
+    assert mod.newest_export(str(tmp_path / "nothing_*.zip")) is None
+
+
+def test_one_export_is_chosen_whatever_it_is_called(tmp_path):
+    (tmp_path / "listenbrainz_sample.zip").write_bytes(b"x" * 10)
+    chosen = mod.newest_export(str(tmp_path / "listenbrainz_*.zip"))
+    assert chosen is not None and chosen.name == "listenbrainz_sample.zip"

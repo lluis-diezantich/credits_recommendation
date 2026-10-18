@@ -8,6 +8,7 @@ No judgement here -- `window` is passed in, and policy.py decides the bands.
 from __future__ import annotations
 
 import datetime as dt
+import glob
 import json
 import zipfile
 from collections import Counter, defaultdict
@@ -15,9 +16,24 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from core.names import normalise
-from core.paths import CACHE
+from core.paths import CACHE, ROOT
 
 MONTHS = CACHE / "listens_months"
+
+# The export lives OUTSIDE the repo, and is found rather than required.
+EXPORT_GLOB = str(ROOT.parent / "listenbrainz_*.zip")
+
+
+def newest_export(pattern: str = EXPORT_GLOB) -> Path | None:
+    """The export to read, chosen by SIZE rather than by name.
+
+    sorted(glob)[-1] takes the last name alphabetically, and
+    "listenbrainz_sample.zip" sorts after "listenbrainz_<user>_<stamp>.zip" --
+    so a 2,000-listen sample silently shadowed 190,131 listens, and every
+    number measured off it was wrong by two orders of magnitude.
+    """
+    found = sorted(glob.glob(pattern), key=lambda path: Path(path).stat().st_size)
+    return Path(found[-1]) if found else None
 
 
 @dataclass(frozen=True)
