@@ -5,6 +5,7 @@ Who you still listen to, measured in **active months** rather than plays.
     ./stages/profile.py --seed              # once: compact the export zip
     ./stages/profile.py --month --user X    # monthly: 1 request, save the month
     ./stages/profile.py                     # anytime: print the table, free
+    ./stages/profile.py --json              # the same, plus data/profile.json
 
 Not to be confused with `data/favourites.json`, which is the list of artists
 each radar *watches*. This is the evidence for who belongs on that list.
@@ -20,6 +21,7 @@ often as you like for nothing.
 | `--seed` | the export zip → one file per month | once, then yearly to repair | 0 requests, reads 21 MB |
 | `--month` | the last calendar month, from the stats API | monthly | 1 request |
 | (default) | every month on disk → one row per artist | whenever | free |
+| `--json` | the verdicts, for `favourites.py --from-profile` | before resolving ids | free |
 
 ## The two numbers
 
@@ -30,14 +32,24 @@ Depth and currency, kept apart, with no ratio between them:
 
                   m24 >= 10        m24 < 10
     life >= 24    core             lapsed
-    life <  24    emerging         thin
+    life <  24    emerging *       thin
+
+    * and recent plays >= 100
 
 `lapsed` is the band that earns the design: real past interest, nothing now.
 Do not watch it for new releases, but keep the credit-graph edge — that is
 roadmap.md's "prune the first, never the second". Radiohead lands here on 73
 lifetime months and 3 recent ones, and that was confirmed by hand.
 
-The floors are `M24_FLOOR`, `DEEP_FLOOR` and `RECENT_WINDOW` in
+`EMERGING_PLAYS` applies to `emerging` alone, and that asymmetry is measured
+rather than tidy. Scaling the month test to a short history let three recent
+months out of three qualify, so 2,006 artists were `emerging` — Camilo among
+them, on two plays. 100 recent plays is about eight album listens and leaves 72,
+the same order as the 108 entries `favourites.json` already holds. It is **not**
+applied to `core`: Sparklehorse has 60 lifetime months and 52 recent plays, and
+months already carry the weight there.
+
+The floors are `M24_FLOOR`, `DEEP_FLOOR`, `EMERGING_PLAYS` and `RECENT_WINDOW` in
 [policy.py](../policy.py), with the artists they were measured against in the
 comment beside them.
 
@@ -96,6 +108,24 @@ credited plays exceed listens — 206,560 against 190,131 — and
 field is the whole credit line: "j milo" is the line for a Milo j & Trueno
 track, and using it invents an artist while losing two real ones.
 
+## Handing it to the radar
+
+`--json` writes `data/profile.json` — the `core`, `lapsed` and `emerging` rows,
+with the floors they were judged against. `thin` is 5,608 of 7,807 rows and
+nothing consumes it, so it is left out.
+
+    ./stages/profile.py --json
+    ./stages/favourites.py --from-profile      # resolve the core + emerging ones
+
+A file rather than an import, so the verdict can be read and edited before
+anything spends a Qobuz request on it. `--from-profile` takes `core` and
+`emerging` only — `lapsed` means real past interest with nothing current, so
+adding it back would undo the point. Muting is still a separate decision:
+
+    ./stages/favourites.py --mute "Radiohead"
+
+See [favourites.md](favourites.md) for what happens to the ids after that.
+
 ## Gotchas
 
 **A missed month is gone.** `range=month` only ever answers about one past
@@ -108,10 +138,6 @@ midnight on the 1st.
 **`total_artist_count` is not an artist count.** all_time reports 9,024 against
 the export's 6,405 distinct MBIDs, inflated by exactly the fragmentation the
 fold undoes.
-
-**`emerging` is too loose to act on.** 2,006 artists, because the currency test
-scales to a short history and three recent months out of three qualifies. Right
-for a verdict, useless as a list — it wants a floor nobody has set yet.
 
 **A burst reads as decay.** Omar Rodríguez-López has 3 active months in the last
 24 and 154 plays inside them, last played this month. He lands `lapsed`.

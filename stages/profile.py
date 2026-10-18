@@ -22,6 +22,7 @@ backfills any hole and resolves names that had no mbid.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import glob
 import json
 import sys
@@ -30,7 +31,7 @@ from pathlib import Path
 import policy
 from core import favourites, listens
 from core.http import get as http_get
-from core.paths import ROOT
+from core.paths import DATA, ROOT
 
 STATS_URL = "https://api.listenbrainz.org/1/stats/user/{user}/artists"
 USER_AGENT = "profile-builder/1.0 (personal use)"
@@ -41,6 +42,11 @@ USER_AGENT = "profile-builder/1.0 (personal use)"
 EXPORT_GLOB = str(ROOT.parent / "listenbrainz_*.zip")
 
 BAND_ORDER = {"core": 0, "emerging": 1, "lapsed": 2, "thin": 3}
+
+
+def verdict(row) -> str:
+    """policy.band for one profile row, since every caller needs all three fields."""
+    return policy.band(row.months, row.recent, row.recent_plays)
 
 
 def shorten(path: Path) -> Path:
@@ -97,7 +103,39 @@ def fetch_month(user: str, dry_run: bool) -> int:
     return 0
 
 
-def report(window: int, min_months: int, show_all: bool) -> int:
+VERDICT_FILE = DATA / "profile.json"
+
+# thin is 5,608 of 7,807 rows and nothing consumes it, so the file carries the
+# three bands a decision could be made from.
+WRITTEN_BANDS = ("core", "lapsed", "emerging")
+
+
+def write_verdicts(rows, now: str, window: int, path: Path) -> int:
+    """The machine-readable half, for stages/favourites.py --from-profile.
+
+    A file rather than an import, so the verdict can be read and edited before
+    anything spends a Qobuz request on it.
+    """
+    judged = [(verdict(row), row) for row in rows]
+    judged = [pair for pair in judged if pair[0] in WRITTEN_BANDS]
+    # Sorted on the rows, not the dicts, so the keys stay typed.
+    judged.sort(key=lambda pair: (WRITTEN_BANDS.index(pair[0]), -pair[1].months))
+    artists = [{"name": row.name, "mbid": row.mbid, "band": band,
+                "months": row.months, "recent": row.recent,
+                "plays": row.plays, "recent_plays": row.recent_plays,
+                "first": row.first, "last": row.last}
+               for band, row in judged]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(
+        {"generated": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
+         "through": now, "window": window,
+         "floors": {"m24": policy.M24_FLOOR, "deep": policy.DEEP_FLOOR,
+                    "emerging_plays": policy.EMERGING_PLAYS},
+         "artists": artists}, indent=2, ensure_ascii=False) + "\n")
+    return len(artists)
+
+
+def report(window: int, min_months: int, show_all: bool, json_path: Path | None) -> int:
     months = listens.read_months()
     if not months:
         print("nothing to profile yet -- run --seed first", file=sys.stderr)
@@ -112,8 +150,8 @@ def report(window: int, min_months: int, show_all: bool) -> int:
 
     counts: dict[str, int] = {}
     for row in rows:
-        verdict = policy.band(row.months, row.recent)
-        counts[verdict] = counts.get(verdict, 0) + 1
+        band = verdict(row)
+        counts[band] = counts.get(band, 0) + 1
 
     print(f"{len(rows)} artists over {len(months)} months, through {now} "
           f"(window {window}mo, floors {policy.M24_FLOOR}/{policy.DEEP_FLOOR})")
@@ -121,23 +159,23 @@ def report(window: int, min_months: int, show_all: bool) -> int:
     print()
 
     shown = [r for r in rows if show_all or r.months >= min_months]
-    shown.sort(key=lambda r: (BAND_ORDER[policy.band(r.months, r.recent)], -r.months))
+    shown.sort(key=lambda r: (BAND_ORDER[verdict(r)], -r.months))
     print(f"{'band':<9}{'artist':<34}{'life':>5}{'m' + str(window):>5}"
           f"{'plays':>8}{'recent':>8}  last     watch")
     for row in shown:
-        verdict = policy.band(row.months, row.recent)
-        if verdict == "thin" and not show_all:
+        band = verdict(row)
+        if band == "thin" and not show_all:
             continue
         mark = "yes" if row.mbid in watched else "MUTED" if row.mbid in muted else "-"
-        print(f"{verdict:<9}{row.name[:33]:<34}{row.months:>5}{row.recent:>5}"
+        print(f"{band:<9}{row.name[:33]:<34}{row.months:>5}{row.recent:>5}"
               f"{row.plays:>8}{row.recent_plays:>8}  {row.last}  {mark}")
 
     # The three sets that are the point of the exercise.
-    add = [r for r in shown if policy.band(r.months, r.recent) in ("core", "emerging")
+    add = [r for r in shown if verdict(r) in ("core", "emerging")
            and r.mbid and r.mbid not in watched and r.mbid not in muted]
-    drop = [r for r in shown if policy.band(r.months, r.recent) == "lapsed"
+    drop = [r for r in shown if verdict(r) == "lapsed"
             and r.mbid in watched]
-    check = [r for r in shown if policy.band(r.months, r.recent) == "core"
+    check = [r for r in shown if verdict(r) == "core"
              and r.mbid in muted]
     print()
     print(f"watch these, not watched yet : {len(add)}")
@@ -145,6 +183,11 @@ def report(window: int, min_months: int, show_all: bool) -> int:
           f"({', '.join(r.name for r in drop[:6])})")
     print(f"muted but still core         : {len(check)}  "
           f"({', '.join(r.name for r in check[:6])})")
+
+    if json_path:
+        written = write_verdicts(rows, now, window, json_path)
+        print(f"\nwrote {shorten(json_path)} ({written} artists in "
+              f"{', '.join(WRITTEN_BANDS)})")
     return 0
 
 
@@ -164,6 +207,9 @@ def main() -> int:
                         help="hide artists with fewer lifetime months (default: 3)")
     parser.add_argument("--all", action="store_true",
                         help="show every artist, including thin ones")
+    parser.add_argument("--json", nargs="?", const=str(VERDICT_FILE), metavar="PATH",
+                        help=f"also write the verdicts for --from-profile to read "
+                             f"(default: {VERDICT_FILE.name})")
     parser.add_argument("--dry-run", action="store_true", help="write nothing")
     args = parser.parse_args()
 
@@ -178,7 +224,8 @@ def main() -> int:
         if not args.user:
             parser.error("--month needs --user")
         return fetch_month(args.user, args.dry_run)
-    return report(args.window, args.min_months, args.all)
+    json_path = Path(args.json) if args.json and not args.dry_run else None
+    return report(args.window, args.min_months, args.all, json_path)
 
 
 if __name__ == "__main__":

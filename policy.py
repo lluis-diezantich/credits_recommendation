@@ -313,6 +313,7 @@ MIN_WRITING_SHARE = 0.35
 RECENT_WINDOW = 24       # months that count as recent
 M24_FLOOR = 10           # active months inside the window to count as current
 DEEP_FLOOR = 24          # lifetime active months to count as established
+EMERGING_PLAYS = 100     # recent plays before a SHORT history is worth watching
 
 # Measured on the 2026-05 export (190,131 listens, 159 months):
 #
@@ -324,7 +325,18 @@ DEEP_FLOOR = 24          # lifetime active months to count as established
 # Nails, and Extremoduro drops out.
 
 
-def band(months: int, recent: int) -> str:
+# EMERGING_PLAYS applies to emerging ALONE, and that asymmetry is measured, not
+# tidy: scaling the month test to a short history (the min() below) let three
+# recent months out of three qualify, so 2,006 artists were emerging, Camilo on
+# two plays among them. 100 recent plays is roughly eight album listens and
+# leaves 72 -- the same order as the 108 entries favourites.json already holds.
+#
+# It is NOT applied to core, because core artists do not all clear it:
+# Sparklehorse has 60 lifetime months and 52 recent plays. Months already carry
+# the weight there, and a second constraint would demote him on no evidence.
+
+
+def band(months: int, recent: int, recent_plays: int) -> str:
     """core | lapsed | emerging | thin.
 
     `lapsed` is the one that earns the design: real past interest, nothing now.
@@ -332,9 +344,12 @@ def band(months: int, recent: int) -> str:
     roadmap.md's "prune the first, never the second".
 
     The min() scales the currency test to a short history, since an artist you
-    found four months ago cannot have ten recent months.
+    found four months ago cannot have ten recent months. EMERGING_PLAYS is what
+    stops that scaling from admitting everyone you played once.
     """
     current = recent >= min(M24_FLOOR, months)
     if months >= DEEP_FLOOR:
         return "core" if current else "lapsed"
-    return "emerging" if current else "thin"
+    if current and recent_plays >= EMERGING_PLAYS:
+        return "emerging"
+    return "thin"

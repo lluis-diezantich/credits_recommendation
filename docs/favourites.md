@@ -3,7 +3,8 @@
 `data/favourites.json` — the artists you actually play, with one id per source.
 The radars read it instead of each hardcoding their own list.
 
-    ./stages/favourites.py --user <listenbrainz-user>    # build or refresh it
+    ./stages/favourites.py --from-profile                # who is worth watching
+    ./stages/favourites.py --user <listenbrainz-user>    # the older, ranked source
     ./radars/qobuz.py --days 90                          # what came out
 
 Not to be confused with `data/watchlist.json`, which is the **collaborator**
@@ -27,7 +28,8 @@ match nobody looked at would otherwise poison the radar quietly.
 ## Running it
 
     # 1. build or refresh the list (keeps every id you fixed by hand)
-    ./stages/favourites.py --user lluisdiezantich --count 100
+    ./stages/profile.py --json                 # measure, then
+    ./stages/favourites.py --from-profile      # resolve what it named
 
     # 2. fix whatever did not resolve cleanly
     ./stages/favourites.py --review
@@ -38,9 +40,19 @@ match nobody looked at would otherwise poison the radar quietly.
     # 4. the actual point
     ./radars/qobuz.py --days 90
 
-Step 1 defaults to the `all_time` window. `--range week,month` unions several,
-`--range all` takes all nine; each extra window is another hundred-odd artists
-deeper into the tail. `--count` is **per window, not in total**.
+Step 1 costs **one Qobuz search per name it has never seen**, and nothing for a
+name already carrying an id — so the second run is nearly free. `--from-profile`
+takes the `core` and `emerging` rows out of `data/profile.json`, which on the
+2026-05 export is 152 names of which 88 already had ids.
+
+The older source is still there: `--user <name>` reads the ListenBrainz top-artist
+windows, defaulting to `all_time`, with `--range week,month` to union several or
+`--range all` for all nine, and `--count` is **per window, not in total**. It
+admits an artist on play count, which is why it missed 140 artists with 24+
+active months — prefer `--from-profile` and keep this for a cross-check.
+
+Note that `--dry-run` means "do not write the file". It does **not** skip the
+Qobuz searches, so a dry run of step 1 still spends them.
 
 Step 2 needs no `--user` and makes no ListenBrainz call. For each open row it
 prints Qobuz's candidates with album counts, marking the id the entry already
@@ -95,7 +107,14 @@ point-in-time ZIP and reading it needs pandas, which would end this project's
 no-dependencies property. What that loses is `aliases.yml` name merging, so two
 spellings of one artist can both appear — mute one.
 
-**There is no relevance filter, and the obvious one was tried and removed.**
+**There IS a relevance filter now, and it lives in `profile.py`.** The condition
+this section set — *"any replacement has to measure breadth from something
+live"* — is met: one stats request a month, appended to a durable store, and the
+verdict is active months rather than a play count. `--from-profile` reads it.
+[profile.md](profile.md) has the measurements. What follows is why the first
+attempt failed, which is still the reason the bar was set there.
+
+**The first relevance filter was tried and removed.**
 Counting distinct tracks per artist out of `music.db` does separate one song on
 repeat from an artist you follow: measured on a real 321-artist file, 19 played
 on two tracks or fewer, and a collaboration credits a play to every artist on
