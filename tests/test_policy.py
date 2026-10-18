@@ -420,3 +420,31 @@ def test_every_band_is_one_of_the_four_names():
             for plays in (0, 50, 5000):
                 assert policy.band(months, recent, plays) in {
                     "core", "lapsed", "emerging", "thin"}
+
+
+def test_an_intense_lapse_is_flagged_but_still_lapsed():
+    """Omar: 5 active months, 163 plays inside them, 33 a month. The flag says
+    look again; it does not change the verdict."""
+    assert policy.band(50, 5, 163) == "lapsed"
+    assert policy.burst(5, 163) is True
+
+
+def test_a_steady_trickle_is_not_a_burst():
+    """Interpol was judged cooled by hand on 6 of the last 6 months at 11 a
+    month. Every promotion rule tried also promoted him, which is why this is
+    a flag on an axis of its own."""
+    assert policy.burst(7, 80) is False
+    assert policy.burst(3, 22) is False      # Radiohead
+    assert policy.burst(3, 7) is False       # Mogwai
+
+
+def test_the_burst_rate_is_per_active_month_not_per_month_of_the_window():
+    """Otherwise a binge in two months reads the same as a trickle over twenty."""
+    assert policy.burst(2, 2 * policy.BURST_RATE) is True
+    assert policy.burst(20, 2 * policy.BURST_RATE) is False
+
+
+def test_nothing_recent_cannot_burst():
+    """Guards the division, and says the right thing: no recent plays, no doubt."""
+    assert policy.burst(0, 0) is False
+    assert policy.burst(0, 500) is False

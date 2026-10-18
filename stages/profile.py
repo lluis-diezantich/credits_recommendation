@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import glob
 import json
 import sys
 from pathlib import Path
@@ -49,17 +48,17 @@ def verdict(row) -> str:
     return policy.band(row.months, row.recent, row.recent_plays)
 
 
+def flagged(row, band: str) -> bool:
+    """Whether to mark this row's lapse as doubtful. Only a lapse can be."""
+    return band == "lapsed" and policy.burst(row.recent, row.recent_plays)
+
+
 def shorten(path: Path) -> Path:
     """Repo-relative for reading, absolute when it is somewhere else entirely."""
     try:
         return path.relative_to(ROOT)
     except ValueError:
         return path
-
-
-def newest_export() -> Path | None:
-    found = sorted(glob.glob(EXPORT_GLOB), key=lambda p: Path(p).stat().st_size)
-    return Path(found[-1]) if found else None
 
 
 def seed(path: Path, dry_run: bool) -> int:
@@ -123,7 +122,8 @@ def write_verdicts(rows, now: str, window: int, path: Path) -> int:
     artists = [{"name": row.name, "mbid": row.mbid, "band": band,
                 "months": row.months, "recent": row.recent,
                 "plays": row.plays, "recent_plays": row.recent_plays,
-                "first": row.first, "last": row.last}
+                "first": row.first, "last": row.last,
+                **({"burst": True} if flagged(row, band) else {})}
                for band, row in judged]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(
@@ -161,14 +161,15 @@ def report(window: int, min_months: int, show_all: bool, json_path: Path | None)
     shown = [r for r in rows if show_all or r.months >= min_months]
     shown.sort(key=lambda r: (BAND_ORDER[verdict(r)], -r.months))
     print(f"{'band':<9}{'artist':<34}{'life':>5}{'m' + str(window):>5}"
-          f"{'plays':>8}{'recent':>8}  last     watch")
+          f"{'plays':>8}{'recent':>8}  last     watch  ")
     for row in shown:
         band = verdict(row)
         if band == "thin" and not show_all:
             continue
         mark = "yes" if row.mbid in watched else "MUTED" if row.mbid in muted else "-"
+        note = "  burst?" if flagged(row, band) else ""
         print(f"{band:<9}{row.name[:33]:<34}{row.months:>5}{row.recent:>5}"
-              f"{row.plays:>8}{row.recent_plays:>8}  {row.last}  {mark}")
+              f"{row.plays:>8}{row.recent_plays:>8}  {row.last}  {mark}{note}")
 
     # The three sets that are the point of the exercise.
     add = [r for r in shown if verdict(r) in ("core", "emerging")
@@ -179,8 +180,12 @@ def report(window: int, min_months: int, show_all: bool, json_path: Path | None)
              and r.mbid in muted]
     print()
     print(f"watch these, not watched yet : {len(add)}")
+    doubtful = [r for r in drop if policy.burst(r.recent, r.recent_plays)]
     print(f"watched but lapsed           : {len(drop)}  "
           f"({', '.join(r.name for r in drop[:6])})")
+    if doubtful:
+        print(f"  ...of which played intensely : {len(doubtful)}  "
+              f"({', '.join(r.name for r in doubtful)}) -- check before muting")
     print(f"muted but still core         : {len(check)}  "
           f"({', '.join(r.name for r in check[:6])})")
 
@@ -197,7 +202,8 @@ def main() -> int:
     parser.add_argument("--seed", action="store_true",
                         help="compact a ListenBrainz export zip into one file per month")
     parser.add_argument("--export", metavar="PATH",
-                        help=f"zip to seed from (default: largest match for {EXPORT_GLOB})")
+                        help="zip to seed from (default: the largest match for "
+                             f"{listens.EXPORT_GLOB})")
     parser.add_argument("--month", action="store_true",
                         help="fetch the trailing 30 days and save it (1 request)")
     parser.add_argument("--user", help="ListenBrainz username (needed with --month)")
@@ -216,9 +222,10 @@ def main() -> int:
     if args.seed and args.month:
         parser.error("--seed and --month are separate runs")
     if args.seed:
-        path = Path(args.export) if args.export else newest_export()
+        path = Path(args.export) if args.export else listens.newest_export()
         if not path or not path.exists():
-            parser.error(f"no export found; --export PATH (looked for {EXPORT_GLOB})")
+            parser.error("no export found; --export PATH "
+                         f"(looked for {listens.EXPORT_GLOB})")
         return seed(path, args.dry_run)
     if args.month:
         if not args.user:

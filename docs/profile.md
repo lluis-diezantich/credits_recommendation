@@ -139,7 +139,16 @@ midnight on the 1st.
 the export's 6,405 distinct MBIDs, inflated by exactly the fragmentation the
 fold undoes.
 
-**A burst reads as decay.** Omar Rodríguez-López has 3 active months in the last
-24 and 154 plays inside them, last played this month. He lands `lapsed`.
-Months cannot tell a binge from a cooling taste; `recent_plays` is printed next
-to them so the eye can.
+**A burst is flagged, not corrected.** Omar Rodríguez-López has 5 active months
+in the last 24 and 163 plays inside them, last played this month — 33 a month,
+which is somebody gone back to rather than a taste cooling. He still lands
+`lapsed`, with `burst?` beside him in the table and `"burst": true` in the
+verdict file, and the "watched but lapsed" count says how many of its names are
+doubtful before you mute them.
+
+It is a flag because intensity is a **third axis**, not a correction to this
+one: Sparklehorse is `core` at 5 plays per active month and Drexler is `core` at
+136, so the rate says nothing about depth or currency. And every rule tried that
+*promoted* on it also promoted Interpol, who was judged cooled by hand on 6 of
+the last 6 months at 11 a month. `BURST_RATE` is in `policy.py`; 6 of the 113
+lapsed artists carry the flag.

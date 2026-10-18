@@ -49,8 +49,11 @@ The gap between "a credits database" and "recommends music".
   - `emerging` is 2,006 artists, because the currency test scales to a short
     history and three recent months out of three qualifies. Right as a verdict,
     useless as a list. It needs a floor nobody has set.
-  - a burst reads as decay. Omar Rodríguez-López has 3 recent months and 154
-    plays inside them, last played this month, and lands `lapsed`.
+  - ~~a burst reads as decay.~~ Flagged rather than corrected: `policy.burst`
+    marks a lapse whose few recent months were intense (Omar Rodríguez-López, 5
+    months and 163 plays), and the "watched but lapsed" line says how many of
+    its names are doubtful. Not promoted, because intensity is a third axis —
+    every promotion rule tried also promoted Interpol, judged cooled by hand.
 
   It also has two answers to "how many artists do I watch". 93 entries are
   un-muted but the radar watches **91**, because `favourites.ids_for` keys on
@@ -60,12 +63,15 @@ The gap between "a credits database" and "recommends music".
   grain it means, and duplicate spellings are the first thing it should surface.
 
   The numbers that used to be in this entry came from `listenbrainz_sample.zip`,
-  1% of the export, and two of them were wrong: `load.py` takes
-  `sorted(glob)[-1]`, and "sample" sorts after the real export, so the sample
-  had been shadowing 190,131 listens. `--seed` picks the largest file instead;
-  **`load.py` still has the defect.** The tracks-against-plays rule also did not
-  survive contact with the full file — every artist sits between 0.50 and 1.0
-  tracks per play, so it discriminates nothing.
+  1% of the export, because `load.py` took `sorted(glob)[-1]` and "sample" sorts
+  after the real export — so a 2,000-listen sample had been shadowing 190,196 of
+  them, and `data/music.db` was built from it. Fixed: one picker,
+  `core.listens.newest_export`, chooses by **size**, and both stages use it. The
+  store now holds the 190,196 rows store.md always claimed.
+
+  The tracks-against-plays rule in the old text did not survive the full file
+  either — every artist sits between 0.50 and 1.0 tracks per play, so it
+  discriminates nothing.
 
 - **A radar for people, not artists.** The thesis, and the one thing this cannot
   do: alert on records made by *people* you follow. The pools hold 7,860

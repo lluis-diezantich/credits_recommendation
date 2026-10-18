@@ -314,6 +314,7 @@ RECENT_WINDOW = 24       # months that count as recent
 M24_FLOOR = 10           # active months inside the window to count as current
 DEEP_FLOOR = 24          # lifetime active months to count as established
 EMERGING_PLAYS = 100     # recent plays before a SHORT history is worth watching
+BURST_RATE = 20          # recent plays per active month that make a lapse doubtful
 
 # Measured on the 2026-05 export (190,131 listens, 159 months):
 #
@@ -353,3 +354,23 @@ def band(months: int, recent: int, recent_plays: int) -> str:
     if current and recent_plays >= EMERGING_PLAYS:
         return "emerging"
     return "thin"
+
+
+def burst(recent: int, recent_plays: int) -> bool:
+    """Were those few months INTENSE? A flag on a lapse, never a verdict.
+
+    Omar Rodriguez-Lopez has 5 active months in the last 24 and 163 plays
+    inside them, last played this month: 33 a month, which is somebody gone
+    back to, not a taste cooling. Months alone cannot see it.
+
+    It stays a flag because intensity is a THIRD axis, not a correction to this
+    one -- Sparklehorse is core at 5 plays per active month and Drexler is core
+    at 136, so the rate says nothing about depth or currency. And every rule
+    tried that promoted on it also promoted Interpol, who was judged cooled by
+    hand on 6 of the last 6 months at 11 a month. Same stance as COVERS_MILL_HINTS
+    and writing_tier's lyrics_only: flagged, never silently reclassified.
+
+    Six of the 113 lapsed artists carry it, including both that the watchlist
+    still watches -- which is exactly where a verdict is worth doubting.
+    """
+    return bool(recent) and recent_plays / recent >= BURST_RATE
