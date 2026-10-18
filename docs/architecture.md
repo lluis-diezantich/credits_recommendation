@@ -9,13 +9,114 @@ yet, and the order they get built in is not free.
 
 ## What this doc is, and what it is not
 
-It **is** a target layout and a build order, argued from the shapes the data
-already has. Every number below was measured against `data/` on 2026-09-13.
+It **is** two things, in this order: one diagram of what runs today, then a
+target layout and a build order argued from the shapes the data already has.
+Numbers in the target sections were measured against `data/` on 2026-09-13;
+the diagram's were re-measured on 2026-10-18.
 
 It is **not** a refactor plan for what exists. `core/`, `stages/`, `radars/` and
 `policy.py` are where they should be. The proposal is mostly about naming the
 boxes that are currently empty, plus one rename (`radars/` -> `sources/`) that
 can wait until there is a second kind of source worth grouping.
+
+## How it fits together today
+
+Everything below this section is a target. This one is what runs.
+
+Three paths, one of them paused. Read them top to bottom: a source on the left,
+a stage in the middle, a file it leaves behind on the right.
+
+### The live path — what produces a Friday issue
+
+    ListenBrainz                    stages/                      data/
+    ────────────                    ───────                      ─────
+
+    export .zip ──────┐
+    (manual, yearly)  │
+                      ├──▶ profile.py --seed ──▶ cache/listens_months/
+    stats API         │                          (ignored, rebuilds exactly)
+    ?range=month ─────┘
+    (monthly, in CI) ────▶ profile.py --month ─▶ data/listens_months/
+                                                 (committed, perishable)
+                                                        │
+                                        both read ──────┤
+                                                        ▼
+                           profile.py --json ──▶ data/profile.json
+                                                 core / lapsed / emerging
+                                                        │
+                                                        ▼
+    Qobuz autosuggest ──▶ favourites.py --from-profile
+    MusicBrainz       ──▶ favourites.py --check-active
+    you               ──▶ favourites.py --review / --mute
+                                                        │
+                                                        ▼
+                                                 data/favourites.json
+                                                 qobuz_id · mbid · watch · ended
+                                                        │
+                                   ids_for() skips watch:false AND ended
+                                                        ▼
+    Qobuz artist/get ───▶ radars/qobuz.py ──▶ report.py ──▶ GitHub issue
+                                │                              (Fridays)
+                                └──▶ data/ci/qobuz_seen.json
+
+That last file is the only impression log there is: its git history is a dated
+record of what was actually shown, which is what the evaluation in
+[roadmap.md](roadmap.md) needs before anything can be scored.
+
+### The paused path — the credits thesis
+
+    one seed artist
+          │
+          ▼
+    Qobuz album/get ──▶ discover.py ──▶ discovery_*.json ─┐  278 people
+          │                                               │
+          ├──────────▶ resolve_qobuz.py ──▶ pool.json ────┤  1,470 releases
+          │                                               │
+    Discogs ─────────▶ resolve_discogs.py ─▶ pool_discogs ┤  6,390 releases
+          │                                               │
+          └──────────▶ writing.py ──────▶ writing_*.json ─┘  what they WROTE
+
+                           nothing consumes the pools
+
+This is the project's actual thesis and the half that does not reach a reader.
+It is paused for a stated reason rather than neglect: 47% of those rows are
+name collisions and `sig_score` ranks them first, so ordering the list would
+make the wrongness more prominent. `todo.md` has the measurement.
+
+### Sideways — the store
+
+    every JSON above ──┐
+    export .zip ───────┼──▶ load.py ──▶ data/music.db   derived, disposable,
+    cache/ ────────────┘                                rebuilt in seconds
+
+`load.py` reads the export zip **directly** for its `listens` table and does
+not go through `listens_months/`. Two independent readers of one zip, which is
+why the sample-shadowing bug had to be fixed in a shared picker rather than in
+one of them.
+
+### What runs unattended
+
+| | when | cost | leaves behind |
+|---|---|---|---|
+| `profile: monthly snapshot` | 3rd, 06:23 UTC | 1 request | a committed month |
+| `releases: known artists` | Fridays, 04:17 UTC | 91 requests, 85 once `ended` is stamped | an issue, and the seen-ids commit |
+| `tests` | every push | — | `ruff`, `ty`, `pytest --cov` |
+
+### Which stage of a recommender each piece is
+
+| | | |
+|---|---|---|
+| taste | who you listen to | **yes** — `profile.py` |
+| identity | which id each store speaks | **yes** — `favourites.py` |
+| activity | who still releases | **yes** — `--check-active`, MusicBrainz |
+| retrieval | what came out | **partial** — known artists only |
+| ranking | what order to show it in | — |
+| feedback | what you actually played | **half** — what was *shown* is logged |
+
+Three radars exist and are not wired in: `listenbrainz.py` is a cross-check on
+the same artists from a second source, `itunes.py` has no resolved ids so it
+falls back to one artist, and `remezcla.py` reads a blog and is a different
+shape. [radars.md](radars.md) says why the last one does not fit.
 
 ## Why by stage, not by source
 
