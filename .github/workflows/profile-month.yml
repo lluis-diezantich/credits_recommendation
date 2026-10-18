@@ -1,4 +1,4 @@
-# One month of listening, recorded. Monthly.
+# One month of listening, snapshotted. Monthly.
 #
 # The profile measures taste in ACTIVE MONTHS, and the months come from two
 # places: a 21 MB export zip seeds the years before it was downloaded, and this
@@ -17,7 +17,7 @@
 # Needs no secrets. The ListenBrainz stats endpoint is unauthenticated, which
 # is also why the username is an input rather than a secret -- it is in
 # docs/favourites.md already.
-name: "profile: record the month"
+name: "profile: monthly snapshot"
 
 on:
   schedule:
@@ -37,7 +37,7 @@ on:
         description: "ListenBrainz username"
         default: "lluisdiezantich"
 
-# contents: write, to commit the month back. The same lesson radar.yml records:
+# contents: write, to commit the month back. The same lesson radar.yml notes:
 # leaving this at read makes only the push 403 while every other step succeeds,
 # which is the quietest possible way to lose the data.
 permissions:
@@ -79,7 +79,7 @@ jobs:
           python3 stages/profile.py --month --user "$LB_USER"
 
       - name: Commit it
-        # The commit IS the record: `git log data/listens_months/` is a dated
+        # The commit IS the log: `git log data/listens_months/` is a dated
         # history of what was captured and when. Nothing to commit is a normal
         # outcome -- a re-run in the same month rewrites an identical file.
         run: |
@@ -88,11 +88,11 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- data/listens_months
           if git diff --cached --quiet; then
-            echo "no new month to record"
+            echo "no new month to snapshot"
             exit 0
           fi
           added="$(git diff --cached --name-only | tr '\n' ' ')"
-          git commit -m "profile: record ${added}"
+          git commit -m "profile: snapshot ${added}"
           # Another run may have pushed between checkout and here.
           git pull --rebase --autostash
           git push
