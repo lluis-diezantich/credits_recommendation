@@ -121,7 +121,10 @@ CREATE TABLE meta (
 CREATE TABLE people (
     person_key TEXT PRIMARY KEY, name TEXT, qobuz_id INTEGER, discogs_id INTEGER,
     watch BOOLEAN, cover_source_only BOOLEAN,
-    albums INTEGER, tracks INTEGER, top_role TEXT, first_seen TEXT, last_seen TEXT,
+    albums INTEGER, own_albums INTEGER, tracks INTEGER, seeds INTEGER,
+--  ^ SUMMED across the seeds in person_seeds, which is the real grain. For
+--    "how embedded in ONE seed's catalogue" read person_seeds instead.
+    top_role TEXT, first_seen TEXT, last_seen TEXT,
     resolved_via TEXT, resolved_confidence TEXT, unresolved_reason TEXT,
     discogs_total_releases INTEGER, selectivity REAL, selectivity_band TEXT,
     sources TEXT);
@@ -175,6 +178,16 @@ CREATE TABLE releases (
 -- join available is lower(name), which matches 250 of 2,773 names and silently
 -- calls every accented artist unheard -- it recommended Xoel Lopez, who is in
 -- the export 331 times.
+-- One row per (person, seed): albums and tracks are facts about a person IN
+-- ONE seed's catalogue, and `people` holds one row per person, so there was
+-- nowhere for the second seed's numbers to go. load_people used to let the
+-- last discovery file win, which silently replaced Fred Kevorkian's 13 Drexler
+-- albums with the 1 he has on a Perez Cruz record. 14 people are in both files.
+CREATE TABLE person_seeds (person_key TEXT, seed_qobuz_id INTEGER, seed_name TEXT,
+                           source TEXT, albums INTEGER, own_albums INTEGER,
+                           tracks INTEGER, top_role TEXT,
+                           first_seen TEXT, last_seen TEXT,
+                           PRIMARY KEY (person_key, seed_qobuz_id));
 CREATE TABLE release_artists (album_id TEXT, source TEXT, name TEXT,
                               name_key TEXT,
                               PRIMARY KEY (album_id, source, name));
@@ -278,6 +291,7 @@ CREATE INDEX ix_releases_score        ON releases (sig_score);
 CREATE INDEX ix_releases_date         ON releases (date);
 CREATE INDEX ix_releases_via          ON releases (via_qobuz_id);
 CREATE INDEX ix_releases_shortlist    ON releases (source, via_is_first_artist);
+CREATE INDEX ix_person_seeds_seed     ON person_seeds (seed_qobuz_id);
 CREATE INDEX ix_release_artists_name  ON release_artists (name);
 CREATE INDEX ix_release_artists_key   ON release_artists (name_key);
 
@@ -315,7 +329,8 @@ SELECT source, album_id, title, date, label, genre, via_name, via_top_role,
 FROM releases;
 
 CREATE VIEW v_people AS
-SELECT p.person_key, p.name, p.qobuz_id, p.discogs_id, p.albums, p.tracks,
+SELECT p.person_key, p.name, p.qobuz_id, p.discogs_id, p.albums, p.own_albums,
+       p.tracks, p.seeds,
        p.top_role, p.first_seen, p.last_seen, p.sources,
        (SELECT COUNT(*) FROM person_classes c WHERE c.person_key = p.person_key) AS n_classes
 FROM people p;
@@ -464,6 +479,7 @@ def load_people(ld: Loader) -> None:
     """
     people: dict[str, dict] = {}
     names, classes, roles, albums, edges = [], [], [], [], []
+    person_seeds: list[tuple] = []
 
     def touch(key: str, source: str) -> dict:
         row = people.setdefault(key, {"person_key": key, "sources": set()})
@@ -475,16 +491,33 @@ def load_people(ld: Loader) -> None:
         blob = load_json(path)
         if not blob:
             continue
+        seed = blob.get("seed") or {}
         for person in blob.get("people") or []:
             key = person.get("key") or normalise((person.get("names") or [""])[0])
             row = touch(key, path.name)
             stats = person.get("stats") or {}
+            person_seeds.append((
+                key, seed.get("qobuz_id"), seed.get("name"), path.name,
+                stats.get("albums"), stats.get("own_albums"), stats.get("tracks"),
+                stats.get("top_role"), stats.get("first"), stats.get("last")))
+            # SUMMED over the seeds this person appears in, never overwritten:
+            # "albums of any seed's that they worked on". For "how embedded in
+            # ONE seed's catalogue" -- which is what the scoring means -- read
+            # person_seeds. top_role comes from the seed where they did the
+            # most, since that is what they mainly are.
+            busiest = (row.get("albums") or 0) <= (stats.get("albums") or 0)
             row.update({
                 "name": (person.get("names") or [None])[0],
                 "cover_source_only": bool(person.get("cover_source_only")),
-                "albums": stats.get("albums"), "tracks": stats.get("tracks"),
-                "top_role": stats.get("top_role"),
-                "first_seen": stats.get("first"), "last_seen": stats.get("last"),
+                "albums": (row.get("albums") or 0) + (stats.get("albums") or 0),
+                "own_albums": (row.get("own_albums") or 0) + (stats.get("own_albums") or 0),
+                "tracks": (row.get("tracks") or 0) + (stats.get("tracks") or 0),
+                "seeds": (row.get("seeds") or 0) + 1,
+                "top_role": stats.get("top_role") if busiest else row.get("top_role"),
+                "first_seen": min(x for x in (row.get("first_seen"), stats.get("first")) if x)
+                              if (row.get("first_seen") or stats.get("first")) else None,
+                "last_seen": max(x for x in (row.get("last_seen"), stats.get("last")) if x)
+                             if (row.get("last_seen") or stats.get("last")) else None,
             })
             names += [(key, n) for n in person.get("names") or []]
             classes += [(key, c) for c in person.get("classes") or []]
@@ -507,6 +540,9 @@ def load_people(ld: Loader) -> None:
                 "qobuz_id": artist.get("qobuz_id"),
                 "watch": bool(artist.get("watch")),
                 "cover_source_only": bool(artist.get("cover_source_only")),
+                # First-wins, not summed: watchlist.json is DERIVED from a
+                # discovery file, so adding its counts would double the seed
+                # that produced it.
                 "albums": row.get("albums") or stats.get("albums"),
                 "tracks": row.get("tracks") or stats.get("tracks"),
                 "top_role": row.get("top_role") or stats.get("top_role"),
@@ -582,12 +618,19 @@ def load_people(ld: Loader) -> None:
         ld.note("discogs_candidates", "discogs_watchlist.json", len(cands), dw.get("generated"))
 
     cols = ["person_key", "name", "qobuz_id", "discogs_id", "watch",
-            "cover_source_only", "albums", "tracks", "top_role", "first_seen",
+            "cover_source_only", "albums", "own_albums", "tracks", "seeds",
+            "top_role", "first_seen",
             "last_seen", "resolved_via", "resolved_confidence", "unresolved_reason",
             "discogs_total_releases", "selectivity", "selectivity_band", "sources"]
     ld.insert("people", cols,
               [tuple(joined(sorted(r["sources"])) if c == "sources" else r.get(c)
                      for c in cols) for r in people.values()])
+    # Per (person, seed), which is the grain albums and tracks are actually
+    # measured at -- see the table comment in SCHEMA.
+    ld.insert("person_seeds",
+              ["person_key", "seed_qobuz_id", "seed_name", "source", "albums",
+               "own_albums", "tracks", "top_role", "first_seen", "last_seen"],
+              deduped(person_seeds))
     ld.insert("person_names", ["person_key", "name"], deduped(names))
     # A junction rather than a column, because multi-seed intersection is a
     # FILTER: "keep people who appear in 3+ discovery graphs" (README:122) is a

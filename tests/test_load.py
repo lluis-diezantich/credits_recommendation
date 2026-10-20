@@ -102,7 +102,7 @@ def test_every_index_is_created_after_the_rows_not_in_the_schema(store):
     """The 2s rebuild depends on it: an index in SCHEMA is maintained per
     INSERT across 216k rows. If one migrates into SCHEMA this fails."""
     assert "CREATE INDEX" not in load.SCHEMA
-    assert load.INDEXES.count("CREATE INDEX") == 32
+    assert load.INDEXES.count("CREATE INDEX") == 33
 
 
 def test_the_indexes_name_only_real_columns(store):
@@ -673,11 +673,11 @@ def test_summarise_prints_a_row_per_loaded_table(store, capsys):
 
 
 def test_a_full_build_from_nothing_produces_an_empty_but_valid_store(store, monkeypatch):
-    """main() end to end with no inputs at all: the tables, the 47 indexes and
+    """main() end to end with no inputs at all: the tables, the 49 indexes and
     the views all exist, and nothing raised. This is the contract -- the build
     runs over whatever happens to be on disk.
 
-    47, not 32: 15 of the primary keys are themselves unique indexes."""
+    49, not 33: 16 of the primary keys are themselves unique indexes."""
     db = store.tmp / "out.db"
     monkeypatch.setattr(load, "LISTENS_GLOB", str(store.tmp / "no_such_*.zip"))
     monkeypatch.setattr("sys.argv", ["load.py", "--db", str(db)])
@@ -686,7 +686,7 @@ def test_a_full_build_from_nothing_produces_an_empty_but_valid_store(store, monk
     con = sqlite3.connect(db)
     kinds = con.execute("SELECT type, COUNT(*) FROM sqlite_master GROUP BY type"
                         ).fetchall()
-    assert dict(kinds)["index"] == 47
+    assert dict(kinds)["index"] == 49
     assert dict(kinds)["view"] == 4
 
 
@@ -882,7 +882,10 @@ def test_the_tables_whose_key_is_real_have_one(store):
     assert keyed["person_edges"] == ["person_key", "other_name", "kind"]
     assert keyed["releases"] == ["album_id", "source"]
     assert keyed["songs"] == ["song_key", "artist_query"]
-    assert len(keyed) == 15
+    # (person, seed) -- the grain albums and tracks are measured at, and the
+    # key that stops one seed's numbers overwriting another's.
+    assert keyed["person_seeds"] == ["person_key", "seed_qobuz_id"]
+    assert len(keyed) == 16
 
 
 def test_the_five_without_a_key_are_the_five_with_a_reason(store):
@@ -1160,3 +1163,75 @@ def test_a_referrer_who_only_guested_is_visible_as_zero_own_albums(store):
     load.load_releases(store.ld)
     assert store.rows("releases", "sig_own_albums, sig_embedded, sig_score")[0] == (
         0, 0.0, 0.0)
+
+
+# ---- one person, several seeds -------------------------------------------
+
+
+def two_seeds(store):
+    """The same person on 13 of one seed's albums and 1 of another's, which is
+    Fred Kevorkian exactly: he masters for both."""
+    for seed_id, seed, albums, tracks in ((41620, "Jorge Drexler", 13, 42),
+                                          (656411, "Sílvia Pérez Cruz", 1, 1)):
+        store.write(f"discovery_{seed_id}.json", {
+            "seed": {"qobuz_id": seed_id, "name": seed},
+            "people": [{"key": "fred kevorkian", "names": ["Fred Kevorkian"],
+                        "classes": ["production"], "roles": {"Mastering Engineer": tracks},
+                        "albums": [], "stats": {
+                            "albums": albums, "own_albums": albums, "tracks": tracks,
+                            "top_role": "Mastering Engineer",
+                            "first": "2017-07-07" if seed_id == 41620 else "2026-03-13",
+                            "last": "2026-03-13" if seed_id == 41620 else "2026-03-13"}}]})
+
+
+def test_a_second_seed_no_longer_overwrites_the_first(store):
+    """The defect: load_people updated the same `people` row per discovery
+    file, so the last one won and 13 Drexler albums silently became the 1 from
+    a Pérez Cruz record. 14 people are in both files."""
+    two_seeds(store)
+    load.load_people(store.ld)
+    assert store.rows("people", "albums, own_albums, tracks, seeds")[0] == (14, 14, 43, 2)
+
+
+def test_the_per_seed_numbers_are_both_kept(store):
+    """Summing answers "how much work in total" and loses "how embedded in
+    THIS seed's catalogue", which is what the scoring means. Both now exist."""
+    two_seeds(store)
+    load.load_people(store.ld)
+    assert dict(store.rows("person_seeds", "seed_name, albums")) == {
+        "Jorge Drexler": 13, "Sílvia Pérez Cruz": 1}
+
+
+def test_the_dates_span_every_seed(store):
+    two_seeds(store)
+    load.load_people(store.ld)
+    assert store.rows("people", "first_seen, last_seen")[0] == ("2017-07-07", "2026-03-13")
+
+
+def test_the_top_role_comes_from_the_seed_they_did_most_on(store):
+    """Not from whichever file sorted last: what someone mainly is should come
+    from where they did the most work."""
+    store.write("discovery_1.json", {
+        "seed": {"qobuz_id": 1, "name": "A"},
+        "people": [{"key": "p", "names": ["P"], "stats": {
+            "albums": 10, "tracks": 10, "top_role": "Producer"}}]})
+    store.write("discovery_2.json", {
+        "seed": {"qobuz_id": 2, "name": "B"},
+        "people": [{"key": "p", "names": ["P"], "stats": {
+            "albums": 1, "tracks": 1, "top_role": "Guitar"}}]})
+    load.load_people(store.ld)
+    assert store.rows("people", "top_role, albums, seeds")[0] == ("Producer", 11, 2)
+
+
+def test_the_watchlist_does_not_double_count_its_own_seed(store):
+    """watchlist.json is DERIVED from a discovery file, so adding its counts
+    would count that seed twice. First-wins there, summed only over seeds."""
+    store.write("discovery_41620.json", {
+        "seed": {"qobuz_id": 41620, "name": "Jorge Drexler"},
+        "people": [{"key": "fred kevorkian", "names": ["Fred Kevorkian"],
+                    "stats": {"albums": 13, "tracks": 42}}]})
+    store.write("watchlist.json", {"artists": [
+        {"name": "Fred Kevorkian", "qobuz_id": 1, "watch": True,
+         "stats": {"albums": 13, "tracks": 42}}]})
+    load.load_people(store.ld)
+    assert store.rows("people", "albums, tracks, seeds")[0] == (13, 42, 1)

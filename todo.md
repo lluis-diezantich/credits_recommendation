@@ -295,6 +295,22 @@ The gap between "a credits database" and "recommends music".
 
 Where the code can be wrong without anything noticing.
 
+- **~~One seed's numbers overwrote another's in `people`.~~** Fixed 2026-10-20
+  ([adr/D19](docs/adr/D19-person-seed-is-the-grain.md)). `load_people` called
+  `row.update()` per `discovery_*.json`, so the last file won: Fred Kevorkian's
+  13 Drexler albums became the 1 from a Pérez Cruz record. 14 of 551 people are
+  in both files and all 14 carried the wrong seed's numbers.
+
+  A grain mismatch rather than a merge bug — "albums" is a fact about a
+  (person, seed) pair and was stored one row per person. `person_seeds` now
+  holds it at that grain, `people.albums`/`own_albums`/`tracks` are summed with
+  `people.seeds` saying over how many, and `watchlist.json` stays first-wins
+  because it is derived from a discovery file and would double its own seed.
+
+  Nothing scored from that column, which is why no score moved. That was luck:
+  `signal_for` reads the discovery file directly. The table is fixed before
+  anything starts ranking from the store.
+
 - **Nearly half the candidate pool is name collisions, and the score promotes
   them.** The most important open defect, and the reason nothing credits-based
   should be built yet. Measured 2026-10-17 on the committed pools:

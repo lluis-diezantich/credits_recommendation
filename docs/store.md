@@ -57,9 +57,16 @@ Or in a notebook, which is where this actually gets used:
 
 ## Tables
 
+Row counts below are from the 2026-10-20 build and drift as the pools are
+regenerated. `meta` is authoritative.
+
     meta                     provenance: which file each table came from, row counts, dates
 
-    people             278   the credit graph, one row per person, merged from 5 places
+    people             551   the credit graph, one row per person, merged from 5 places
+                             albums/own_albums/tracks are SUMMED over seeds
+    person_seeds       565   one row per (person, seed) - the grain those counts
+                             are really measured at. Read this, not people.albums,
+                             for "how embedded in ONE seed's catalogue"
     person_names       281   spelling variants
     person_sources     412   which file contributed each person (multi-seed joins)
     person_classes     396   production / engineering / writing / billing / performance
