@@ -530,15 +530,18 @@ def musical_referral(roles) -> bool:
     return bool({role_class(role) for role in roles or []} & REFERRAL_CLASSES)
 
 
-def shortlisted(source: str, via_is_first_artist: bool, roles) -> bool:
-    """The three filters together: a pool row worth a person's attention.
+def shortlisted(source: str, via_is_first_artist: bool, roles, score=None) -> bool:
+    """The filters together: a pool row worth a person's attention.
 
     `source` is the pool the row came from ("qobuz" or "discogs"), the same
-    value `releases.source` carries in the store.
+    value `releases.source` carries in the store. `score` is the row's stored
+    `sig_score`, and a zero one is dropped by `carries_signal` -- see the block
+    above for why that is not one of the three taste filters.
     """
     return (source != "discogs"
             and not via_is_first_artist
-            and musical_referral(roles))
+            and musical_referral(roles)
+            and carries_signal(score))
 
 
 # ---------------------------------------------------------------------------
@@ -593,3 +596,48 @@ def cap_per_referrer(rows, referrer, limit: int = MAX_PER_REFERRER) -> list:
         seen[key] = seen.get(key, 0) + 1
         kept.append(row)
     return kept
+
+
+# ---------------------------------------------------------------------------
+# A REFERRAL THAT CARRIES NOTHING (score 0)
+#
+# Measured on the regenerated Qobuz pool, 2026-10-20: 5 of its 50 referrers
+# hold ZERO of the seed's own albums -- Chab, Susana San Jose, El David
+# Aguilar, Ulises Hadjis, Cantamarta. They passed the `--min-albums 2` gate on
+# two albums each, and both albums were records the seed GUESTED on, so they
+# never worked on one of his. Once `embedded` is computed from own albums their
+# score is 0.0, by the scoring's own arithmetic.
+#
+# They are not weak referrals, they are not referrals: the relationship the
+# pool claims does not exist. The right place for them is discovery's
+# `co_artists` block, which is where D14 puts an artist the seed made a record
+# WITH.
+#
+# So this is a different test from the POOL FILTERS above, which are taste --
+# an engineering referral is real and worth less. A score of 0 is the scoring
+# saying there is no referral at all, and a list has no reason to hold it.
+# ---------------------------------------------------------------------------
+
+
+def carries_signal(score) -> bool:
+    """Does this referral assert any relationship at all?
+
+    Strictly greater than zero, and None is not zero: a missing score is an
+    absence of evidence (a pool written before the score existed), not a
+    verdict of worthless, so it passes rather than being silently dropped.
+    """
+    return True if score is None else score > 0
+
+
+def seed_albums_of(stats) -> int:
+    """How many of the SEED's own records this person worked on.
+
+    The one place that reads discover.py's own/guest labelling, so the gate in
+    resolve_qobuz.py and the score in signal_for cannot drift apart. Falls back
+    to the unlabelled total for a discovery file written before D14, which is
+    the old inflated number -- callers flag `unlabelled_albums` when they take
+    it, rather than letting it pass for a measured one.
+    """
+    stats = stats or {}
+    own = stats.get("own_albums")
+    return (stats.get("albums") or 0) if own is None else own

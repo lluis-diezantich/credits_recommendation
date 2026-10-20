@@ -40,7 +40,7 @@ from core.qobuz import (
     search_artists,
     store_cookies,
 )
-from policy import WEAK_CLASSES, match_confidence, role_weight
+from policy import WEAK_CLASSES, match_confidence, role_weight, seed_albums_of
 
 
 def signal_for(artist: dict) -> dict:
@@ -62,8 +62,10 @@ def signal_for(artist: dict) -> dict:
     weight = role_weight(stats.get("top_role"))
     # Guest spots are not the seed's records: discover.py labels them, and a
     # person reached only through one did not work on the seed's catalogue.
+    # policy.seed_albums_of is the one place that reads the labelling, so this
+    # and the --min-albums gate below cannot drift apart.
     own_albums = stats.get("own_albums")
-    seed_albums = stats.get("albums") or 0 if own_albums is None else own_albums
+    seed_albums = seed_albums_of(stats)
     embedded = min(seed_albums / 10.0, 1.0)      # 10+ of the seed's albums saturates
     flags = []
     if own_albums is None:
@@ -135,7 +137,20 @@ def main() -> int:
     seed = discovery["seed"]
     print(f"seed: {seed['name']} ({seed['qobuz_id']}) from {source.name}", file=sys.stderr)
 
-    people = [p for p in discovery["people"] if p["stats"]["albums"] >= args.min_albums]
+    # --min-albums counts the seed's OWN records. Against the unlabelled total
+    # it let through five people whose two albums were both records the seed
+    # GUESTED on: they never worked on one of his, so their score came out 0.0
+    # and the pool carried their whole discography for nothing. One autosuggest
+    # and one discography each, per run.
+    people = [p for p in discovery["people"]
+              if seed_albums_of(p.get("stats")) >= args.min_albums]
+    guests_only = [p for p in discovery["people"]
+                   if seed_albums_of(p.get("stats")) < args.min_albums
+                   and (p["stats"].get("albums") or 0) >= args.min_albums]
+    if guests_only:
+        print(f"skipped {len(guests_only)} people whose {args.min_albums}+ albums are "
+              f"ALL guest spots, not the seed's records: "
+              + ", ".join(sorted(p["names"][0] for p in guests_only)[:6]), file=sys.stderr)
     if args.no_cover_sources:
         people = [p for p in people if not p.get("cover_source_only")]
     if args.min_role_weight > 0:

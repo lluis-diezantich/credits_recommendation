@@ -228,10 +228,15 @@ The gap between "a credits database" and "recommends music".
     lost albums and five went to zero own albums — Chab, Susana San José, El
     David Aguilar, Ulises Hadjis, Çantamarta — so they now score 0.0. They
     never worked on a Drexler record; they are people he was billed alongside,
-    which is what `co_artists` is for. **Open question this raises:** a
+    which is what `co_artists` is for. ~~**Open question this raises:** a
     referrer at score 0 still contributes every row of their discography to the
-    pool. Dropping score-0 referrals is a one-line filter and a decision
-    nobody has made.
+    pool.~~ Decided and done
+    ([adr/D18](docs/adr/D18-drop-score-zero-referrals.md)): dropped on read by
+    `policy.carries_signal`, and `--min-albums` now counts the seed's own
+    albums so the resolver stops spending a lookup and a discography on them —
+    110 people instead of 122, 12 of the 57 fetched artists. The 175 rows stay
+    in the pool until the next regeneration, which is what the read filter is
+    for.
   - **Catalogue size does not discriminate**, so that hypothesis is refused for
     the Qobuz path: flagged people hold 4-309 albums, unflagged hold 1-483.
     Caetano Veloso holds 483 and is correct; "Calequi" holds 4 and is flagged.

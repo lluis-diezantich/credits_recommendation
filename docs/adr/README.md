@@ -41,3 +41,4 @@ intended way round from here.
 | [D15](D15-filters-before-ranking.md) | The pool is filtered on read by three stored facts, before anything ranks it | Accepted |
 | [D16](D16-cap-the-list-per-referrer.md) | The shortlist keeps at most two rows per referrer | Accepted |
 | [D17](D17-fold-plausibility-into-the-score.md) | The resolvers fold match plausibility and own-album counts into the stored score | Accepted |
+| [D18](D18-drop-score-zero-referrals.md) | A referral scoring zero is dropped, and the resolver stops fetching one | Accepted |

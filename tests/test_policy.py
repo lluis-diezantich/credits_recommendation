@@ -626,3 +626,45 @@ def test_the_unlabelled_albums_flag_costs_nothing():
     as every other unknown flag."""
     assert policy.match_confidence(["unlabelled_albums"]) == 1.0
     assert policy.match_confidence(["unlabelled_albums", "single_token_name"]) == 0.1
+
+
+# ---- a referral that carries nothing ------------------------------------
+
+
+def test_a_score_of_zero_is_not_a_referral():
+    """5 of the Qobuz pool's 50 referrers: two albums each, both of them
+    records the seed GUESTED on, so they worked on none of his. The scoring's
+    own arithmetic puts them at 0.0."""
+    assert policy.carries_signal(0.0) is False
+    assert policy.carries_signal(0) is False
+    assert policy.shortlisted("qobuz", False, ["Drums"], 0.0) is False
+
+
+def test_any_score_above_zero_survives():
+    """Weak is not the same as absent -- 0.01 asserts a relationship, and
+    MIN_SIGNAL is where weakness is judged, not here."""
+    assert policy.carries_signal(0.01) is True
+    assert policy.shortlisted("qobuz", False, ["Drums"], 0.01) is True
+
+
+def test_a_missing_score_passes_rather_than_being_dropped():
+    """A pool written before the score existed is an absence of evidence, not
+    a verdict of worthless. The 6,390 Discogs rows are in exactly that state
+    until that half is regenerated."""
+    assert policy.carries_signal(None) is True
+    assert policy.shortlisted("qobuz", False, ["Drums"]) is True
+
+
+def test_seed_albums_prefers_the_labelled_count():
+    """One place reads discover.py's own/guest labelling, so the --min-albums
+    gate in resolve_qobuz and the score in signal_for cannot drift."""
+    assert policy.seed_albums_of({"albums": 2, "own_albums": 0}) == 0
+    assert policy.seed_albums_of({"albums": 7, "own_albums": 6}) == 6
+
+
+def test_an_unlabelled_count_falls_back_to_the_total():
+    """The old inflated number, taken knowingly: callers flag
+    unlabelled_albums when they use it."""
+    assert policy.seed_albums_of({"albums": 2}) == 2
+    assert policy.seed_albums_of({}) == 0
+    assert policy.seed_albums_of(None) == 0

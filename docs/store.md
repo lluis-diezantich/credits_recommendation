@@ -232,6 +232,7 @@ WITH kept AS (
     AND NOT via_is_first_artist                            -- not their own record
     AND (via_referral_classes LIKE '%performance%'         -- a player
          OR via_referral_classes LIKE '%production%')      -- or a producer
+    AND sig_score > 0                                      -- policy.carries_signal
     AND date >= '2015-01-01' AND streamable
 ),
 unheard AS (
@@ -264,6 +265,11 @@ Four things to know before trusting it.
 key `listens.artist_key` already carries. `lower(name)` matches 250 of 2,773
 pooled names against 313, because it cannot see an accent — it called Xoel López
 unheard, and he is in the export 331 times. That column exists for this query.
+
+**A score of 0 is not a weak referral, it is no referral.** `sig_score > 0`
+drops 175 rows through 5 people whose only link to the seed was a record he
+guested on — [adr/D18](adr/D18-drop-score-zero-referrals.md). It is separate
+from the three filters below, which are judgements about what a credit is worth.
 
 **The three filters are the difference between a list and a table dump.**
 Measured 2026-10-20: 7,860 rows, of which 1,470 Qobuz-native, 1,998 side credits
