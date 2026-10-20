@@ -427,3 +427,47 @@ def match_confidence(flags) -> float:
 def ranked_score(score: float, flags) -> float:
     """sig_score discounted by how plausible the match behind it is."""
     return score * match_confidence(flags)
+
+
+# ---------------------------------------------------------------------------
+# ALBUM PROVENANCE (stages/discover.py)
+#
+# Qobuz files a guest spot inside the GUEST's own discography, so artist/get on
+# a seed returns records the seed did not make. Discovery walked all of them and
+# credited everyone aboard as having worked on the seed's records, which is the
+# relationship inverted: they did not make his record, he sang on theirs.
+#
+# Measured 2026-10-20 over cache/credits, no requests:
+#
+#     Jorge Drexler       15 of 62 albums are not his records -- and only 5 of
+#                             the 15 say "feat." in the title, so the titles
+#                             cannot be the test
+#     Silvia Perez Cruz    3 of 44
+#
+# The test is who holds MainArtist across the album's tracks. A SHARE rather
+# than "is the seed billed anywhere on it", because a various-artists
+# compilation bills the seed on one track of twenty and is not his record
+# either.
+#
+# 0.5, and the exact value is UNTESTED on purpose: across all 106 albums in the
+# two corpora the seed holds MainArtist on every billed track or on none, never
+# in between, so any floor in (0, 1] labels them identically. A compilation is
+# the case that would tell two floors apart and there is not one yet. Half is
+# the value that reads as "most of the record", which is the intent.
+# ---------------------------------------------------------------------------
+
+OWN_ALBUM_MAIN_SHARE = 0.5
+
+
+def album_provenance(seed_billed: int, billed_tracks: int) -> str:
+    """"own", "guest" or "unknown" for one album in the seed's discography.
+
+    "unknown" is an absence of evidence, not a verdict of guest: no track on
+    the album names a MainArtist, so the string holds nothing to decide with.
+    Every one of the 500 cached tracks carries one today, which makes this a
+    guard rather than a case -- and the reason it is not an exception is that a
+    silent relabel of the whole album is the failure that matters here.
+    """
+    if billed_tracks <= 0:
+        return "unknown"
+    return "own" if seed_billed / billed_tracks >= OWN_ALBUM_MAIN_SHARE else "guest"

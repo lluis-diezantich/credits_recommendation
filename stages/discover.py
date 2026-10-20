@@ -32,13 +32,13 @@ import time
 import urllib.parse
 from pathlib import Path
 
-from core.credits import parse_performers
+from core.credits import main_artists, parse_performers
 from core.names import normalise
 from core.paths import CACHE, DATA
 from core.qobuz import API, APP_ID, PAUSE, STORE, artist_releases, store_cookies
 from core.qobuz import get as _get
 from core.qobuz import message as _message
-from policy import MUSICAL_ROLES, classify_roles
+from policy import MUSICAL_ROLES, album_provenance, classify_roles
 
 CACHE_DIR = CACHE / "credits"
 
@@ -96,6 +96,40 @@ def album_tracks(album_id: str, store: str, cookies: str,
     return slim, False
 
 
+def album_billing(tracks: list[dict], seed_key: str) -> tuple[str, list[str]]:
+    """(provenance, the other artists billed on this album).
+
+    Pure and offline: `tracks` is what album_tracks already returned, so this
+    makes no request and the labelling of a whole discography costs nothing.
+
+    Both halves answer the same question -- who is this record BY -- and the
+    answer runs in two directions, which is why they come back together:
+
+        own    the seed is billed on it, and the others billed alongside are
+               the guests on the seed's record
+        guest  the seed is not billed, so the record is the OTHER artist's and
+               the seed is the guest on theirs
+
+    Either way the names returned are artists the seed has made a record with,
+    and that is a different list from the people who worked ON the seed's
+    records -- the crew graph the rest of this file builds.
+    """
+    seed_billed = billed_tracks = 0
+    others: dict[str, str] = {}
+    for track in tracks:
+        billed = main_artists(track.get("performers") or "")
+        if not billed:
+            continue
+        billed_tracks += 1
+        keys = {normalise(name) for name in billed}
+        if seed_key in keys:
+            seed_billed += 1
+        for name in billed:
+            if normalise(name) != seed_key:
+                others.setdefault(normalise(name), name)
+    return album_provenance(seed_billed, billed_tracks), list(others.values())
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Discover who made a seed artist's records.")
     parser.add_argument("--artist", type=int, default=SEED_ARTIST, help="Qobuz seed artist id")
@@ -111,10 +145,15 @@ def main() -> int:
     if not releases:
         raise SystemExit(f"no releases for artist {args.artist} in the {args.store} store")
     print(f"seed: {seed_name} ({args.artist}) - {len(releases)} releases", file=sys.stderr)
+    seed_key = normalise(seed_name)
 
     # key -> evidence
     people: dict[str, dict] = collections.defaultdict(
         lambda: {"names": set(), "roles": collections.Counter(), "albums": {}, "tracks": 0})
+    # key -> the albums that bill this artist alongside the seed
+    co_artists: dict[str, dict] = collections.defaultdict(
+        lambda: {"names": set(), "albums": []})
+    provenances: collections.Counter[str] = collections.Counter()
     credited_tracks = 0
     total_tracks = 0
     failed = 0
@@ -126,6 +165,16 @@ def main() -> int:
             failed += 1
             continue
         fetched += 1
+        provenance, billed_with = album_billing(tracks, seed_key)
+        provenances[provenance] += 1
+        for name in billed_with:
+            entry = co_artists[normalise(name)]
+            entry["names"].add(name)
+            entry["albums"].append({
+                "album_id": str(release["id"]),
+                "title": release.get("title"),
+                "date": (release.get("release_date_original") or "")[:10],
+                "provenance": provenance})
         for track in tracks:
             total_tracks += 1
             credits = (track.get("performers") or "").strip()
@@ -142,6 +191,9 @@ def main() -> int:
                     "album_id": str(release["id"]),
                     "title": release.get("title"),
                     "date": (release.get("release_date_original") or "")[:10],
+                    # own or guest: a credit on a record the seed only sang on
+                    # is not a credit on the seed's record.
+                    "provenance": provenance,
                     "roles": [], "tracks": 0})
                 album["tracks"] += 1
                 for role in roles:
@@ -157,12 +209,13 @@ def main() -> int:
 
     kept, dropped = [], 0
     for key, entry in people.items():
-        if key == normalise(seed_name):
+        if key == seed_key:
             continue                      # the seed is not their own collaborator
         if not args.include_all and not is_musical(entry):
             dropped += 1
             continue
         albums = sorted(entry["albums"].values(), key=lambda a: a["date"] or "")
+        billing = collections.Counter(a["provenance"] for a in albums)
         top_role = entry["roles"].most_common(1)[0][0] if entry["roles"] else None
         classes = classify_roles(entry["roles"])
         kept.append({
@@ -174,7 +227,11 @@ def main() -> int:
             "cover_source_only": classes == ["writing"],
             "roles": dict(entry["roles"].most_common()),
             "albums": albums,
+            # `albums` still counts both, so this file's existing numbers and
+            # everything computed from them are unchanged; own_albums is what a
+            # consumer should prefer, and resolve_qobuz.py does not yet.
             "stats": {"albums": len(albums), "tracks": entry["tracks"],
+                      "own_albums": billing["own"], "guest_albums": billing["guest"],
                       "top_role": top_role,
                       "first": albums[0]["date"] if albums else None,
                       "last": albums[-1]["date"] if albums else None},
@@ -184,6 +241,27 @@ def main() -> int:
     # this person again, where track count just reflects album length.
     kept.sort(key=lambda p: (-p["stats"]["albums"], -p["stats"]["tracks"], p["key"]))
 
+    # Who the seed has made a record WITH, which is not who worked on the
+    # seed's records: measured against real listening it carries 59% (Drexler)
+    # and 40% (Perez Cruz) artists already played, against 13-16% for the crew
+    # graph above -- see docs/adr/D14-co-appearance-is-its-own-output.md.
+    together = []
+    for key, entry in co_artists.items():
+        albums = sorted(entry["albums"], key=lambda a: a["date"] or "")
+        billing = collections.Counter(a["provenance"] for a in albums)
+        together.append({
+            "key": key,
+            "names": sorted(entry["names"]),
+            "albums": albums,
+            # their_records: the seed was the guest. seed_records: they were.
+            "stats": {"albums": len(albums),
+                      "their_records": billing["guest"],
+                      "seed_records": billing["own"],
+                      "first": albums[0]["date"] if albums else None,
+                      "last": albums[-1]["date"] if albums else None},
+        })
+    together.sort(key=lambda p: (-p["stats"]["albums"], p["key"]))
+
     out = Path(args.out) if args.out else DATA / f"discovery_{args.artist}.json"
     out.write_text(json.dumps({
         "version": 1,
@@ -191,8 +269,12 @@ def main() -> int:
         "seed": {"qobuz_id": args.artist, "name": seed_name, "store": args.store,
                  "releases": len(releases), "albums_fetched": fetched,
                  "albums_failed": failed,
+                 "albums_own": provenances["own"],
+                 "albums_guest": provenances["guest"],
+                 "albums_unbilled": provenances["unknown"],
                  "tracks": total_tracks, "credited_tracks": credited_tracks},
         "people": kept,
+        "co_artists": together,
         "dropped_non_musical": dropped,
     }, indent=2, ensure_ascii=False))
 
@@ -201,11 +283,22 @@ def main() -> int:
     by_class = collections.Counter(c for p in kept for c in p["classes"])
     print(f"\n{credited_tracks}/{total_tracks} tracks credited"
           f"{f' ({failed} albums failed)' if failed else ''}")
+    unbilled = provenances["unknown"]
+    print(f"{provenances['own']} of {fetched} albums are the seed's own, "
+          f"{provenances['guest']} are guest spots on someone else's"
+          + (f", {unbilled} with nobody billed" if unbilled else ""))
     print(f"{len(kept)} musical people kept, {dropped} non-musical dropped")
     print(f"{len(multi)} appear on 2+ of the seed's albums")
     print("by class: " + ", ".join(f"{k} {v}" for k, v in by_class.most_common()))
     print(f"{len(covers)} are cover sources only (wrote a song the seed recorded, "
           "never worked with them)")
+    print(f"{len(together)} artists share a billing with the seed "
+          f"(made a record WITH them, not ON their records)")
+    print("\nbilled with the seed, top 10:")
+    for artist in together[:10]:
+        s = artist["stats"]
+        print(f"  {s['albums']:>2} alb  {artist['names'][0][:30]:<30} "
+              f"{s['seed_records']} on the seed's, {s['their_records']} on their own")
     print("\ntop 10:")
     for person in kept[:10]:
         s = person["stats"]

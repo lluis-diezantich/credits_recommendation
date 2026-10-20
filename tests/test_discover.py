@@ -1,0 +1,99 @@
+"""stages/discover.py: own record or guest spot, and who the seed is billed with.
+
+The first tests this file has had. `album_billing` is the only decision in it
+that is not plumbing, and it was extracted to be testable for the reason
+todo.md gives: Qobuz files a guest spot inside the GUEST's discography, so
+artist/get on a seed returns records the seed did not make, and discovery
+credited everyone aboard as having worked on the seed's records. 15 of
+Drexler's 62 albums and 3 of Perez Cruz's 44 are somebody else's.
+
+The titles cannot be the test -- only 5 of those 15 say "feat." -- so these
+fixtures deliberately carry titles that point the wrong way, to pin that the
+billing is what decides and the title is never read.
+
+The orchestration around it (main(), the fetch loop) is still uncovered, and
+that is what it IS now that the decision has moved out.
+"""
+
+from __future__ import annotations
+
+from stages.discover import album_billing
+
+SEED = "jorge drexler"
+
+
+def track(performers: str) -> dict:
+    return {"id": 1, "title": "t", "performers": performers}
+
+
+def test_a_record_the_seed_is_billed_on_is_their_own():
+    tracks = [track("Jorge Drexler, MainArtist, Vocal - Borja Barrueta, Drums")] * 3
+    assert album_billing(tracks, SEED) == ("own", [])
+
+
+def test_a_record_the_seed_is_not_billed_on_belongs_to_whoever_is():
+    """The leak, in one case: the seed sang on Lau Noah's record, so she is the
+    artist he made a record WITH -- not a person who worked on his."""
+    tracks = [track("Lau Noah, MainArtist, Vocal - Jorge Drexler, Vocal")]
+    assert album_billing(tracks, SEED) == ("guest", ["Lau Noah"])
+
+
+def test_the_title_is_never_read():
+    """5 of the 15 guest albums say "feat." and the other 10 do not, so a title
+    test catches a third of them. Billing catches all 15."""
+    says_nothing = [track("Perota Chingo, MainArtist - Jorge Drexler, Vocal")]
+    says_feat = [track("Lau Noah, MainArtist - Jorge Drexler, Vocal")]
+    assert album_billing(says_nothing, SEED)[0] == "guest"
+    assert album_billing(says_feat, SEED)[0] == "guest"
+
+
+def test_a_guest_on_the_seeds_own_record_is_still_a_co_appearance():
+    """The direction todo.md did not count: 23 of Drexler's co-appearances are
+    guests on HIS records, and they hit 57% against real listening."""
+    tracks = [track("Jorge Drexler, MainArtist - C. Tangana, MainArtist"),
+              track("Jorge Drexler, MainArtist, Vocal")]
+    assert album_billing(tracks, SEED) == ("own", ["C. Tangana"])
+
+
+def test_one_track_of_twenty_is_a_compilation_not_the_seeds_record():
+    """Why the rule is a share and not "is the seed billed anywhere on it".
+    No album in either corpus is in between, so this case is the floor's only
+    witness -- see policy.OWN_ALBUM_MAIN_SHARE."""
+    tracks = ([track("Jorge Drexler, MainArtist")]
+              + [track("Various Hands, MainArtist")] * 19)
+    provenance, others = album_billing(tracks, SEED)
+    assert provenance == "guest"
+    assert others == ["Various Hands"]
+
+
+def test_an_album_nobody_is_billed_on_is_unknown_rather_than_guest():
+    """Absence of evidence. All 500 cached tracks carry a MainArtist, so this
+    is a guard with no instance -- and the failure it guards against is
+    relabelling a whole discography as somebody else's."""
+    assert album_billing([track("Borja Barrueta, Drums")], SEED) == ("unknown", [])
+
+
+def test_tracks_with_no_credits_at_all_do_not_count_against_the_share():
+    """An uncredited track is not a track billed to somebody else."""
+    tracks = [track("Jorge Drexler, MainArtist"), track(""), track("")]
+    assert album_billing(tracks, SEED) == ("own", [])
+
+
+def test_a_co_artist_billed_on_every_track_is_named_once():
+    tracks = [track("Jorge Drexler, MainArtist - Kevin Johansen, MainArtist")] * 11
+    assert album_billing(tracks, SEED) == ("own", ["Kevin Johansen"])
+
+
+def test_the_first_spelling_of_a_name_wins():
+    """Keyed on normalise(), like everything else here, so the accented and
+    bare spellings are one artist and the one Qobuz printed first is kept."""
+    tracks = [track("Jorge Drexler, MainArtist - Anavitória, MainArtist"),
+              track("Jorge Drexler, MainArtist - Anavitoria, MainArtist")]
+    assert album_billing(tracks, SEED) == ("own", ["Anavitória"])
+
+
+def test_the_seed_is_never_their_own_co_appearance_however_it_is_spelled():
+    """`seed_key` arrives normalised; the billing does not. "Silvia Perez Cruz"
+    must not be billed alongside "Sílvia Pérez Cruz"."""
+    tracks = [track("Sílvia Pérez Cruz, MainArtist, Vocal")]
+    assert album_billing(tracks, "silvia perez cruz") == ("own", [])

@@ -20,7 +20,7 @@ that "fixes" it is a change to what the pools contain.
 
 from __future__ import annotations
 
-from core.credits import parse_performers
+from core.credits import main_artists, parse_performers
 
 # ---- the mechanical part -------------------------------------------------
 
@@ -163,3 +163,45 @@ def test_every_segment_head_survives_as_a_person():
                " - Ana Prada, Voices")
     heads = [segment.split(",")[0].strip() for segment in credits.split(" - ")]
     assert [name for name, _ in parse_performers(credits)] == heads
+
+
+# ---- who the record is BY ------------------------------------------------
+
+
+def test_main_artists_from_the_module_docstring():
+    assert main_artists(
+        "Jorge Drexler, MainArtist, Vocal - Ana Prada, Voices") == ["Jorge Drexler"]
+
+
+def test_several_artists_share_the_billing_in_the_order_given():
+    assert main_artists(
+        "Jorge Drexler, MainArtist - C. Tangana, MainArtist, Vocal"
+    ) == ["Jorge Drexler", "C. Tangana"]
+
+
+def test_a_track_with_no_billing_names_nobody():
+    """Not an error: 0 of the 500 cached tracks are like this, and
+    policy.album_provenance calls a whole album of them "unknown"."""
+    assert main_artists("Borja Barrueta, Drums - Matias Cella, Producer") == []
+    assert main_artists("") == []
+
+
+def test_the_role_is_matched_whatever_its_case():
+    assert main_artists("Lau Noah, mainartist") == ["Lau Noah"]
+    assert main_artists("Lau Noah, MAINARTIST") == ["Lau Noah"]
+
+
+def test_featuredartist_is_not_mainartist():
+    """A feature is a billing credit and not authorship of the record. The
+    question here is who the record is BY, and Qobuz answers it with one role."""
+    assert main_artists("Ana Tijoux, FeaturedArtist") == []
+
+
+def test_a_co_artist_packed_into_a_role_slot_is_not_billed_by_accident():
+    """The packed-segment form above, now reaching a function that reads roles
+    by name: "Rueda de Candombe" sits in a role slot, and parse_performers
+    drops it there because it heads its own segment -- so it is billed from
+    that segment and never from the seed's."""
+    packed = ("Jorge Drexler, Rueda de Candombe, MainArtist"
+              " - Rueda de Candombe, MainArtist, AssociatedPerformer")
+    assert main_artists(packed) == ["Jorge Drexler", "Rueda de Candombe"]

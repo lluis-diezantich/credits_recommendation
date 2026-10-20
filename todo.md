@@ -4,7 +4,9 @@ What is known to be missing, grouped by what kind of work it is. Moved out of
 the README so the entry point stays an orientation rather than a backlog.
 
 Not the same thing as [roadmap.md](docs/roadmap.md), which assesses this
-project *as a recommender*, stage by stage. This file is work items.
+project *as a recommender*, stage by stage, nor [docs/adr/](docs/adr/README.md),
+which records what was decided and against which alternative. This file is work
+items.
 
 ## Where this is going (decided 2026-10-17)
 
@@ -86,35 +88,56 @@ The gap between "a credits database" and "recommends music".
   finished — only the release dates can see that, and the radar currently
   fetches every one and then discards it into a bare id list.
 
-- **Co-appearance beats the crew graph by 6x, and the data is already cached.**
-  Measured 2026-10-18, two seeds. THE most important finding of that session.
+- **~~Co-appearance beats the crew graph, and the data is already cached.~~**
+  Done 2026-10-20, and it was the right order to do it in — see
+  [adr/D14](docs/adr/D14-co-appearance-is-its-own-output.md), which carries the
+  full method. `discover.py` labels each album `own` or `guest` from who holds
+  `MainArtist`, stamps `own_albums`/`guest_albums` into every person's stats,
+  and emits the artists the seed is billed alongside as a `co_artists` block.
+  `policy.album_provenance` holds the rule, `core.credits.main_artists` reads
+  the billing, and `tests/test_discover.py` is the first coverage that file has
+  had (0% → 23%).
 
-  | | hit rate |
-  |---|---|
-  | "who made a record WITH the seed" | **6 of 15 are artists you play (40%)** |
-  | "who worked ON the seed's records" | 82 of 1,184 (7%) |
+  Re-measured over `cache/credits` on 2026-10-20, no requests. 15 of Drexler's
+  62 albums and 3 of Pérez Cruz's 44 are not the seed's records, and only 5 of
+  those 15 say "feat.", so the titles could never have been the test.
 
-  7% is the baseline — the pool contains ~7% of your artists whenever you found
-  them, so the crew graph predicts nothing. 40% is a signal.
+  | | Drexler | Pérez Cruz |
+  |---|---|---|
+  | MainArtist of a guest album | 10/15 (67%) | 0/3 |
+  | co-MainArtist on an own album | 13/23 (57%) | 12/28 (43%) |
+  | either — co-appearance | 22/37 (59%) | 12/30 (40%) |
+  | the crew graph, all credited people | 36/278 (13%) | 45/287 (16%) |
 
-  **The cause is a leak in `discover.py`.** Qobuz files guest spots inside an
-  artist's own discography, and discovery does not distinguish them: **15 of the
-  62 albums it walked are not Drexler's records**, only 5 of which say "feat."
-  in the title. Everyone on those 15 enters the graph as if they had worked on
-  his records, when he worked on theirs. Lau Noah and Salvador Sobral — the two
-  rows that read as good recommendations — arrived that way.
+  Two corrections to the entry this replaces. The baseline is 13-16%, not 7%,
+  keyed on the 7,357 distinct `listens.artist_key` in the store — still a 3-4x
+  gap, not 6x. And there is a **second direction** it did not count: guests
+  billed on the seed's OWN records, 23 and 28 more names at a comparable rate.
+  `album_billing` returns both, since both answer "who has this artist made a
+  record with".
 
-  **The fix costs no requests.** The test is "who holds `MainArtist` on this
-  album, and is it the seed?", and `cache/credits` already holds the per-track
-  performers. Label the album own/guest, then make "who has this artist made
-  records with" its own output.
+  Caveat unchanged and still worth keeping: partly circular, since a guest spot
+  also exposed you to that record.
 
-  From two seeds it already names seven artists you have never played: Calequi y
-  Las Panteras, Kanaku y El Tigre, Leiton, Marcela Ferrari, Sebastian Jantos,
-  Caamaño & Ameixeiras, Hirahi Afonso.
+  What is still open, and none of it is expensive:
 
-  Caveat: partly circular, since a guest spot also exposed you to that record.
-  But 6-of-15 against 82-of-1,184 is too wide to be only that.
+  - **`resolve_qobuz.signal_for` still counts guest albums** in
+    `person_seed_albums`, so a referrer's weight is still inflated by the leak.
+    Fixing it changes stored scores and needs a pool regeneration — the same
+    bill as folding match plausibility into `sig_score`, so pay it once, for
+    both.
+  - **`load.py` has no column** for `provenance`, `own_albums` or `co_artists`,
+    so none of this is queryable from `data/music.db` and `docs/store.md` has
+    no shortlist over it.
+  - **The co-artist list inherits the name problem.** "Colors" (from *A COLORS
+    SHOW*) and "Penelope Cruz" are among Pérez Cruz's 28. It needs the same
+    stance as the pools before anything ranks it.
+  - **`top_role` is order-dependent on a tie.** Found while verifying this
+    change was behaviour-preserving, and it predates it: `Counter.most_common(1)`
+    breaks a tie by insertion order, so the role depends on the order Qobuz
+    returned the discography. `luis eduardo aute` has three roles at 1 each and
+    `juan falu` four at 13. A rebuild on a different day can flip it, which
+    means the field is not a fact about the person. Pick a tie-break.
 
 - **The credits pool itself has four defects, all measured 2026-10-18.**
 
@@ -233,7 +256,9 @@ Where the code can be wrong without anything noticing.
 
   All free — no requests. This is the "filters instead of ranking" row in
   [roadmap.md](docs/roadmap.md), and it reads as a nice-to-have there; the
-  numbers above make it the prerequisite.
+  numbers above make it the prerequisite. The stance taken so far — penalise on
+  read, do not drop — is [adr/D13](docs/adr/D13-match-plausibility-on-read.md),
+  which also names what folding it into `sig_score` would cost.
 
 - **~~`policy.py` and `core/credits.py` are untested.~~** Done: both at 100%,
   94 cases in `tests/test_policy.py` and `tests/test_credits.py`. The three

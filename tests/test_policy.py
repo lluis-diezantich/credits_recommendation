@@ -482,3 +482,33 @@ def test_an_unknown_flag_is_not_silently_a_penalty():
 
 def test_doubts_compound():
     assert policy.match_confidence(["single_token_name", "single_token_name"]) == 0.1 ** 2
+
+
+# ---- album provenance ---------------------------------------------------
+
+
+def test_the_seed_billed_throughout_owns_the_record():
+    assert policy.album_provenance(11, 11) == "own"
+
+
+def test_the_seed_billed_on_nothing_is_a_guest():
+    """15 of Drexler's 62 albums, 3 of Perez Cruz's 44."""
+    assert policy.album_provenance(0, 1) == "guest"
+
+
+def test_half_the_record_is_enough_to_own_it():
+    """The floor itself, stated. No album in either corpus is between 0 and 1,
+    so this is the only place the value is visible."""
+    assert policy.OWN_ALBUM_MAIN_SHARE == 0.5
+    assert policy.album_provenance(5, 10) == "own"
+    assert policy.album_provenance(4, 10) == "guest"
+
+
+def test_one_track_of_twenty_is_a_compilation():
+    assert policy.album_provenance(1, 20) == "guest"
+
+
+def test_nobody_billed_is_unknown_not_guest():
+    """Guards the division, and says the right thing: no billing, no verdict."""
+    assert policy.album_provenance(0, 0) == "unknown"
+    assert policy.album_provenance(3, 0) == "unknown"

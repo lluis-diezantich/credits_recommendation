@@ -69,6 +69,7 @@ record of what was actually shown, which is what the evaluation in
           │
           ▼
     Qobuz album/get ──▶ discover.py ──▶ discovery_*.json ─┐  278 people
+          │                              + co_artists      │  37 co-appearances
           │                                               │
           ├──────────▶ resolve_qobuz.py ──▶ pool.json ────┤  1,470 releases
           │                                               │
@@ -82,6 +83,17 @@ This is the project's actual thesis and the half that does not reach a reader.
 It is paused for a stated reason rather than neglect: 47% of those rows are
 name collisions and `sig_score` ranks them first, so ordering the list would
 make the wrongness more prominent. `todo.md` has the measurement.
+
+**Two relationships come out of one walk, and they are not equally good.**
+Qobuz files a guest spot inside the guest's own discography, so the walk above
+returns records the seed did not make — 15 of Drexler's 62. Everyone aboard used
+to enter the graph as crew on the seed's records, which inverts the
+relationship. `discover.py` now labels each album own or guest from who holds
+`MainArtist`, and emits the artists the seed is *billed alongside* as a separate
+`co_artists` block. Against real listening that list carries 59% artists already
+played (40% for Pérez Cruz) against 13-16% for the crew graph, so the cheaper
+half of this path is the better one — [adr/D14](adr/D14-co-appearance-is-its-own-output.md)
+has both directions and the method.
 
 ### Sideways — the store
 

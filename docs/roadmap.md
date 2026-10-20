@@ -6,15 +6,17 @@ requests, since that is the only scarce thing here.
 
 ## What can be recommended with what is already here
 
-None of this is built. It is what the current data and functions actually
-support. Cost is API requests, since that is the only scarce thing here — a query
-over what is already on disk is free.
+Almost none of this is built — one row below is, and it says so. The rest is
+what the current data and functions actually support. Cost is API requests,
+since that is the only scarce thing here — a query over what is already on disk
+is free.
 
 **Works exactly, today.**
 
 | | | cost |
 |---|---|---|
 | other recordings of a song | `writing_*.json` already lists every performer per song, so "the other 19 versions of Al Otro Lado Del Río" is a lookup | free |
+| who the seed has made a record WITH | built 2026-10-20: `discovery_*.json` carries a `co_artists` block, and against real listening it carries 59% artists already played (Drexler) against 13% for the crew graph — [adr/D14](adr/D14-co-appearance-is-its-own-output.md). Nothing consumes it into a recommendation yet, and it inherits the name-collision problem | free |
 
 **Straightforward, low risk.**
 

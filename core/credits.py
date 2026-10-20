@@ -66,3 +66,26 @@ def parse_performers(credits: str) -> list[tuple[str, list[str]]]:
                  if not (token in heads and token != parts[0])]
         people.append((parts[0], roles))
     return people
+
+
+# Qobuz's spelling of the billing credit, lowercased. The one role token this
+# module knows by name, because "who is this record BY" is a question about the
+# string's shape rather than about what a credit is worth.
+MAIN_ARTIST = "mainartist"
+
+
+def main_artists(credits: str) -> list[str]:
+    """The names billed MainArtist in one performers string, in order.
+
+        main_artists("Jorge Drexler, MainArtist, Vocal - Ana Prada, Voices")
+        -> ["Jorge Drexler"]
+
+    Mechanical, like parse_performers, and for the same reason: it reports who
+    Qobuz says holds the role and rules on nothing. Whether an album that bills
+    the seed somewhere is the seed's OWN record is a judgement about how much
+    of the album they hold -- policy.album_provenance -- because Qobuz files a
+    guest spot inside the guest's discography, so "the seed is billed here" and
+    "the seed made this" are different questions.
+    """
+    return [name for name, roles in parse_performers(credits)
+            if any(role.lower() == MAIN_ARTIST for role in roles)]
