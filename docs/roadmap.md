@@ -24,7 +24,7 @@ is free.
 |---|---|---|
 | a radar for PEOPLE, not artists | the repo's actual thesis and the one thing it cannot do: alert on records made by *people* you follow, not artists | 1 `album/get` per fresh release, cached |
 | filters instead of ranking | `covers_mill`, selectivity band and `album_wide_credit` already name most of the noise; dropping rows needs no taste model | free |
-| explanations | `via.signal` already holds enough for a sentence: "engineered 21 of the seed's albums and only 45 records in total" | free |
+| ~~explanations~~ | built 2026-10-20 for the co-artist list: `./stages/co_artists.py` prints one sentence per artist from `credits`, every clause a row — [adr/D21](adr/D21-explanations-name-what-the-person-did.md). Not done for the release shortlist | free |
 
 **Plausible, unproven — hypotheses about taste, not known signals.**
 

@@ -668,3 +668,29 @@ def test_an_unlabelled_count_falls_back_to_the_total():
     assert policy.seed_albums_of({"albums": 2}) == 2
     assert policy.seed_albums_of({}) == 0
     assert policy.seed_albums_of(None) == 0
+
+
+# ---- what an explanation may name ---------------------------------------
+
+
+def test_only_what_the_person_did_is_nameable():
+    """Billing is why they are in the list at all, so naming it is circular,
+    and engineering tells a listener nothing -- ROLE_WEIGHTS has said 0.15
+    since this file was written."""
+    assert policy.nameable_roles(
+        ["MainArtist", "Guitar", "Producer", "Mastering Engineer",
+         "AssociatedPerformer"]) == ["Guitar", "Producer"]
+
+
+def test_an_unrecognised_credit_is_nameable_because_it_is_an_instrument():
+    """role_class defaults to performance, and 65 of the corpus's 124 role
+    tokens are in no table: Berimbau, Wurlitzer, Theremin."""
+    assert policy.nameable_roles(["Berimbau"]) == ["Berimbau"]
+
+
+def test_nothing_nameable_is_an_empty_list_not_an_error():
+    """37 of the 67 co-artists are billing-only, and their honest sentence has
+    no role clause at all."""
+    assert policy.nameable_roles(["MainArtist"]) == []
+    assert policy.nameable_roles([]) == []
+    assert policy.nameable_roles(None) == []

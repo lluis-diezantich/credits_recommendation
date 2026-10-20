@@ -44,3 +44,4 @@ intended way round from here.
 | [D18](D18-drop-score-zero-referrals.md) | A referral scoring zero is dropped, and the resolver stops fetching one | Accepted |
 | [D19](D19-person-seed-is-the-grain.md) | Albums and tracks are per (person, seed), and `people` sums them | Accepted |
 | [D20](D20-the-funnel-is-queryable.md) | Everything the funnel is made of reaches the store, keyed by seed | Accepted |
+| [D21](D21-explanations-name-what-the-person-did.md) | An explanation names what the person did, and every clause is a row | Accepted |

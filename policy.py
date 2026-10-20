@@ -641,3 +641,30 @@ def seed_albums_of(stats) -> int:
     stats = stats or {}
     own = stats.get("own_albums")
     return (stats.get("albums") or 0) if own is None else own
+
+
+# ---------------------------------------------------------------------------
+# WHAT AN EXPLANATION MAY NAME
+#
+# "credited on 3 tracks (mainartist)" says nothing: MainArtist and
+# FeaturedArtist are billing lines, carried by every row, and they are already
+# the reason the artist is in the list at all. What a reader wants is what the
+# person DID -- guitar, producer, arranger.
+#
+# So an explanation names performance and production credits only, which is
+# the same split REFERRAL_CLASSES uses and for the same reason. 30 of the 67
+# co-artists in the two graphs have one; the other 37 are billing-only, and
+# their honest sentence is "they made a record together", with no role clause.
+# ---------------------------------------------------------------------------
+
+NAMEABLE_CLASSES = {"performance", "production"}
+
+
+def nameable_roles(roles) -> list[str]:
+    """The roles worth putting in a sentence, in the order given.
+
+    Engineering is excluded as well as billing: "credited on 11 tracks
+    (mastering engineer)" is true and tells a listener nothing, which is the
+    judgement ROLE_WEIGHTS has encoded at 0.15 all along.
+    """
+    return [r for r in roles or [] if role_class(r) in NAMEABLE_CLASSES]

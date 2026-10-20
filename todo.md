@@ -134,7 +134,10 @@ The gap between "a credits database" and "recommends music".
     [store.md](docs/store.md). `co_artists` is still read by nothing that
     recommends — it is now one join away rather than absent.
   - **The co-artist list inherits the name problem.** "Colors" (from *A COLORS
-    SHOW*) and "Penelope Cruz" are among Pérez Cruz's 28. It needs the same
+    SHOW*) and "Penelope Cruz" are among Pérez Cruz's 28, and since 2026-10-20
+    they get a fluent explanation each
+    ([adr/D21](docs/adr/D21-explanations-name-what-the-person-did.md)), which
+    makes a wrong row more convincing rather than less. It needs the same
     stance as the pools before anything ranks it.
   - **`top_role` is order-dependent on a tie.** Found while verifying this
     change was behaviour-preserving, and it predates it: `Counter.most_common(1)`
