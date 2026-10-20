@@ -121,11 +121,11 @@ The gap between "a credits database" and "recommends music".
 
   What is still open, and none of it is expensive:
 
-  - **`resolve_qobuz.signal_for` still counts guest albums** in
-    `person_seed_albums`, so a referrer's weight is still inflated by the leak.
-    Fixing it changes stored scores and needs a pool regeneration — the same
-    bill as folding match plausibility into `sig_score`, so pay it once, for
-    both.
+  - ~~**`resolve_qobuz.signal_for` still counts guest albums**~~ Fixed
+    2026-10-20: both resolvers prefer the discovery file's `own_albums` and
+    flag `unlabelled_albums` where the file predates the labelling, rather than
+    falling back silently to the inflated count. **Pending the run** — see "one
+    regeneration, three debts" below.
   - **`load.py` has no column** for `provenance`, `own_albums` or `co_artists`,
     so none of this is queryable from `data/music.db` and `docs/store.md` has
     no shortlist over it.
@@ -195,6 +195,33 @@ The gap between "a credits database" and "recommends music".
   Fred Kevorkian masters 1,070 records and is in both — so an intersection count
   must be multiplied by `selectivity()`, never used raw. A weighted gradient
   needs 4-5 seeds before it has any range.
+
+- **One regeneration, three debts — and it has not been run yet.** The code
+  for all three landed 2026-10-20
+  ([adr/D17](docs/adr/D17-fold-plausibility-into-the-score.md)): the match
+  penalty folded into `sig_score`, `person_seed_albums` counting only the
+  seed's own albums, and both catalogue sizes kept instead of dropped. Nothing
+  in `data/` reflects any of it, so `sig_match_confidence` is NULL on all 7,860
+  rows and `docs/store.md` still discounts conditionally on that.
+
+  The run, in this order — the order matters, because a discovery file written
+  before the own/guest labelling makes every row `unlabelled_albums` and the
+  second half of D17 does nothing:
+
+      ./stages/discover.py --artist 41620          # 1 request, albums cached
+      ./stages/discover.py --artist 656411         # 1 request
+      ./stages/resolve_qobuz.py                    # ~59 artist/get
+      ./stages/resolve_discogs.py                  # 128-person fan-out, needs
+                                                   #   DISCOGS_TOKEN, cached
+      ./stages/load.py                             # free, rebuilds the store
+
+  Then the `sig_match_confidence IS NULL` branch in `docs/store.md` can go, and
+  the one thing D17 could NOT measure becomes measurable: whether catalogue
+  size separates a collision from a real match. Two cheaper corroborations were
+  tried and both failed — graph overlap is 0 for Henry Mancini and 0 for Zahara
+  alike, and date windows are disjoint for nobody because Qobuz artist pages
+  aggregate reissues to 2026. So size is a hypothesis with the data to test it,
+  not a fix.
 
 - **A radar for people, not artists.** The thesis, and the one thing this cannot
   do: alert on records made by *people* you follow. The pools hold 7,860
@@ -290,8 +317,11 @@ Where the code can be wrong without anything noticing.
   - require more than a bare exact match for a single-token name: an album
     count, an overlap with the referrer's own catalogue, or a genre that is not
     a mid-century film score.
-  - fold match plausibility into `sig_score`, so a shaky resolve cannot
-    inherit a strong referrer's weight.
+  - ~~fold match plausibility into `sig_score`, so a shaky resolve cannot
+    inherit a strong referrer's weight.~~ Done in the resolvers 2026-10-20
+    ([adr/D17](docs/adr/D17-fold-plausibility-into-the-score.md)), together
+    with the two other debts that needed the same regeneration. **Pending the
+    run** — see "one regeneration, three debts" below.
 
   All free — no requests. This is the "filters instead of ranking" row in
   [roadmap.md](docs/roadmap.md), and it reads as a nice-to-have there; the

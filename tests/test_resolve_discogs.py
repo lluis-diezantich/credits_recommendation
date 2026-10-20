@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import pytest
 
+import policy
 import stages.resolve_discogs as mod
 
 
@@ -307,3 +308,22 @@ def test_a_person_with_no_roles_is_counted_in_neither():
 def test_a_census_of_nobody_is_empty():
     tops, by_class = mod.role_census([])
     assert not tops and not by_class
+
+
+# ---- the folded score ---------------------------------------------------
+
+
+def test_a_single_token_match_is_discounted_in_the_stored_score():
+    """policy.MATCH_PENALTY folded in at the source, which is what that block
+    calls the better fix: "Morgan" reached 1.00, the maximum, on a name match
+    nobody corroborated."""
+    assert policy.match_confidence(["single_token_name"]) == 0.1
+    raw = 1.0 * 1.0 * 1.0                     # weight x selectivity x embedded
+    assert round(raw * policy.match_confidence(["single_token_name"]), 4) == 0.1
+
+
+def test_an_unlabelled_discovery_file_is_flagged_and_not_discounted():
+    """The flag says the seed-album count could not be checked for guest
+    spots. It changes no score -- an unknown flag is 1.0 by design -- so it
+    reports rather than guesses."""
+    assert policy.match_confidence(["unlabelled_albums"]) == 1.0

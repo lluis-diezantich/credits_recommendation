@@ -154,9 +154,17 @@ CREATE TABLE releases (
     via_is_first_artist BOOLEAN,
 --  ^ the referring person is the FIRST credited artist, i.e. it is their own
 --    record rather than one they worked on. 5,862 of the 7,860 rows are.
+    via_albums_count INTEGER, via_discogs_releases INTEGER,
+--  ^ the two catalogue sizes, for corroborating the name match: how many
+--    albums the matched Qobuz artist holds, and how many releases the Discogs
+--    credits put that person on. Both were fetched and dropped before.
     sig_score REAL, sig_role_weight REAL, sig_selectivity REAL,
     sig_selectivity_band TEXT, sig_person_seed_albums INTEGER,
-    sig_embedded REAL, sig_flags TEXT,
+    sig_embedded REAL, sig_match_confidence REAL, sig_flags TEXT,
+--  ^ sig_score is ALREADY multiplied by sig_match_confidence by the resolvers,
+--    so a reader must not apply the penalty a second time. Divide by it to
+--    recover the raw referrer score. (No semicolons in these comments: the
+--    tests split SCHEMA on them.)
     PRIMARY KEY (album_id, source));
 -- name_key is normalise(name), the same key listens.artist_key carries, so a
 -- pooled artist can be joined to your listening at all. Without it the only
@@ -644,9 +652,11 @@ def load_releases(ld: Loader) -> None:
                 joined(via.get("through")), joined(via.get("through_roles")),
                 joined(sorted({role_class(r) for r in referral})),
                 bool(credited) and normalise(credited[0]) == normalise(via.get("name") or ""),
+                via.get("albums_count"), via.get("discogs_releases"),
                 sig.get("score"), sig.get("role_weight"), sig.get("selectivity"),
                 sig.get("selectivity_band"), sig.get("person_seed_albums"),
-                sig.get("embedded"), joined(sig.get("flags"))))
+                sig.get("embedded"), sig.get("match_confidence"),
+                joined(sig.get("flags"))))
             artists += [(rel.get("album_id"), source, a, normalise(a))
                         for a in rel.get("artists") or []]
         ld.insert("releases",
@@ -654,9 +664,11 @@ def load_releases(ld: Loader) -> None:
                    "streamable", "label", "genre", "via_name", "via_qobuz_id",
                    "via_path", "via_top_role", "via_seed_albums", "via_through",
                    "via_through_roles", "via_referral_classes",
-                   "via_is_first_artist", "sig_score", "sig_role_weight", "sig_selectivity",
-                   "sig_selectivity_band", "sig_person_seed_albums", "sig_embedded",
-                   "sig_flags"], rows)
+                   "via_is_first_artist", "via_albums_count",
+                   "via_discogs_releases", "sig_score", "sig_role_weight",
+                   "sig_selectivity", "sig_selectivity_band",
+                   "sig_person_seed_albums", "sig_embedded",
+                   "sig_match_confidence", "sig_flags"], rows)
         ld.insert("release_artists", ["album_id", "source", "name", "name_key"],
                   artists)
         ld.note("releases", name, len(rows), blob.get("generated"))

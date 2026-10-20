@@ -220,9 +220,11 @@ Filtered first, then ordered: `policy.shortlisted`'s three cuts, then
 ```sql
 WITH kept AS (
   SELECT album_id, source, date, title, via_name, genre,
-         -- policy.ranked_score: a single-token name match is suspicion, not
-         -- proof, so it loses its place in the order and keeps its row.
-         sig_score * CASE WHEN sig_flags LIKE '%single_token_name%'
+         -- The resolvers now fold policy.match_confidence into sig_score, so
+         -- this only discounts rows written BEFORE that -- the ones with no
+         -- sig_match_confidence. Penalising a new row here would square it.
+         sig_score * CASE WHEN sig_match_confidence IS NULL
+                           AND sig_flags LIKE '%single_token_name%'
                           THEN 0.1 ELSE 1.0 END AS score
   FROM releases
   -- policy.shortlisted, spelled out. 7,860 rows -> 291.
@@ -276,6 +278,13 @@ drift, the predicate is right.
 `single_token_name`, through five people — "Mauro" alone contributes 42. Filtering
 to the Qobuz path does not escape the name problem, it only reduces it: that path
 resolves names through autosuggest too.
+
+**Which score you are reading depends on when the pool was written.**
+`sig_match_confidence` is the discount the resolvers applied, and `sig_score` is
+already multiplied by it — divide to recover the raw referrer score. It is NULL
+for every row written before [adr/D17](adr/D17-fold-plausibility-into-the-score.md),
+which is why the CASE above is conditional. Once both pools have been
+regenerated, that branch can go.
 
 **The cap is what makes it a list rather than one discography.** The 291 arrive
 through 30 people (212 through 24, once unheard and since-2015 are asked for too),

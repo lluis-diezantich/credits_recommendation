@@ -44,6 +44,7 @@ from policy import (
     CLASS_NAMES,
     MIN_ROLE_WEIGHT,
     MIN_SIGNAL,
+    match_confidence,
     person_role_weight,
     person_roles,
     role_class,
@@ -404,9 +405,14 @@ def main() -> int:
                 "name": name, "releases": 0, "via": []})
             slot["releases"] += count
             best_role = max(role_by_artist[name], key=role_weight, default=None)
+            # own_albums where the discovery file has it: a guest spot is not
+            # one of the seed's records, so it must not count as embedding.
+            own = person.get("own_albums")
             slot["via"].append({"name": names[0], "discogs_id": did,
                                 "roles": sorted(role_by_artist[name]),
-                                "person_seed_albums": person.get("albums"),
+                                "person_seed_albums": (person.get("albums")
+                                                       if own is None else own),
+                                "albums_labelled": own is not None,
                                 "role_weight": role_weight(best_role),
                                 "selectivity": select_score,
                                 "selectivity_band": select_label})
@@ -481,14 +487,25 @@ def build_pool(args, seed, known_qobuz, collaborators) -> int:
         # person is in the seed's catalogue.
         best = max(artist["via"], key=lambda v: v["role_weight"] * v["selectivity"])
         embedded = min((best.get("person_seed_albums") or 0) / 10.0, 1.0)
+        flags = []
+        if not best.get("albums_labelled"):
+            flags.append("unlabelled_albums")
+        if len((artist.get("qobuz_name") or "").split()) == 1:
+            flags.append("single_token_name")
+        # Folded into the stored score rather than left to each reader, which
+        # is what policy.MATCH_PENALTY calls the better fix: this is the path
+        # that produced "Morgan" at 1.00, the maximum, on a name match nobody
+        # corroborated.
+        confidence = match_confidence(flags)
         signal = {"role_weight": best["role_weight"],
                   "selectivity": best["selectivity"],
                   "selectivity_band": best["selectivity_band"],
                   "person_seed_albums": best.get("person_seed_albums"),
                   "embedded": round(embedded, 3),
-                  "score": round(best["role_weight"] * best["selectivity"] * embedded, 4),
-                  "flags": (["single_token_name"]
-                            if len((artist.get("qobuz_name") or "").split()) == 1 else [])}
+                  "match_confidence": confidence,
+                  "score": round(best["role_weight"] * best["selectivity"]
+                                 * embedded * confidence, 4),
+                  "flags": flags}
         _, releases, _ = artist_releases(artist["qobuz_id"], args.store, cookies)
         for release in releases:
             rid = str(release.get("id") or "")
@@ -514,6 +531,12 @@ def build_pool(args, seed, known_qobuz, collaborators) -> int:
                 # Provenance chains through the studio person Qobuz could not see.
                 "via": {"qobuz_id": artist["qobuz_id"], "name": artist["qobuz_name"],
                         "path": "discogs",
+                        # The two catalogue sizes, for the corroboration this
+                        # path has never had: how many albums the Qobuz artist
+                        # we matched holds, against how many releases the
+                        # Discogs credit rows put this person on.
+                        "albums_count": artist.get("albums_count"),
+                        "discogs_releases": artist.get("releases"),
                         "through": [v["name"] for v in artist["via"]],
                         "through_roles": sorted({r for v in artist["via"] for r in v["roles"]}),
                         "signal": signal},

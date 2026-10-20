@@ -40,21 +40,37 @@ from core.qobuz import (
     search_artists,
     store_cookies,
 )
-from policy import WEAK_CLASSES, role_weight
+from policy import WEAK_CLASSES, match_confidence, role_weight
 
 
 def signal_for(artist: dict) -> dict:
     """A comparable score for how much a referral is worth.
 
-    role_weight  x  how embedded the person is in the seed's catalogue.
-    Selectivity (how many records they touch in total) needs Discogs and is
-    added by discogs_resolve.py; here it is absent, not assumed.
+    role_weight x how embedded the person is in the seed's catalogue x how
+    plausible the match behind it is. Selectivity (how many records they touch
+    in total) needs Discogs and is added by discogs_resolve.py; here it is
+    absent, not assumed.
+
+    The plausibility term is folded in HERE rather than applied by every
+    reader, which is policy.MATCH_PENALTY's own stated better fix: a score
+    computed only from the referrer let a shaky resolve inherit a strong
+    referrer's weight and rank first. `match_confidence` is kept beside the
+    score so the discount is visible and reversible -- the row keeps its
+    provenance, which is the whole stance.
     """
     stats = artist.get("stats") or {}
     weight = role_weight(stats.get("top_role"))
-    seed_albums = stats.get("albums") or 0
+    # Guest spots are not the seed's records: discover.py labels them, and a
+    # person reached only through one did not work on the seed's catalogue.
+    own_albums = stats.get("own_albums")
+    seed_albums = stats.get("albums") or 0 if own_albums is None else own_albums
     embedded = min(seed_albums / 10.0, 1.0)      # 10+ of the seed's albums saturates
     flags = []
+    if own_albums is None:
+        # A discovery file written before albums were labelled own/guest. Says
+        # so rather than falling back silently, because the fallback is the old
+        # inflated number and nothing downstream could tell.
+        flags.append("unlabelled_albums")
     if len((artist.get("name") or "").split()) == 1:
         # Single-word names are what Qobuz collapses into bucket entities
         # (one "Morgan" holding a 1972 prog album and 2026 reggaeton). A flag,
@@ -62,9 +78,12 @@ def signal_for(artist: dict) -> dict:
         flags.append("single_token_name")
     if set(artist.get("classes") or []) <= WEAK_CLASSES:
         flags.append("weak_classes")
+    confidence = match_confidence(flags)
     return {"role_weight": round(weight, 3), "seed_albums": seed_albums,
+            "own_albums": own_albums,
             "embedded": round(embedded, 3),
-            "score": round(weight * embedded, 4), "flags": flags}
+            "match_confidence": confidence,
+            "score": round(weight * embedded * confidence, 4), "flags": flags}
 
 
 def load_mutes(path: Path) -> set[int]:
@@ -221,6 +240,12 @@ def main() -> int:
                 "via": {"qobuz_id": artist["qobuz_id"], "name": artist["name"],
                         "classes": artist["classes"], "top_role": artist["stats"]["top_role"],
                         "seed_albums": artist["stats"]["albums"],
+                        # How big the catalogue we matched to actually is.
+                        # Already fetched by the autosuggest and until now
+                        # dropped: a session player matched to an artist
+                        # holding 400 albums is the collision this cannot
+                        # otherwise see.
+                        "albums_count": (artist.get("resolved") or {}).get("albums_count"),
                         "signal": signal_for(artist)},
             })
         if index % 20 == 0:

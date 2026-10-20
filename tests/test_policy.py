@@ -617,3 +617,12 @@ def test_referrers_that_are_none_are_one_group_not_many():
     would be one referrer and the cap would leave two rows in total."""
     rows = [row(None, 1), row(None, 1), row(None, 1)]
     assert len(policy.cap_per_referrer(rows, lambda r: r["via"])) == 2
+
+
+def test_the_unlabelled_albums_flag_costs_nothing():
+    """resolve_qobuz and resolve_discogs both set it when the discovery file
+    predates own/guest labelling, so the seed-album count could not be checked
+    for guest spots. It must report without changing an order -- the same rule
+    as every other unknown flag."""
+    assert policy.match_confidence(["unlabelled_albums"]) == 1.0
+    assert policy.match_confidence(["unlabelled_albums", "single_token_name"]) == 0.1
