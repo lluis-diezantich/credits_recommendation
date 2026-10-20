@@ -67,6 +67,41 @@ than a commitment: whether this works outside one scene. Both current seeds sit
 in the Iberian/Latin cluster, where guest culture is dense and Qobuz's credits
 are good. Tom Waits and PJ Harvey are the test.
 
+## What the probe found (2026-10-20, same day)
+
+Little Simz (53 releases) and Björk (153) were walked, ~200 requests. **The
+method generalizes and the counts do not.**
+
+Generalizes: Gorillaz, Sampha, Thom Yorke, Dirty Projectors, Shygirl, ANOHNI,
+Yves Tumor, Obongjayar, alt-J are all real, checkable collaborations that no
+genre model would produce. 19 co-artists for Simz, 35 for Björk.
+
+Three defects, invisible in the Iberian seeds, all free to fix:
+
+| | |
+|---|---|
+| seed credited under a legal name | `discover.py` drops `normalise(seed_name)`, so "Björk Guðmundsdóttir" (**120 albums, 581 tracks**) is the top of Björk's own crew graph. Little Simz appears three times — Simbiatu Ajikawo (24), Simbiatu Abisola Abiola Ajikawo (5), Simbi Ajikawo (4) |
+| one person split across names | Sjón is four people: Sjon 12, Sigurjon Sigurdsson 11, Sigurjon Birgir Sigurdsson 9, Sigurjón Birgir Sigurðsson 2. Arca is Alejandro Ghersi 11 and Arca 7. Inflo is Inflo 13 and Dean Josiah Cover 10 |
+| editions inflate counts | "WE PRAY" is one Coldplay single as **5 album ids**, so Coldplay, Burna Boy, Elyanna and tINI each score 5 co-appearances off one song. Björk: 141 album ids for 99 distinct titles, 42 surplus |
+
+By seed:
+
+| seed | releases | people | co-artists | surplus editions | top of its own crew graph |
+|---|---|---|---|---|---|
+| Little Simz | 53 | 181 | 19 | 6 | **itself** (24) |
+| Björk | 153 | 149 | 35 | 42 | **itself** (120) |
+| Jorge Drexler | 63 | 278 | 37 | 4 | Carles Campi Campón (21) |
+| Sílvia Pérez Cruz | 44 | 287 | 30 | 1 | Alberto Pérez (13) |
+
+Drexler and Pérez Cruz never showed any of it: Qobuz credits them under their
+performing names, and their catalogues carry few alternate editions. Two seeds
+from one scene were not enough to see the identity model break.
+
+A fourth, subtler one: "WE PRAY" is labelled `own` because the seed holds
+MainArtist on it, and it is a Coldplay single. `policy.album_provenance`
+assumes one main artist per record, which holds in a cantautor catalogue and
+not in a features culture.
+
 ## Consequences
 
 - `todo.md`'s ordering changes: more seeds moves from "avoid" to "do next",

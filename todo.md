@@ -37,17 +37,29 @@ not correct.
    makes a wrong row more convincing rather than less. Free. **Blocks
    everything user-facing.**
 
-2. **Add 6-8 seeds from the profile's 80 `core` artists, by rule.** ~400
-   requests one-off, about four weeks of the Friday radar's own traffic. The
-   rule (band + a months floor) is a `policy.py` number and wants an ADR;
-   picking by hand is what produced the current two.
+2. **~~Probe two seeds outside the Iberian cluster.~~** Done 2026-10-20 with
+   Little Simz and Björk, ~200 requests, and it paid for itself immediately —
+   the full result is in
+   [adr/D22](docs/adr/D22-co-appearance-is-the-second-pipeline.md). **The
+   method generalizes and the counts do not.** Gorillaz, Sampha, Thom Yorke,
+   Dirty Projectors, Shygirl, ANOHNI, Yves Tumor and alt-J are real, checkable
+   collaborations no genre model would produce. But three identity defects that
+   two Iberian seeds could never have shown now corrupt every count — see
+   **Correctness** below. **Those block step 3.**
 
-   Do **Tom Waits and PJ Harvey first, as a probe.** Both current seeds sit in
-   the Iberian/Latin cluster, where guest culture is dense and Qobuz's credits
-   are good. Whether this works outside one scene is unmeasured, and that is
-   cheaper to find out at two seeds than at ten.
+   Still to do: **6-8 more seeds from the profile's 80 `core` artists, by
+   rule** — ~50 requests each, about four weeks of the Friday radar's traffic
+   for eight. The rule (band plus a recent-months floor) is a `policy.py`
+   number and wants an ADR; picking by hand is what produced the first four.
+   Candidates by recent months, from `profile.json`: Nathy Peluso 24/24, El
+   Gran Combo 23/24, Celia Cruz 22, Kali Uchis 22, Ca7riel 21, ROSALÍA 21,
+   Willie Colón 21. Not before the three fixes, or every new seed arrives with
+   the same corrupted counts.
 
-3. **Rank across seeds.** The inputs are already stored: how many of your
+3. **Rank across seeds.** Blocked on the three identity fixes below: ranking
+   by `albums` today puts Coldplay, Burna Boy, Elyanna and tINI at the top of
+   the Little Simz list on the strength of one single stored five times. The
+   inputs are already stored: how many of your
    artists made a record with them, how many records each way, the direction
    (the seed guesting on THEIR album is the stronger claim — your artist chose
    to show up), the roles, recency. Plus a **ubiquity penalty**, because
@@ -353,6 +365,47 @@ The gap between "a credits database" and "recommends music".
 ## Correctness
 
 Where the code can be wrong without anything noticing.
+
+- **Three identity defects, found by the 2026-10-20 probe.** All free to fix,
+  all invisible until a seed outside the Iberian cluster was walked, and
+  together they corrupt every co-appearance and crew count. Numbers and the
+  per-seed table are in
+  [adr/D22](docs/adr/D22-co-appearance-is-the-second-pipeline.md).
+
+  - **The seed is credited under a legal name, so the seed-drop misses it.**
+    `discover.py` skips `normalise(seed_name)` only, so "Björk Guðmundsdóttir"
+    — 120 albums, 581 tracks — is the biggest collaborator in Björk's own
+    graph, and Little Simz appears three times under her legal name for 33
+    albums. Drexler and Pérez Cruz are credited under their performing names,
+    which is why this never showed.
+
+    Not a one-liner, because the test has to distinguish the seed from a
+    lifelong writing partner: Sjón holds 12 of Björk's 148 own albums and
+    Carles Campi Campón 21 of Drexler's 48 (44%), so a bare share threshold
+    would catch a real producer. What separates them is measurable — the seed
+    holds `MainArtist`, a producer does not — and that wants checking before
+    a number goes in `policy.py`.
+
+  - **One person splits across names, and it hits the best collaborators.**
+    Sjón is four people (Sjon 12, Sigurjon Sigurdsson 11, Sigurjon Birgir
+    Sigurdsson 9, Sigurjón Birgir Sigurðsson 2), Arca is two (Alejandro Ghersi
+    11, Arca 7), Inflo is two (Inflo 13, Dean Josiah Cover 10). The identity
+    model is `normalise(primary name)` and `people`'s docstring already admits
+    the limit — this is the first evidence it splits REAL evidence rather than
+    merely colliding strangers, and it splits exactly the people who matter
+    most. Needs a source of aliases: a hand-edited file like
+    `favourites.json`, or a Qobuz lookup per name, which costs requests.
+
+  - **Editions inflate every count.** "WE PRAY" is one Coldplay single stored
+    as five album ids. Björk has 141 album ids for 99 distinct titles, 42
+    surplus. This is the "Album identity" entry below, now with a measured
+    consequence rather than a theoretical one.
+
+  A fourth, subtler: `policy.album_provenance` assumes one `MainArtist` per
+  record, so "WE PRAY" reads as Little Simz's OWN record because she is billed
+  on it. True in a cantautor catalogue, false in a features culture, and it
+  means `own` stops meaning "the seed's record" on exactly the records where
+  several artists share a billing.
 
 - **~~One seed's numbers overwrote another's in `people`.~~** Fixed 2026-10-20
   ([adr/D19](docs/adr/D19-person-seed-is-the-grain.md)). `load_people` called
