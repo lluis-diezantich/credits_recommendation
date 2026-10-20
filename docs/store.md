@@ -219,7 +219,7 @@ Filtered first, then ordered: `policy.shortlisted`'s three cuts, then
 
 ```sql
 WITH kept AS (
-  SELECT album_id, source, date, title, via_name, via_through, genre,
+  SELECT album_id, source, date, title, via_name, genre,
          -- policy.ranked_score: a single-token name match is suspicion, not
          -- proof, so it loses its place in the order and keeps its row.
          sig_score * CASE WHEN sig_flags LIKE '%single_token_name%'
@@ -227,20 +227,31 @@ WITH kept AS (
   FROM releases
   -- policy.shortlisted, spelled out. 7,860 rows -> 291.
   WHERE source <> 'discogs'                               -- 81% of the rows
-    AND NOT via_is_first_artist                           -- not their own record
-    AND (via_referral_classes LIKE '%performance%'        -- a player
-         OR via_referral_classes LIKE '%production%')     -- or a producer
+    AND NOT via_is_first_artist                            -- not their own record
+    AND (via_referral_classes LIKE '%performance%'         -- a player
+         OR via_referral_classes LIKE '%production%')      -- or a producer
     AND date >= '2015-01-01' AND streamable
+),
+unheard AS (
+  SELECT * FROM kept
+  WHERE NOT EXISTS (
+    SELECT 1 FROM release_artists ra
+    JOIN listens l ON l.artist_key = ra.name_key
+    WHERE ra.album_id = kept.album_id AND ra.source = kept.source)
+),
+capped AS (
+  -- policy.cap_per_referrer, MAX_PER_REFERRER = 2. Keyed on via_name, NOT
+  -- via_through, which is NULL on every Qobuz-path row.
+  SELECT *, ROW_NUMBER() OVER (PARTITION BY via_name
+                               ORDER BY score DESC, date) AS nth
+  FROM unheard
 )
-SELECT ROUND(score, 2) AS score, date, title, via_name AS through,
+SELECT ROUND(score, 2) AS score, date, title, via_name AS through, genre,
        (SELECT name FROM release_artists ra
-        WHERE ra.album_id = kept.album_id AND ra.source = kept.source
+        WHERE ra.album_id = capped.album_id AND ra.source = capped.source
         LIMIT 1) AS artist
-FROM kept
-WHERE NOT EXISTS (
-  SELECT 1 FROM release_artists ra
-  JOIN listens l ON l.artist_key = ra.name_key
-  WHERE ra.album_id = kept.album_id AND ra.source = kept.source)
+FROM capped
+WHERE nth <= 2
 ORDER BY score DESC, date
 LIMIT 20;
 ```
@@ -266,10 +277,16 @@ drift, the predicate is right.
 to the Qobuz path does not escape the name problem, it only reduces it: that path
 resolves names through autosuggest too.
 
-**It does not diversify.** The 291 come through 30 people, and the uncapped top is
-nine Juan Campodónico rows. Capping at two per `via_name` is a post-processing
-decision nothing here makes yet — `roadmap.md` lists it as missing. `artist` is
-also an arbitrary one of the credited names, since `LIMIT 1` has no ordering.
+**The cap is what makes it a list rather than one discography.** The 291 arrive
+through 30 people (212 through 24, once unheard and since-2015 are asked for too),
+and uncapped the first rows were nine Juan Campodónico records. `nth <= 2` leaves
+38 rows across all 24, with 12 distinct people in the top 20 —
+[adr/D16](adr/D16-cap-the-list-per-referrer.md) has the numbers for caps of 1, 2,
+3 and 5. Raising it brings the dropped rows straight back; nothing is reordered
+and no score changes.
+
+`artist` is still an arbitrary one of the credited names, since `LIMIT 1` has no
+ordering.
 
 **Where the identifiers are** — 92.6% of listens carry a `recording_mbid`, which
 is the only MusicBrainz identifier anywhere in this project.

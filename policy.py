@@ -539,3 +539,57 @@ def shortlisted(source: str, via_is_first_artist: bool, roles) -> bool:
     return (source != "discogs"
             and not via_is_first_artist
             and musical_referral(roles))
+
+
+# ---------------------------------------------------------------------------
+# ONE LIST, NOT ONE PRODUCER'S DISCOGRAPHY (the cap)
+#
+# The three filters in POOL FILTERS leave 291 rows, and 212 once unheard,
+# streamable and since-2015 are asked for as well -- but they arrive through
+# only 24 people, and the top of the order is whichever of them was reached
+# through the strongest credit. Nine of the first rows were Juan Campodonico.
+# A list like that tests one producer, not the graph.
+#
+# Measured 2026-10-20 over the 212:
+#
+#     cap   rows   distinct people in the top 20
+#       1     24   20
+#       2     38   12
+#       3     52    8
+#       5     80    7
+#
+# 2, which is where the top of the list stops being one person without
+# flattening it to one row each. At 1 the strongest referral and the second
+# strongest are indistinguishable, which throws away the thing the score is
+# for; by 3 a single producer is a third of the first ten again.
+#
+# The key is via_name -- the person whose catalogue the release came out of.
+# todo.md and store.md both said via_through, which is NULL on all 1,470
+# Qobuz-path rows (it records which of the SEED's people referred, and only
+# the Discogs path writes it), so capping on it would have put the entire
+# shortlist in one group.
+#
+# A cap, not a diversity score: it is a rule about the list rather than about
+# any row, so no row's score changes and nothing is reordered. The row that
+# loses its place is still in the pool, and raising the cap brings it back.
+# ---------------------------------------------------------------------------
+
+MAX_PER_REFERRER = 2
+
+
+def cap_per_referrer(rows, referrer, limit: int = MAX_PER_REFERRER) -> list:
+    """The first `limit` rows per referrer, in the order given.
+
+    Order in, order out: the caller has already decided what "best" means, and
+    this only thins what they produced. `referrer` reads the key off a row, so
+    this does not need to know the shape of one.
+    """
+    kept: list = []
+    seen: dict = {}
+    for row in rows:
+        key = referrer(row)
+        if seen.get(key, 0) >= limit:
+            continue
+        seen[key] = seen.get(key, 0) + 1
+        kept.append(row)
+    return kept

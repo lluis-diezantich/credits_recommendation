@@ -39,3 +39,4 @@ intended way round from here.
 | [D13](D13-match-plausibility-on-read.md) | A shaky name match is penalised on read, not dropped | Accepted |
 | [D14](D14-co-appearance-is-its-own-output.md) | An album in the seed's discography is labelled own or guest, and co-appearance is its own output | Accepted |
 | [D15](D15-filters-before-ranking.md) | The pool is filtered on read by three stored facts, before anything ranks it | Accepted |
+| [D16](D16-cap-the-list-per-referrer.md) | The shortlist keeps at most two rows per referrer | Accepted |

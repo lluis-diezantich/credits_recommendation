@@ -565,3 +565,55 @@ def test_no_referring_role_at_all_refers_nothing():
     assert policy.musical_referral([]) is False
     assert policy.musical_referral(None) is False
     assert policy.shortlisted("qobuz", False, []) is False
+
+
+# ---- the cap ------------------------------------------------------------
+
+
+def row(via, score):
+    return {"via": via, "score": score}
+
+
+def test_two_per_referrer_is_the_cap():
+    """The written value. 2 is where the top 20 stops being one person without
+    flattening the list to one row each."""
+    assert policy.MAX_PER_REFERRER == 2
+
+
+def test_the_third_row_from_one_referrer_is_dropped():
+    rows = [row("Campodónico", 0.7), row("Campodónico", 0.7), row("Campodónico", 0.7),
+            row("Barrueta", 0.8)]
+    kept = policy.cap_per_referrer(rows, lambda r: r["via"])
+    assert [r["via"] for r in kept] == ["Campodónico", "Campodónico", "Barrueta"]
+
+
+def test_the_order_in_is_the_order_out():
+    """It thins, it never reorders: the caller has already decided what best
+    means, and the score is not consulted here at all."""
+    rows = [row("a", 0.1), row("b", 0.9), row("a", 0.2)]
+    assert policy.cap_per_referrer(rows, lambda r: r["via"]) == rows
+
+
+def test_the_rows_kept_are_the_first_ones_offered():
+    """Which is why the caller sorts first -- cap_per_referrer keeps the two
+    best only because the two best arrived first."""
+    rows = [row("a", 0.9), row("a", 0.5), row("a", 0.1)]
+    kept = policy.cap_per_referrer(rows, lambda r: r["via"])
+    assert [r["score"] for r in kept] == [0.9, 0.5]
+
+
+def test_a_cap_of_one_keeps_one_each():
+    rows = [row("a", 1), row("a", 1), row("b", 1)]
+    assert len(policy.cap_per_referrer(rows, lambda r: r["via"], limit=1)) == 2
+
+
+def test_an_empty_list_caps_to_an_empty_list():
+    assert policy.cap_per_referrer([], lambda r: r["via"]) == []
+
+
+def test_referrers_that_are_none_are_one_group_not_many():
+    """via_through is NULL on every Qobuz-path row, which is exactly why the
+    store caps on via_name instead: keyed on the NULL, the whole shortlist
+    would be one referrer and the cap would leave two rows in total."""
+    rows = [row(None, 1), row(None, 1), row(None, 1)]
+    assert len(policy.cap_per_referrer(rows, lambda r: r["via"])) == 2

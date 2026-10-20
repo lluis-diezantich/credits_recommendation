@@ -216,11 +216,21 @@ The gap between "a credits database" and "recommends music".
   Filtering comes first.
 
   Filtering is now done ([adr/D15](docs/adr/D15-filters-before-ranking.md)), and
-  what it leaves is a list of 291 that still has no order worth trusting: it
-  comes through 30 people and nine of the top rows are one producer. So the next
-  decision is not a ranker but a **cap per referrer** — a post-processing rule,
-  free, and the thing that would make the shortlist read like a recommendation
-  rather than a producer's discography.
+  ~~the next decision is a cap per referrer~~ that is done too
+  ([adr/D16](docs/adr/D16-cap-the-list-per-referrer.md)): `MAX_PER_REFERRER = 2`,
+  which takes the 212 shortlisted rows to 38 across all 24 referrers and puts 12
+  distinct people in the top 20, where uncapped the first rows were nine Juan
+  Campodónico records.
+
+  Note the key: **`via_name`, not `via_through`.** This file and `store.md` both
+  said `via_through`, which is NULL on all 1,470 Qobuz-path rows — only the
+  Discogs path writes it — so capping on it would have put the whole shortlist in
+  one group. A test pins it.
+
+  What a ranker would still have to add on top, and why it is still not next: the
+  cap hides the concentration rather than fixing it. 24 referrers for 212 rows is
+  the real number, and what widens it is more seeds or the Discogs path repaired
+  instead of excluded.
 - **Album identity.** `core/radar.Release` now normalises what the radars
   report, but it is a *reporting* record keyed on each store's own id: two
   editions of one album are still two rows, and nothing reconciles a Qobuz id
