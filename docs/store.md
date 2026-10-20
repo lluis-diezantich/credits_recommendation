@@ -62,6 +62,12 @@ regenerated. `meta` is authoritative.
 
     meta                     provenance: which file each table came from, row counts, dates
 
+    seeds                2   one row per seed walked - the TOP of the funnel:
+                             releases, albums_own/albums_guest, people, co_artists
+    co_artists          67   who a seed has made a record WITH, per seed. 59%
+                             already-played against the crew graph's 13% (adr/D14)
+    co_artist_albums    85   the records behind each co-appearance, own/guest
+
     people             551   the credit graph, one row per person, merged from 5 places
                              albums/own_albums/tracks are SUMMED over seeds
     person_seeds       565   one row per (person, seed) - the grain those counts
@@ -219,6 +225,48 @@ GROUP BY f.y ORDER BY f.y;
 
 Read the caveat under *Numbers that disagree with the README* before trusting the
 output of that one.
+
+**The funnel, end to end** — what discovery produced and what survives each cut.
+`seeds` is the top half, `releases` the bottom, and each step is the one before
+plus one condition.
+
+```sql
+SELECT name, releases AS albums_walked, albums_own, albums_guest,
+       people AS credited_people, co_artists
+FROM seeds;
+```
+
+```sql
+WITH pool AS (SELECT * FROM releases WHERE seed_qobuz_id = 41620 AND source = 'qobuz')
+SELECT 1 AS step, 'in the pool' AS filter, COUNT(*) FROM pool
+UNION ALL SELECT 2, 'not the referrer''s own record', COUNT(*) FROM pool
+          WHERE NOT via_is_first_artist
+UNION ALL SELECT 3, 'player or producer referral', COUNT(*) FROM pool
+          WHERE NOT via_is_first_artist
+            AND (via_referral_classes LIKE '%performance%'
+                 OR via_referral_classes LIKE '%production%')
+ORDER BY step;
+```
+
+Measured 2026-10-20 on the Drexler pool: 1,255 -> 383 -> 271, then 215 unheard,
+208 since 2015 and streamable, 38 after the cap. The side-credit cut is the big
+one — 872 of the 1,255 rows are the referring person's own albums.
+
+**Who the seed made a record WITH** — the other output of discovery, and the one
+with the best hit rate. Unheard only:
+
+```sql
+SELECT c.name, c.albums, c.seed_records, c.their_records, c.last_seen
+FROM co_artists c
+WHERE c.seed_qobuz_id = 41620
+  AND NOT EXISTS (SELECT 1 FROM listens l WHERE l.artist_key = c.person_key)
+ORDER BY c.albums DESC, c.last_seen DESC;
+```
+
+`seed_records` is them guesting on the seed's album, `their_records` is the seed
+guesting on theirs. Both are a record the two made together — see
+[adr/D14](adr/D14-co-appearance-is-its-own-output.md). Joining on `person_key`
+works because it is `normalise(name)`, the same key `listens.artist_key` carries.
 
 **The shortlist** — the credits thesis, as something a person can actually read.
 Filtered first, then ordered: `policy.shortlisted`'s three cuts, then

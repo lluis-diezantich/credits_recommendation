@@ -137,6 +137,9 @@ CREATE TABLE person_classes (person_key TEXT, class TEXT,
 CREATE TABLE person_roles   (person_key TEXT, role TEXT, role_key TEXT,
                              role_class TEXT, role_weight REAL, n INTEGER);
 CREATE TABLE person_albums  (person_key TEXT, album_id TEXT, title TEXT,
+                             provenance TEXT,
+--  ^ own/guest, from discover.py: a credit on a record the seed only guested
+--    on is not a credit on one of the seed's records.
                              date TEXT, tracks INTEGER, roles TEXT,
                              PRIMARY KEY (person_key, album_id));
 CREATE TABLE person_edges   (person_key TEXT, other_name TEXT, releases INTEGER,
@@ -145,7 +148,11 @@ CREATE TABLE person_edges   (person_key TEXT, other_name TEXT, releases INTEGER,
 
 -- releases (candidate pool) --------------------------------------------
 CREATE TABLE releases (
-    album_id TEXT, source TEXT, title TEXT, date TEXT, tracks INTEGER,
+    album_id TEXT, source TEXT, seed_qobuz_id INTEGER,
+--  ^ which seed's graph this candidate came out of. Both pool files carry it
+--    and it was dropped, so two seeds' pools in one table were
+--    indistinguishable in SQL -- the defect person_seeds fixed for people.
+    title TEXT, date TEXT, tracks INTEGER,
     hires BOOLEAN, streamable BOOLEAN, label TEXT, genre TEXT,
     via_name TEXT, via_qobuz_id INTEGER, via_path TEXT, via_top_role TEXT,
     via_seed_albums INTEGER, via_through TEXT, via_through_roles TEXT,
@@ -178,6 +185,32 @@ CREATE TABLE releases (
 -- join available is lower(name), which matches 250 of 2,773 names and silently
 -- calls every accented artist unheard -- it recommended Xoel Lopez, who is in
 -- the export 331 times.
+-- One row per seed walked. The top half of the funnel: how much of the
+-- discography is really the seed's own work, how many people it credits, how
+-- many artists they are billed alongside. Lived only in discovery_*.json, so
+-- "what did discovery actually produce" could not be asked of the store.
+CREATE TABLE seeds (seed_qobuz_id INTEGER PRIMARY KEY, name TEXT, store TEXT,
+                    releases INTEGER, albums_own INTEGER, albums_guest INTEGER,
+                    albums_unbilled INTEGER, tracks INTEGER,
+                    credited_tracks INTEGER, people INTEGER,
+                    co_artists INTEGER, source TEXT, generated TEXT);
+
+-- Who the seed has made a record WITH, as opposed to who worked on their
+-- records. Measured at 59% artists-already-played against 13% for the crew
+-- graph (docs/adr/D14), and until now it reached no table at all.
+-- person_key is normalise(name), so this joins to people and to
+-- listens.artist_key like everything else.
+CREATE TABLE co_artists (seed_qobuz_id INTEGER, person_key TEXT, name TEXT,
+                         albums INTEGER, their_records INTEGER,
+                         seed_records INTEGER, first_seen TEXT, last_seen TEXT,
+                         PRIMARY KEY (seed_qobuz_id, person_key));
+CREATE TABLE co_artist_albums (seed_qobuz_id INTEGER, person_key TEXT,
+                               album_id TEXT, title TEXT, date TEXT,
+                               provenance TEXT,
+--  ^ "own": they guested on the seed's record. "guest": the seed guested on
+--    theirs. Both are a record the two of them made together.
+                               PRIMARY KEY (seed_qobuz_id, person_key, album_id));
+
 -- One row per (person, seed): albums and tracks are facts about a person IN
 -- ONE seed's catalogue, and `people` holds one row per person, so there was
 -- nowhere for the second seed's numbers to go. load_people used to let the
@@ -292,6 +325,8 @@ CREATE INDEX ix_releases_date         ON releases (date);
 CREATE INDEX ix_releases_via          ON releases (via_qobuz_id);
 CREATE INDEX ix_releases_shortlist    ON releases (source, via_is_first_artist);
 CREATE INDEX ix_person_seeds_seed     ON person_seeds (seed_qobuz_id);
+CREATE INDEX ix_co_artists_person     ON co_artists (person_key);
+CREATE INDEX ix_releases_seed         ON releases (seed_qobuz_id);
 CREATE INDEX ix_release_artists_name  ON release_artists (name);
 CREATE INDEX ix_release_artists_key   ON release_artists (name_key);
 
@@ -480,6 +515,7 @@ def load_people(ld: Loader) -> None:
     people: dict[str, dict] = {}
     names, classes, roles, albums, edges = [], [], [], [], []
     person_seeds: list[tuple] = []
+    seeds, co_artists, co_artist_albums = [], [], []
 
     def touch(key: str, source: str) -> dict:
         row = people.setdefault(key, {"person_key": key, "sources": set()})
@@ -492,6 +528,27 @@ def load_people(ld: Loader) -> None:
         if not blob:
             continue
         seed = blob.get("seed") or {}
+        seed_id = seed.get("qobuz_id")
+        seeds.append((
+            seed_id, seed.get("name"), seed.get("store"), seed.get("releases"),
+            seed.get("albums_own"), seed.get("albums_guest"),
+            seed.get("albums_unbilled"), seed.get("tracks"),
+            seed.get("credited_tracks"), len(blob.get("people") or []),
+            len(blob.get("co_artists") or []), path.name, blob.get("generated")))
+        for artist in blob.get("co_artists") or []:
+            key = artist.get("key") or normalise((artist.get("names") or [""])[0])
+            stats = artist.get("stats") or {}
+            co_artists.append((
+                seed_id, key, (artist.get("names") or [None])[0],
+                stats.get("albums"), stats.get("their_records"),
+                stats.get("seed_records"), stats.get("first"), stats.get("last")))
+            co_artist_albums += [
+                (seed_id, key, alb.get("album_id"), alb.get("title"),
+                 alb.get("date"), alb.get("provenance"))
+                for alb in artist.get("albums") or []]
+            # A co-artist is a person too: the names table is how a reader gets
+            # from a spelling to a key, and these keys appear nowhere else.
+            names += [(key, n) for n in artist.get("names") or []]
         for person in blob.get("people") or []:
             key = person.get("key") or normalise((person.get("names") or [""])[0])
             row = touch(key, path.name)
@@ -523,10 +580,12 @@ def load_people(ld: Loader) -> None:
             classes += [(key, c) for c in person.get("classes") or []]
             roles += role_rows(key, person.get("roles"))
             for alb in person.get("albums") or []:
-                albums.append((key, alb.get("album_id"), alb.get("title"),
-                               alb.get("date"), alb.get("tracks"),
+                albums.append((key, alb.get("album_id"), alb.get("provenance"),
+                               alb.get("title"), alb.get("date"), alb.get("tracks"),
                                joined(alb.get("roles"))))
         ld.note("people", path.name, len(blob.get("people") or []), blob.get("generated"))
+        ld.note("co_artists", path.name, len(blob.get("co_artists") or []),
+                blob.get("generated"))
 
     # watchlist.json - resolved Qobuz ids, plus the ones that failed to resolve
     wl = load_json(DATA / "watchlist.json") if (DATA / "watchlist.json").exists() else None
@@ -555,8 +614,8 @@ def load_people(ld: Loader) -> None:
             classes += [(key, c) for c in artist.get("classes") or []]
             roles += role_rows(key, artist.get("roles"))
             for alb in artist.get("appearances") or []:
-                albums.append((key, alb.get("album_id"), alb.get("title"),
-                               alb.get("date"), alb.get("tracks"),
+                albums.append((key, alb.get("album_id"), alb.get("provenance"),
+                               alb.get("title"), alb.get("date"), alb.get("tracks"),
                                joined(alb.get("roles"))))
         for person in wl.get("unresolved") or []:
             key = normalise((person.get("names") or [""])[0])
@@ -643,8 +702,19 @@ def load_people(ld: Loader) -> None:
               ["person_key", "role", "role_key", "role_class", "role_weight", "n"],
               deduped(roles))
     ld.insert("person_albums",
-              ["person_key", "album_id", "title", "date", "tracks", "roles"],
+              ["person_key", "album_id", "provenance", "title", "date", "tracks",
+               "roles"],
               deduped(albums))
+    ld.insert("seeds",
+              ["seed_qobuz_id", "name", "store", "releases", "albums_own",
+               "albums_guest", "albums_unbilled", "tracks", "credited_tracks",
+               "people", "co_artists", "source", "generated"], deduped(seeds))
+    ld.insert("co_artists",
+              ["seed_qobuz_id", "person_key", "name", "albums", "their_records",
+               "seed_records", "first_seen", "last_seen"], deduped(co_artists))
+    ld.insert("co_artist_albums",
+              ["seed_qobuz_id", "person_key", "album_id", "title", "date",
+               "provenance"], deduped(co_artist_albums))
     ld.insert("person_edges",
               ["person_key", "other_name", "releases", "roles", "kind"],
               deduped(edges))
@@ -691,7 +761,8 @@ def load_releases(ld: Loader) -> None:
                 [via["top_role"]] if via.get("top_role") else [])
             credited = rel.get("artists") or []
             rows.append((
-                rel.get("album_id"), source, rel.get("title"), rel.get("date"),
+                rel.get("album_id"), source, (blob.get("seed") or {}).get("qobuz_id"),
+                rel.get("title"), rel.get("date"),
                 rel.get("tracks"), bool(rel.get("hires")), bool(rel.get("streamable")),
                 rel.get("label"), rel.get("genre"),
                 via.get("name"), via.get("qobuz_id"), via.get("path"),
@@ -712,7 +783,8 @@ def load_releases(ld: Loader) -> None:
             artists += [(rel.get("album_id"), source, a, normalise(a))
                         for a in rel.get("artists") or []]
         ld.insert("releases",
-                  ["album_id", "source", "title", "date", "tracks", "hires",
+                  ["album_id", "source", "seed_qobuz_id", "title", "date",
+                   "tracks", "hires",
                    "streamable", "label", "genre", "via_name", "via_qobuz_id",
                    "via_path", "via_top_role", "via_seed_albums", "via_through",
                    "via_through_roles", "via_referral_classes",

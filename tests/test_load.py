@@ -102,7 +102,7 @@ def test_every_index_is_created_after_the_rows_not_in_the_schema(store):
     """The 2s rebuild depends on it: an index in SCHEMA is maintained per
     INSERT across 216k rows. If one migrates into SCHEMA this fails."""
     assert "CREATE INDEX" not in load.SCHEMA
-    assert load.INDEXES.count("CREATE INDEX") == 33
+    assert load.INDEXES.count("CREATE INDEX") == 35
 
 
 def test_the_indexes_name_only_real_columns(store):
@@ -673,11 +673,13 @@ def test_summarise_prints_a_row_per_loaded_table(store, capsys):
 
 
 def test_a_full_build_from_nothing_produces_an_empty_but_valid_store(store, monkeypatch):
-    """main() end to end with no inputs at all: the tables, the 49 indexes and
+    """main() end to end with no inputs at all: the tables, the 53 indexes and
     the views all exist, and nothing raised. This is the contract -- the build
     runs over whatever happens to be on disk.
 
-    49, not 33: 16 of the primary keys are themselves unique indexes."""
+    53, not 35: 18 of the primary keys are themselves unique indexes. 19
+    tables carry a key, but `seeds` keys on INTEGER PRIMARY KEY, which aliases
+    the rowid and creates no index at all."""
     db = store.tmp / "out.db"
     monkeypatch.setattr(load, "LISTENS_GLOB", str(store.tmp / "no_such_*.zip"))
     monkeypatch.setattr("sys.argv", ["load.py", "--db", str(db)])
@@ -686,7 +688,7 @@ def test_a_full_build_from_nothing_produces_an_empty_but_valid_store(store, monk
     con = sqlite3.connect(db)
     kinds = con.execute("SELECT type, COUNT(*) FROM sqlite_master GROUP BY type"
                         ).fetchall()
-    assert dict(kinds)["index"] == 49
+    assert dict(kinds)["index"] == 53
     assert dict(kinds)["view"] == 4
 
 
@@ -885,7 +887,12 @@ def test_the_tables_whose_key_is_real_have_one(store):
     # (person, seed) -- the grain albums and tracks are measured at, and the
     # key that stops one seed's numbers overwriting another's.
     assert keyed["person_seeds"] == ["person_key", "seed_qobuz_id"]
-    assert len(keyed) == 16
+    # Everything per-seed is keyed by the seed, so a second seed adds rows
+    # instead of overwriting the first -- the lesson of person_seeds.
+    assert keyed["seeds"] == ["seed_qobuz_id"]
+    assert keyed["co_artists"] == ["seed_qobuz_id", "person_key"]
+    assert keyed["co_artist_albums"] == ["seed_qobuz_id", "person_key", "album_id"]
+    assert len(keyed) == 19
 
 
 def test_the_five_without_a_key_are_the_five_with_a_reason(store):
@@ -1235,3 +1242,82 @@ def test_the_watchlist_does_not_double_count_its_own_seed(store):
          "stats": {"albums": 13, "tracks": 42}}]})
     load.load_people(store.ld)
     assert store.rows("people", "albums, tracks, seeds")[0] == (13, 42, 1)
+
+
+# ---- the seed, and who the seed made records with ------------------------
+
+
+def discovery_with_co_artists(store):
+    store.write("discovery_41620.json", {
+        "generated": "2026-10-20",
+        "seed": {"qobuz_id": 41620, "name": "Jorge Drexler", "store": "gb-en",
+                 "releases": 63, "albums_own": 48, "albums_guest": 15,
+                 "albums_unbilled": 0, "tracks": 265, "credited_tracks": 265},
+        "people": [{"key": "borja barrueta", "names": ["Borja Barrueta"],
+                    "stats": {"albums": 10, "own_albums": 10, "tracks": 25},
+                    "albums": [{"album_id": "a1", "title": "Eco", "date": "2004-01-01",
+                                "provenance": "own", "tracks": 3, "roles": ["Drums"]}]}],
+        "co_artists": [
+            {"key": "lau noah", "names": ["Lau Noah"],
+             "albums": [{"album_id": "g1", "title": "Libertad", "date": "2023-01-01",
+                         "provenance": "guest"}],
+             "stats": {"albums": 1, "their_records": 1, "seed_records": 0,
+                       "first": "2023-01-01", "last": "2023-01-01"}},
+            {"key": "c. tangana", "names": ["C. Tangana"],
+             "albums": [{"album_id": "o1", "title": "Tocarte", "date": "2021-10-28",
+                         "provenance": "own"}],
+             "stats": {"albums": 1, "their_records": 0, "seed_records": 1,
+                       "first": "2021-10-28", "last": "2021-10-28"}}]})
+
+
+def test_the_top_of_the_funnel_is_now_a_table(store):
+    """63 albums, 48 of them his, 15 guest spots: it lived only in the
+    discovery JSON, so "what did discovery produce" was not a query."""
+    discovery_with_co_artists(store)
+    load.load_people(store.ld)
+    assert store.rows(
+        "seeds", "name, releases, albums_own, albums_guest, people, co_artists"
+    )[0] == ("Jorge Drexler", 63, 48, 15, 1, 2)
+
+
+def test_both_directions_of_a_co_appearance_are_kept(store):
+    """"guest" is the seed on their record, "own" is them on the seed's. Both
+    are a record the two made together, and the hit rate was measured over
+    both -- 59% against the crew graph's 13%."""
+    discovery_with_co_artists(store)
+    load.load_people(store.ld)
+    assert dict(store.rows("co_artists", "name, their_records")) == {
+        "Lau Noah": 1, "C. Tangana": 0}
+    assert dict(store.rows("co_artist_albums", "title, provenance")) == {
+        "Libertad": "guest", "Tocarte": "own"}
+
+
+def test_a_co_artist_can_be_joined_to_listens_by_key(store):
+    """The whole point of keying on normalise(name): the 59% list is only
+    checkable against real listening if it shares a key with it."""
+    discovery_with_co_artists(store)
+    load.load_people(store.ld)
+    assert {r[0] for r in store.rows("co_artists", "person_key")} == {
+        "lau noah", "c. tangana"}
+
+
+def test_a_person_album_says_whether_it_was_the_seeds_record(store):
+    discovery_with_co_artists(store)
+    load.load_people(store.ld)
+    assert store.rows("person_albums", "title, provenance")[0] == ("Eco", "own")
+
+
+def test_a_pool_row_records_which_seed_it_came_from(store):
+    """Two pools in one table were indistinguishable in SQL, which is how a
+    funnel for one seed could silently count another's rows."""
+    store.write("pool.json", {
+        "seed": {"qobuz_id": 41620, "name": "Jorge Drexler"},
+        "pool": [{"album_id": "a1", "title": "x", "artists": ["Someone"],
+                  "via": {"name": "Borja Barrueta", "top_role": "Drums", "signal": {}}}]})
+    store.write("pool_discogs.json", {
+        "seed": {"qobuz_id": 656411, "name": "Sílvia Pérez Cruz"},
+        "pool": [{"album_id": "a2", "title": "y", "artists": ["Someone"],
+                  "via": {"name": "Raül Refree", "signal": {}}}]})
+    load.load_releases(store.ld)
+    assert dict(store.rows("releases", "album_id, seed_qobuz_id")) == {
+        "a1": 41620, "a2": 656411}

@@ -126,9 +126,13 @@ The gap between "a credits database" and "recommends music".
     flag `unlabelled_albums` where the file predates the labelling, rather than
     falling back silently to the inflated count. **Pending the run** — see "one
     regeneration, three debts" below.
-  - **`load.py` has no column** for `provenance`, `own_albums` or `co_artists`,
-    so none of this is queryable from `data/music.db` and `docs/store.md` has
-    no shortlist over it.
+  - ~~**`load.py` has no column** for `provenance`, `own_albums` or
+    `co_artists`.~~ Done 2026-10-20
+    ([adr/D20](docs/adr/D20-the-funnel-is-queryable.md)): `seeds`,
+    `co_artists` and `co_artist_albums` tables, `releases.seed_qobuz_id`,
+    `person_albums.provenance`, and both halves of the funnel as queries in
+    [store.md](docs/store.md). `co_artists` is still read by nothing that
+    recommends — it is now one join away rather than absent.
   - **The co-artist list inherits the name problem.** "Colors" (from *A COLORS
     SHOW*) and "Penelope Cruz" are among Pérez Cruz's 28. It needs the same
     stance as the pools before anything ranks it.

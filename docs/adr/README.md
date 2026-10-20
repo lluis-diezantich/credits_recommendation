@@ -43,3 +43,4 @@ intended way round from here.
 | [D17](D17-fold-plausibility-into-the-score.md) | The resolvers fold match plausibility and own-album counts into the stored score | Accepted |
 | [D18](D18-drop-score-zero-referrals.md) | A referral scoring zero is dropped, and the resolver stops fetching one | Accepted |
 | [D19](D19-person-seed-is-the-grain.md) | Albums and tracks are per (person, seed), and `people` sums them | Accepted |
+| [D20](D20-the-funnel-is-queryable.md) | Everything the funnel is made of reaches the store, keyed by seed | Accepted |
