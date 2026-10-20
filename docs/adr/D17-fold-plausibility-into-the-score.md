@@ -65,13 +65,43 @@ the hypothesis is open, not confirmed:
 | a real match shares another person with the graph | 0/459 for Henry Mancini and 0/120 for Zahara, who is real — no discrimination |
 | a real match's dates overlap the referrer's career | disjoint for nobody: Qobuz artist pages aggregate reissues, so Mancini reads 1956-2026 |
 
+## What the run then showed (2026-10-20, same day)
+
+The Qobuz half was regenerated: `discovery_41620.json` first, then
+`resolve_qobuz.py` (122 of 278 people, 66 resolved, 1,496 releases from 57
+artists) and `load.py`. No row came out `unlabelled_albums`, so the own-album
+half took effect everywhere.
+
+**The guest-spot fix is worth more than expected.** 10 of 50 referrers lost
+albums, and five — Chab, Susana San José, El David Aguilar, Ulises Hadjis,
+Çantamarta — went to **zero** own albums and therefore score 0.0. They never
+worked on a Drexler record at all: they are artists he guested alongside, which
+is what [D14](D14-co-appearance-is-its-own-output.md)'s `co_artists` block is
+for. Juan Campodónico went 7 albums to 6, which took the shortlist's second row
+from 0.70 to 0.60.
+
+**Catalogue size does NOT separate a collision from a real match**, so the
+hypothesis this decision made testable is now tested and refused for the Qobuz
+path:
+
+| | albums held by the matched artist |
+|---|---|
+| flagged `single_token_name` (6 people) | 4 to 309, mean 214 |
+| unflagged (44 people) | 1 to 483, mean 126 |
+
+Caetano Veloso holds 483 albums and is a correct match; "Calequi" holds 4 and is
+flagged. A big catalogue is normal among correct matches, so size alone cannot
+be a filter. What the original argument wanted was a *comparison* — the matched
+artist's catalogue against the number of releases the credits put the person on —
+and the Qobuz path has only one of those two numbers. That comparison still
+needs the Discogs path, which needs a token.
+
 ## Consequences
 
-- **Nothing changes until the pools are regenerated.** The code is in place and
-  the data on disk still carries the old scores, so `sig_match_confidence` is
-  NULL for every row today and the query in [../store.md](../store.md) applies
-  the penalty conditionally on that. Once both pools are rebuilt, that branch
-  can go.
+- **The Discogs half is still unregenerated** (no `DISCOGS_TOKEN`), so
+  `sig_match_confidence` is NULL on its 6,390 rows and the query in
+  [../store.md](../store.md) still applies the penalty conditionally on that.
+  The branch goes when that half is run.
 - The regeneration is roughly 1 request per seed for discovery, ~59 for
   `resolve_qobuz`, and the 128-person Discogs fan-out, which is cached.
   `DISCOGS_TOKEN` is needed for the last one.

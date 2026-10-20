@@ -1130,3 +1130,33 @@ def test_a_pool_written_before_these_fields_still_loads(store):
     assert store.rows(
         "releases", "sig_score, sig_match_confidence, via_albums_count")[0] == (
         0.8, None, None)
+
+
+def test_the_seed_album_count_lands_in_one_column_from_either_path(store):
+    """The pools name it differently -- `person_seed_albums` on the Discogs
+    path, `seed_albums` on the Qobuz one -- and before this half the column
+    read NULL with nothing saying why."""
+    store.write("pool.json", {"pool": [
+        {"album_id": "a1", "title": "x", "artists": ["Someone"],
+         "via": {"name": "Juan Campodónico", "signal": {
+             "seed_albums": 6, "own_albums": 6, "embedded": 0.6}}}]})
+    store.write("pool_discogs.json", {"pool": [
+        {"album_id": "a2", "title": "y", "artists": ["Someone"],
+         "via": {"name": "Morgan", "signal": {
+             "person_seed_albums": 21, "embedded": 1.0}}}]})
+    load.load_releases(store.ld)
+    assert dict(store.rows("releases", "album_id, sig_person_seed_albums")) == {
+        "a1": 6, "a2": 21}
+
+
+def test_a_referrer_who_only_guested_is_visible_as_zero_own_albums(store):
+    """5 of 50 referrers in the Drexler pool are like this: they never worked
+    on one of his records, they were on records he guested on. They scored
+    non-zero until the embedding was computed from own_albums."""
+    store.write("pool.json", {"pool": [
+        {"album_id": "a1", "title": "x", "artists": ["Someone"],
+         "via": {"name": "Çantamarta", "signal": {
+             "seed_albums": 2, "own_albums": 0, "embedded": 0.0, "score": 0.0}}}]})
+    load.load_releases(store.ld)
+    assert store.rows("releases", "sig_own_albums, sig_embedded, sig_score")[0] == (
+        0, 0.0, 0.0)

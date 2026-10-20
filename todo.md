@@ -196,7 +196,7 @@ The gap between "a credits database" and "recommends music".
   must be multiplied by `selectivity()`, never used raw. A weighted gradient
   needs 4-5 seeds before it has any range.
 
-- **One regeneration, three debts — and it has not been run yet.** The code
+- **One regeneration, three debts — the Qobuz half is done.** The code
   for all three landed 2026-10-20
   ([adr/D17](docs/adr/D17-fold-plausibility-into-the-score.md)): the match
   penalty folded into `sig_score`, `person_seed_albums` counting only the
@@ -215,13 +215,29 @@ The gap between "a credits database" and "recommends music".
                                                    #   DISCOGS_TOKEN, cached
       ./stages/load.py                             # free, rebuilds the store
 
-  Then the `sig_match_confidence IS NULL` branch in `docs/store.md` can go, and
-  the one thing D17 could NOT measure becomes measurable: whether catalogue
-  size separates a collision from a real match. Two cheaper corroborations were
-  tried and both failed — graph overlap is 0 for Henry Mancini and 0 for Zahara
-  alike, and date windows are disjoint for nobody because Qobuz artist pages
-  aggregate reissues to 2026. So size is a hypothesis with the data to test it,
-  not a fix.
+  **Run 2026-10-20, except the Discogs line** — no token yet, so 6,390 of the
+  7,886 rows still carry the old scores and the `sig_match_confidence IS NULL`
+  branch in `docs/store.md` stays until they are rebuilt. The Qobuz half came
+  out clean: 1,496 releases from 57 artists, no row flagged
+  `unlabelled_albums`.
+
+  Two results, both recorded in
+  [adr/D17](docs/adr/D17-fold-plausibility-into-the-score.md):
+
+  - **Five referrers were pure artefacts of the guest-spot leak.** 10 of 50
+    lost albums and five went to zero own albums — Chab, Susana San José, El
+    David Aguilar, Ulises Hadjis, Çantamarta — so they now score 0.0. They
+    never worked on a Drexler record; they are people he was billed alongside,
+    which is what `co_artists` is for. **Open question this raises:** a
+    referrer at score 0 still contributes every row of their discography to the
+    pool. Dropping score-0 referrals is a one-line filter and a decision
+    nobody has made.
+  - **Catalogue size does not discriminate**, so that hypothesis is refused for
+    the Qobuz path: flagged people hold 4-309 albums, unflagged hold 1-483.
+    Caetano Veloso holds 483 and is correct; "Calequi" holds 4 and is flagged.
+    The test the argument actually wanted is a *comparison* of the matched
+    catalogue against the credit count, and only the Discogs path has both
+    numbers. Still blocked on the token, not on the idea.
 
 - **A radar for people, not artists.** The thesis, and the one thing this cannot
   do: alert on records made by *people* you follow. The pools hold 7,860

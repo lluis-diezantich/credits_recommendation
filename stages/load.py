@@ -160,7 +160,11 @@ CREATE TABLE releases (
 --    credits put that person on. Both were fetched and dropped before.
     sig_score REAL, sig_role_weight REAL, sig_selectivity REAL,
     sig_selectivity_band TEXT, sig_person_seed_albums INTEGER,
-    sig_embedded REAL, sig_match_confidence REAL, sig_flags TEXT,
+    sig_embedded REAL, sig_match_confidence REAL, sig_own_albums INTEGER,
+--  ^ how many of those albums are the seed's OWN records. sig_embedded is
+--    computed from THIS, not from via_seed_albums, so a referrer who only ever
+--    appeared on a record the seed guested on scores 0 -- 5 of 50 did.
+    sig_flags TEXT,
 --  ^ sig_score is ALREADY multiplied by sig_match_confidence by the resolvers,
 --    so a reader must not apply the penalty a second time. Divide by it to
 --    recover the raw referrer score. (No semicolons in these comments: the
@@ -654,9 +658,14 @@ def load_releases(ld: Loader) -> None:
                 bool(credited) and normalise(credited[0]) == normalise(via.get("name") or ""),
                 via.get("albums_count"), via.get("discogs_releases"),
                 sig.get("score"), sig.get("role_weight"), sig.get("selectivity"),
-                sig.get("selectivity_band"), sig.get("person_seed_albums"),
+                sig.get("selectivity_band"),
+                # The two paths name it differently: the Discogs pool records
+                # whose seed-album count was used (`person_seed_albums`), the
+                # Qobuz pool its own (`seed_albums`). One column either way, or
+                # half the table reads NULL and nothing says why.
+                sig.get("person_seed_albums", sig.get("seed_albums")),
                 sig.get("embedded"), sig.get("match_confidence"),
-                joined(sig.get("flags"))))
+                sig.get("own_albums"), joined(sig.get("flags"))))
             artists += [(rel.get("album_id"), source, a, normalise(a))
                         for a in rel.get("artists") or []]
         ld.insert("releases",
@@ -668,7 +677,7 @@ def load_releases(ld: Loader) -> None:
                    "via_discogs_releases", "sig_score", "sig_role_weight",
                    "sig_selectivity", "sig_selectivity_band",
                    "sig_person_seed_albums", "sig_embedded",
-                   "sig_match_confidence", "sig_flags"], rows)
+                   "sig_match_confidence", "sig_own_albums", "sig_flags"], rows)
         ld.insert("release_artists", ["album_id", "source", "name", "name_key"],
                   artists)
         ld.note("releases", name, len(rows), blob.get("generated"))
