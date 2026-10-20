@@ -512,3 +512,56 @@ def test_nobody_billed_is_unknown_not_guest():
     """Guards the division, and says the right thing: no billing, no verdict."""
     assert policy.album_provenance(0, 0) == "unknown"
     assert policy.album_provenance(3, 0) == "unknown"
+
+
+# ---- pool filters -------------------------------------------------------
+
+
+def test_the_three_filters_together_keep_a_side_credit_from_a_player():
+    """The shape of the 291: Qobuz-native, somebody else's record, reached
+    through a musician. Borja Barrueta drumming on a Juanfe Perez record."""
+    assert policy.shortlisted("qobuz", False, ["Drums"]) is True
+
+
+def test_the_discogs_path_is_excluded_whatever_else_is_true():
+    """81% of the rows and every junk row traced to it, so this cut is widest
+    and is kept separate from the other two."""
+    assert policy.shortlisted("discogs", False, ["Producer"]) is False
+
+
+def test_the_persons_own_record_is_not_a_credit_they_shaped():
+    """5,862 of 7,860 rows. The thesis is "they made their mark on somebody
+    else's record"."""
+    assert policy.shortlisted("qobuz", True, ["Producer"]) is False
+
+
+def test_an_engineering_referral_is_dropped():
+    """73% of the Discogs pool arrives through mixing. A mixing credit is an
+    industrial service, which ROLE_WEIGHTS has scored at 0.5 all along."""
+    assert policy.shortlisted("qobuz", False, ["Mixed by"]) is False
+    assert policy.musical_referral(["Mastering Engineer"]) is False
+
+
+def test_a_writing_or_billing_referral_is_dropped_too():
+    """REFERRAL_CLASSES excludes both WEAK_CLASSES, so a cover source and a
+    billing line do not refer anything."""
+    assert policy.musical_referral(["Composer"]) is False
+    assert policy.musical_referral(["MainArtist"]) is False
+
+
+def test_one_musical_role_is_enough_among_several():
+    """"Any", not "all": 815 rows mix a kept class with a dropped one, and a
+    producer who also engineered was still chosen for how they sound."""
+    assert policy.musical_referral(["Producer", "Mixed by"]) is True
+
+
+def test_an_unrecognised_role_is_an_instrument_and_so_a_musical_referral():
+    """role_class's default. Berimbau and Wurlitzer are in no table, and 65 of
+    the corpus's 124 role tokens are like that."""
+    assert policy.musical_referral(["Berimbau"]) is True
+
+
+def test_no_referring_role_at_all_refers_nothing():
+    assert policy.musical_referral([]) is False
+    assert policy.musical_referral(None) is False
+    assert policy.shortlisted("qobuz", False, []) is False

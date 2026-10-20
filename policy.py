@@ -471,3 +471,71 @@ def album_provenance(seed_billed: int, billed_tracks: int) -> str:
     if billed_tracks <= 0:
         return "unknown"
     return "own" if seed_billed / billed_tracks >= OWN_ALBUM_MAIN_SHARE else "guest"
+
+
+# ---------------------------------------------------------------------------
+# POOL FILTERS (the three that were measured and never written down)
+#
+# 7,860 candidate releases, in one table, in an order that promotes the junk.
+# todo.md's answer was filters before ranking, and named three. Re-measured
+# 2026-10-20 over data/pool.json and data/pool_discogs.json, no requests:
+#
+#     all rows                                7,860
+#     Qobuz-native (via.path is not discogs)  1,470
+#     side credits (not the first artist)     1,998
+#     musician or producer referral           2,778
+#     all three                                 291   of which 220 are by
+#                                                     artists never played
+#
+# Each one answers a different objection, and each was measured separately:
+#
+# REFERRAL CLASS. 73% of the Discogs pool's referrals come through MIXING:
+# 5,347 engineering against 1,942 production, and no performance at all. A
+# mastering or mixing credit is an industrial service -- ROLE_WEIGHTS has said
+# so since this file was written -- so a pool ordered by role weight still
+# CONTAINS mostly rows that role weight scores at 0.15.
+#
+# SIDE CREDITS. 5,862 of the 7,860 rows are a release where the referring
+# person is the FIRST credited artist: their own record, not one they shaped.
+# The thesis is "this person made their mark on somebody else's record", and
+# that is the 1,998.
+#
+# SOURCE. The Discogs path is 81% of the rows and every junk row traced to it
+# (the Henry Mancini and Morgan rows under MATCH_PENALTY). Dropping it is the
+# single widest cut here, which is why it is not folded into the others.
+#
+# A WHERE clause, not a deletion: the pools are regenerated from an API and
+# the rows carry their own provenance, so an excluded row stays queryable and
+# a filter that turns out to be wrong costs a different query rather than a
+# refetch. Same stance as MATCH_PENALTY applying on read.
+# ---------------------------------------------------------------------------
+
+# Referral classes worth keeping: somebody chosen for how they sound. Note what
+# is absent -- "engineering", and the WEAK_CLASSES (writing, billing).
+REFERRAL_CLASSES = {"performance", "production"}
+
+
+def musical_referral(roles) -> bool:
+    """Was this release reached through a musician or a producer?
+
+    True if ANY referring role qualifies, not all of them: a person credited
+    as producer AND engineer on the seed's records was still chosen for how
+    they sound.
+
+    815 rows do mix a kept class with a dropped one, every one of them on the
+    Discogs path, so none survives the source filter and "any" and "all" return
+    the same 291 today. The choice only starts to matter when the Discogs path
+    is fixed rather than excluded.
+    """
+    return bool({role_class(role) for role in roles or []} & REFERRAL_CLASSES)
+
+
+def shortlisted(source: str, via_is_first_artist: bool, roles) -> bool:
+    """The three filters together: a pool row worth a person's attention.
+
+    `source` is the pool the row came from ("qobuz" or "discogs"), the same
+    value `releases.source` carries in the store.
+    """
+    return (source != "discogs"
+            and not via_is_first_artist
+            and musical_referral(roles))

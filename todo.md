@@ -149,13 +149,35 @@ The gap between "a credits database" and "recommends music".
   | name collisions are not only single-token | "Alex Cooper", "Sexy Sadie", "Solid Ice" all escape the flag and return electronic pop |
 
   **The Discogs path is the broken half**: 81% of the rows, 84% of them
-  engineering-referred, and every junk row traced to it. The Qobuz path takes
-  people from Qobuz's own credits with no name re-matched.
+  engineering-referred, and every junk row traced to it.
 
-  Filtering to musician/producer referrals + side credits + Qobuz-native takes
-  **7,860 rows to 148**, and the top reads coherently — Latin America, World,
-  Bolero, Flamenco, Classical. Those filters are free and none is written down
-  in code yet.
+  ~~Those filters are free and none is written down in code yet.~~ Written down
+  2026-10-20 — `policy.shortlisted`, `via_referral_classes` and
+  `via_is_first_artist` in the store, the query in
+  [store.md](docs/store.md), the decision in
+  [adr/D15](docs/adr/D15-filters-before-ranking.md). Applied on read, so no row
+  is deleted and a wrong filter costs a different WHERE clause.
+
+  **The 148 in this entry was wrong, or its definition was.** Re-measured over
+  the same two pool files, which have not been regenerated since: the three
+  filters together keep **291 rows**, 220 of them by artists never played.
+  Eight compositions were tried and none produced 148; the closest were 291 for
+  the stated set and 161 for production-referred only. The genres this entry
+  reported for its top (Bolero, Classical) are not in the 291 either, so the
+  difference is the definition rather than the data. 291 is what the predicate
+  yields and is now the number in `policy.py`, `docs/store.md` and D15.
+
+  Two corrections that came out of writing it down:
+
+  - **The Qobuz path re-matches names too.** This entry said it "takes people
+    from Qobuz's own credits with no name re-matched", and `resolve_qobuz.py`
+    resolves each name through autosuggest exactly as the Discogs path does.
+    426 of the 1,470 Qobuz-native rows carry `single_token_name`, and 72 of the
+    291 shortlisted rows do — "Mauro" alone contributes 42. Filtering reduces
+    the name problem; it does not escape it.
+  - **Excluding the Discogs path is not fixing it.** One clause drops 6,390
+    rows, so the thesis now rests on 1,470 from a 59-person fan-out. Fixing
+    `build_pool`'s matching is what brings them back.
 
 - **Seeds are cheap once the Discogs path is dropped.** This entry used to say
   growing the graph was expensive; that was measured on the full chain. Sílvia
@@ -192,6 +214,13 @@ The gap between "a credits database" and "recommends music".
   FIRST: "Morgan" carries 323 releases at a score of 1.0, the maximum. Ordering
   a list whose top is wrong makes the wrongness more prominent, not less.
   Filtering comes first.
+
+  Filtering is now done ([adr/D15](docs/adr/D15-filters-before-ranking.md)), and
+  what it leaves is a list of 291 that still has no order worth trusting: it
+  comes through 30 people and nine of the top rows are one producer. So the next
+  decision is not a ranker but a **cap per referrer** — a post-processing rule,
+  free, and the thing that would make the shortlist read like a recommendation
+  rather than a producer's discography.
 - **Album identity.** `core/radar.Release` now normalises what the radars
   report, but it is a *reporting* record keyed on each store's own id: two
   editions of one album are still two rows, and nothing reconciles a Qobuz id

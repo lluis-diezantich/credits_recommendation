@@ -38,3 +38,4 @@ intended way round from here.
 | [D12](D12-hashed-locks-advisory-format.md) | CI installs from hashed lockfiles; `ruff format` is advisory | Accepted |
 | [D13](D13-match-plausibility-on-read.md) | A shaky name match is penalised on read, not dropped | Accepted |
 | [D14](D14-co-appearance-is-its-own-output.md) | An album in the seed's discography is labelled own or guest, and co-appearance is its own output | Accepted |
+| [D15](D15-filters-before-ranking.md) | The pool is filtered on read by three stored facts, before anything ranks it | Accepted |

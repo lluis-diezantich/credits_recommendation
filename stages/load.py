@@ -145,7 +145,15 @@ CREATE TABLE releases (
     album_id TEXT, source TEXT, title TEXT, date TEXT, tracks INTEGER,
     hires BOOLEAN, streamable BOOLEAN, label TEXT, genre TEXT,
     via_name TEXT, via_qobuz_id INTEGER, via_path TEXT, via_top_role TEXT,
-    via_seed_albums INTEGER, via_through TEXT,
+    via_seed_albums INTEGER, via_through TEXT, via_through_roles TEXT,
+-- The two facts policy.shortlisted needs that SQL cannot derive. Stored as
+-- facts, not as the verdict: the composition is policy's and would go stale in
+-- the store the same way sig_score did. docs/store.md spells the WHERE out.
+    via_referral_classes TEXT,
+--  ^ role_class of each referring role: "production", "engineering", ...
+    via_is_first_artist BOOLEAN,
+--  ^ the referring person is the FIRST credited artist, i.e. it is their own
+--    record rather than one they worked on. 5,862 of the 7,860 rows are.
     sig_score REAL, sig_role_weight REAL, sig_selectivity REAL,
     sig_selectivity_band TEXT, sig_person_seed_albums INTEGER,
     sig_embedded REAL, sig_flags TEXT,
@@ -257,6 +265,7 @@ CREATE INDEX ix_releases_source       ON releases (source);
 CREATE INDEX ix_releases_score        ON releases (sig_score);
 CREATE INDEX ix_releases_date         ON releases (date);
 CREATE INDEX ix_releases_via          ON releases (via_qobuz_id);
+CREATE INDEX ix_releases_shortlist    ON releases (source, via_is_first_artist);
 CREATE INDEX ix_release_artists_name  ON release_artists (name);
 CREATE INDEX ix_release_artists_key   ON release_artists (name_key);
 
@@ -619,13 +628,22 @@ def load_releases(ld: Loader) -> None:
         for rel in blob.get("pool") or []:
             via = rel.get("via") or {}
             sig = via.get("signal") or {}
+            # The referring role arrives under two names: the Discogs path
+            # records which credit referred (`through_roles`), the Qobuz path
+            # only the person's top role. Both are "what was this reached
+            # through", so both feed via_referral_classes.
+            referral = via.get("through_roles") or (
+                [via["top_role"]] if via.get("top_role") else [])
+            credited = rel.get("artists") or []
             rows.append((
                 rel.get("album_id"), source, rel.get("title"), rel.get("date"),
                 rel.get("tracks"), bool(rel.get("hires")), bool(rel.get("streamable")),
                 rel.get("label"), rel.get("genre"),
                 via.get("name"), via.get("qobuz_id"), via.get("path"),
                 via.get("top_role"), via.get("seed_albums"),
-                joined(via.get("through")),
+                joined(via.get("through")), joined(via.get("through_roles")),
+                joined(sorted({role_class(r) for r in referral})),
+                bool(credited) and normalise(credited[0]) == normalise(via.get("name") or ""),
                 sig.get("score"), sig.get("role_weight"), sig.get("selectivity"),
                 sig.get("selectivity_band"), sig.get("person_seed_albums"),
                 sig.get("embedded"), joined(sig.get("flags"))))
@@ -635,7 +653,8 @@ def load_releases(ld: Loader) -> None:
                   ["album_id", "source", "title", "date", "tracks", "hires",
                    "streamable", "label", "genre", "via_name", "via_qobuz_id",
                    "via_path", "via_top_role", "via_seed_albums", "via_through",
-                   "sig_score", "sig_role_weight", "sig_selectivity",
+                   "via_through_roles", "via_referral_classes",
+                   "via_is_first_artist", "sig_score", "sig_role_weight", "sig_selectivity",
                    "sig_selectivity_band", "sig_person_seed_albums", "sig_embedded",
                    "sig_flags"], rows)
         ld.insert("release_artists", ["album_id", "source", "name", "name_key"],

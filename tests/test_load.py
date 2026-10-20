@@ -102,7 +102,7 @@ def test_every_index_is_created_after_the_rows_not_in_the_schema(store):
     """The 2s rebuild depends on it: an index in SCHEMA is maintained per
     INSERT across 216k rows. If one migrates into SCHEMA this fails."""
     assert "CREATE INDEX" not in load.SCHEMA
-    assert load.INDEXES.count("CREATE INDEX") == 31
+    assert load.INDEXES.count("CREATE INDEX") == 32
 
 
 def test_the_indexes_name_only_real_columns(store):
@@ -673,11 +673,11 @@ def test_summarise_prints_a_row_per_loaded_table(store, capsys):
 
 
 def test_a_full_build_from_nothing_produces_an_empty_but_valid_store(store, monkeypatch):
-    """main() end to end with no inputs at all: the tables, the 46 indexes and
+    """main() end to end with no inputs at all: the tables, the 47 indexes and
     the views all exist, and nothing raised. This is the contract -- the build
     runs over whatever happens to be on disk.
 
-    46, not 31: 15 of the primary keys are themselves unique indexes."""
+    47, not 32: 15 of the primary keys are themselves unique indexes."""
     db = store.tmp / "out.db"
     monkeypatch.setattr(load, "LISTENS_GLOB", str(store.tmp / "no_such_*.zip"))
     monkeypatch.setattr("sys.argv", ["load.py", "--db", str(db)])
@@ -686,7 +686,7 @@ def test_a_full_build_from_nothing_produces_an_empty_but_valid_store(store, monk
     con = sqlite3.connect(db)
     kinds = con.execute("SELECT type, COUNT(*) FROM sqlite_master GROUP BY type"
                         ).fetchall()
-    assert dict(kinds)["index"] == 46
+    assert dict(kinds)["index"] == 47
     assert dict(kinds)["view"] == 4
 
 
@@ -1025,3 +1025,68 @@ def test_two_sources_disagreeing_about_one_album_fails_the_build_loudly(store):
     message = str(caught.value)
     assert "person_albums" in message
     assert "UNIQUE constraint failed" in message
+
+
+# ---- the shortlist columns ----------------------------------------------
+
+
+def test_the_referring_person_being_first_billed_is_stored_as_a_fact(store):
+    """policy.shortlisted needs it and SQL cannot derive it: the comparison is
+    against normalise(), which sqlite does not have. 5,862 of the 7,860 pooled
+    rows are the referring person's own record."""
+    store.write("pool.json", {"pool": [
+        {"album_id": "a1", "title": "Their own", "artists": ["Borja Barrueta"],
+         "via": {"name": "Borja Barrueta", "top_role": "Drums", "signal": {}}},
+        {"album_id": "a2", "title": "Somebody else's",
+         "artists": ["Juanfe Pérez", "Borja Barrueta"],
+         "via": {"name": "Borja Barrueta", "top_role": "Drums", "signal": {}}}]})
+    load.load_releases(store.ld)
+    assert dict(store.rows("releases", "album_id, via_is_first_artist")) == {
+        "a1": 1, "a2": 0}
+
+
+def test_the_first_artist_test_sees_through_an_accent(store):
+    """Keyed on normalise(), like release_artists.name_key -- lower(name) calls
+    every accented artist a different person."""
+    store.write("pool.json", {"pool": [
+        {"album_id": "a1", "title": "x", "artists": ["Anavitória"],
+         "via": {"name": "Anavitoria", "top_role": "Vocals", "signal": {}}}]})
+    load.load_releases(store.ld)
+    assert store.rows("releases", "via_is_first_artist")[0][0] == 1
+
+
+def test_the_referral_classes_come_from_whichever_role_the_source_recorded(store):
+    """The Discogs path records which credit referred, the Qobuz path only the
+    person's top role. Both answer "what was this reached through"."""
+    store.write("pool.json", {"pool": [
+        {"album_id": "a1", "title": "x", "artists": ["Someone"],
+         "via": {"name": "Borja Barrueta", "top_role": "Drums", "signal": {}}}]})
+    store.write("pool_discogs.json", {"pool": [
+        {"album_id": "a2", "title": "y", "artists": ["Someone"],
+         "via": {"name": "Morgan", "top_role": "Producer",
+                 "through_roles": ["Mixed by", "Producer"], "signal": {}}}]})
+    load.load_releases(store.ld)
+    assert dict(store.rows("releases", "album_id, via_referral_classes")) == {
+        "a1": "performance", "a2": "engineering | production"}
+
+
+def test_a_row_with_no_referring_role_gets_no_classes(store):
+    """joined() returns NULL for an empty list, so the filter in docs/store.md
+    excludes it rather than matching an empty string."""
+    store.write("pool.json", {"pool": [
+        {"album_id": "a1", "title": "x", "artists": ["Someone"],
+         "via": {"name": "Nobody", "signal": {}}}]})
+    load.load_releases(store.ld)
+    assert store.rows("releases", "via_referral_classes")[0][0] is None
+
+
+def test_the_through_roles_reach_the_store_at_all(store):
+    """They were in pool_discogs.json and in no column, so "which credit
+    referred this" was unanswerable from the store."""
+    store.write("pool_discogs.json", {"pool": [
+        {"album_id": "a1", "title": "x", "artists": ["Someone"],
+         "via": {"name": "Morgan", "through": ["Carles Campi Campón"],
+                 "through_roles": ["Producer"], "signal": {}}}]})
+    load.load_releases(store.ld)
+    assert store.rows("releases", "via_through, via_through_roles")[0] == (
+        "Carles Campi Campón", "Producer")

@@ -214,46 +214,60 @@ Read the caveat under *Numbers that disagree with the README* before trusting th
 output of that one.
 
 **The shortlist** — the credits thesis, as something a person can actually read.
-Unheard, recent, and discounted by how plausible the match behind it was.
+Filtered first, then ordered: `policy.shortlisted`'s three cuts, then
+`policy.ranked_score`'s penalty on a shaky name match, then unheard and recent.
 
 ```sql
-WITH ranked AS (
-  SELECT album_id, source, date, title, via_through,
+WITH kept AS (
+  SELECT album_id, source, date, title, via_name, via_through, genre,
          -- policy.ranked_score: a single-token name match is suspicion, not
          -- proof, so it loses its place in the order and keeps its row.
          sig_score * CASE WHEN sig_flags LIKE '%single_token_name%'
                           THEN 0.1 ELSE 1.0 END AS score
   FROM releases
-  WHERE date >= '2015-01-01' AND streamable
+  -- policy.shortlisted, spelled out. 7,860 rows -> 291.
+  WHERE source <> 'discogs'                               -- 81% of the rows
+    AND NOT via_is_first_artist                           -- not their own record
+    AND (via_referral_classes LIKE '%performance%'        -- a player
+         OR via_referral_classes LIKE '%production%')     -- or a producer
+    AND date >= '2015-01-01' AND streamable
 )
-SELECT ROUND(score, 2) AS score, date, title, via_through,
+SELECT ROUND(score, 2) AS score, date, title, via_name AS through,
        (SELECT name FROM release_artists ra
-        WHERE ra.album_id = ranked.album_id AND ra.source = ranked.source
+        WHERE ra.album_id = kept.album_id AND ra.source = kept.source
         LIMIT 1) AS artist
-FROM ranked
+FROM kept
 WHERE NOT EXISTS (
   SELECT 1 FROM release_artists ra
   JOIN listens l ON l.artist_key = ra.name_key
-  WHERE ra.album_id = ranked.album_id AND ra.source = ranked.source)
+  WHERE ra.album_id = kept.album_id AND ra.source = kept.source)
 ORDER BY score DESC, date
 LIMIT 20;
 ```
 
-Three things to know before trusting it.
+Four things to know before trusting it.
 
 **Join on `name_key`, never `lower(name)`.** `name_key` is `normalise(name)`, the
 key `listens.artist_key` already carries. `lower(name)` matches 250 of 2,773
 pooled names against 313, because it cannot see an accent — it called Xoel López
 unheard, and he is in the export 331 times. That column exists for this query.
 
-**The penalty is the whole reason the list is readable.** Without it the top is
-`single_token_name` rows: "Morgan" carries 323 releases at the maximum 1.00
-because `sig_score` is computed from the referrer and never from the match. 47%
-of the pool carries that flag.
+**The three filters are the difference between a list and a table dump.**
+Measured 2026-10-20: 7,860 rows, of which 1,470 Qobuz-native, 1,998 side credits
+and 2,778 musician-or-producer referrals; 291 satisfy all three, and 220 of those
+are by artists never played. `policy.py`'s POOL FILTERS block has the argument
+for each cut and [adr/D15](adr/D15-filters-before-ranking.md) has the decision.
+The numbers live in two places on purpose — the predicate is `policy.shortlisted`
+and this WHERE clause restates it, because sqlite cannot call Python. If they
+drift, the predicate is right.
 
-**It does not diversify.** The uncapped top 20 comes through five of the seed's
-people and Juan Campodónico supplies 11 of them, so the list tests one producer
-rather than the graph. Capping at two per `via_through` is a post-processing
+**The penalty still matters inside the shortlist.** 72 of the 291 carry
+`single_token_name`, through five people — "Mauro" alone contributes 42. Filtering
+to the Qobuz path does not escape the name problem, it only reduces it: that path
+resolves names through autosuggest too.
+
+**It does not diversify.** The 291 come through 30 people, and the uncapped top is
+nine Juan Campodónico rows. Capping at two per `via_name` is a post-processing
 decision nothing here makes yet — `roadmap.md` lists it as missing. `artist` is
 also an arbitrary one of the credited names, since `LIMIT 1` has no ordering.
 
