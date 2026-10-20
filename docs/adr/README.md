@@ -31,7 +31,7 @@ intended way round from here.
 | [D5](D5-flag-rather-than-reclassify.md) | When two signals disagree about one artist, flag it rather than reclassify | Accepted |
 | [D6](D6-store-is-derived.md) | `data/music.db` is derived, disposable and rebuilt from JSON | Accepted |
 | [D7](D7-cache-is-the-corpus.md) | `cache/` is the source of truth for what an API said, and is not backed up | Accepted |
-| [D8](D8-one-pipeline-for-now.md) | The Friday known-artist radar is the whole product for now | Accepted |
+| [D8](D8-one-pipeline-for-now.md) | The Friday known-artist radar is the whole product for now | Superseded by D22 (seeds only) |
 | [D9](D9-taste-in-active-months.md) | Taste is measured in active months, not play counts | Accepted |
 | [D10](D10-ask-musicbrainz-who-stopped.md) | Ask MusicBrainz who has stopped, rather than guessing from release dates | Accepted |
 | [D11](D11-radar-state-in-ci.md) | Radar state lives in `data/ci/`, committed by the workflow after the issue opens | Accepted |
@@ -45,3 +45,4 @@ intended way round from here.
 | [D19](D19-person-seed-is-the-grain.md) | Albums and tracks are per (person, seed), and `people` sums them | Accepted |
 | [D20](D20-the-funnel-is-queryable.md) | Everything the funnel is made of reaches the store, keyed by seed | Accepted |
 | [D21](D21-explanations-name-what-the-person-did.md) | An explanation names what the person did, and every clause is a row | Accepted |
+| [D22](D22-co-appearance-is-the-second-pipeline.md) | Co-appearance becomes the second pipeline, and more seeds is now the point | Accepted |

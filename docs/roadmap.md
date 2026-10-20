@@ -48,7 +48,7 @@ explainable `via.signal.score`. What does not exist:
 
 | | | cost |
 |---|---|---|
-| a ranker | nothing turns candidates + taste into an ordered list | design, not requests |
+| a ranker | nothing turns candidates + taste into an ordered list. For the co-artist list the inputs now exist and the blocker is SEEDS, not design: two seeds share 2 of 67 co-artists, so no weighting has range — [adr/D22](adr/D22-co-appearance-is-the-second-pipeline.md) | ~50 requests per new seed |
 | `core/model.py` | no normalised `Release`, so the pools never converge and album identity is unresolved. Song identity is cheaper — listens carry `recording_mbid`, and Qobuz returns an `isrc` the cache drops | design |
 | language | no source here has it. Qobuz's raw response carries no language field; MusicBrainz *works* do | re-cache for `isrc` (10 requests), then ~910 MB lookups at 1/s |
 | evaluation | no way to tell whether a recommendation was good, and the obvious method is a trap | free, but needs discipline |

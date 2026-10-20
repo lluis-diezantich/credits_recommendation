@@ -1,7 +1,9 @@
 # D8: The Friday known-artist radar is the whole product for now
 
-- **Status:** Accepted
-- **Date:** 2026-10-17
+- **Status:** Superseded by [D22](D22-co-appearance-is-the-second-pipeline.md)
+  for the seed question. Its other conclusions (no orchestrator, no
+  `pipelines/` layout, the pool stays paused) still hold.
+- **Date:** 2026-10-17 (superseded 2026-10-20)
 - **Where it lives:** [`radars/qobuz.py`](../../radars/qobuz.py),
   `.github/workflows/`, and the framing at the top of
   [../../todo.md](../../todo.md)

@@ -8,28 +8,80 @@ project *as a recommender*, stage by stage, nor [docs/adr/](docs/adr/README.md),
 which records what was decided and against which alternative. This file is work
 items.
 
-## Where this is going (decided 2026-10-17)
+## Where this is going (revised 2026-10-20)
 
-**One pipeline for now.** The Friday known-artist radar is the whole product
-and stays that way for a while, to see how it behaves in use. Features get
-added afterwards one at a time, and small — not a stage at a time.
+**Two pipelines now, and the cheap one is the good one.**
+[adr/D22](docs/adr/D22-co-appearance-is-the-second-pipeline.md) has the
+argument; it supersedes the "one pipeline for now" framing that stood here,
+because one of that framing's two measurements turned out to be wrong.
 
-That is a deliberate narrowing, so the backlog below is a backlog and not a
-plan. Two things settle how the rest of it is ordered, and both were measured
-rather than guessed:
+| | per seed | what it buys |
+|---|---|---|
+| the discovery walk — **co-appearance** | ~50 requests, once, then cached | the 59% / 40% list, with a sentence each |
+| resolve + pool — the **crew graph** | ~160 requests | the 13-16% list, filtered to 38 rows |
 
-**Growing the credit graph is expensive; using it is nearly free.** One
-`discover` run on one seed produced 278 people and 7,860 candidate releases,
-and that fan-out — credits per album, then a resolve per person, then a
-discography per person — is the part that multiplies. Adding a second seed
-means paying it again. But querying what is already on disk costs nothing, and
-a radar over the people already resolved would be **68 `artist/get` per run**,
-which is SMALLER than the 91 the Friday job already makes without complaint.
-So the thing to avoid is more seeds, not more features over the one graph.
+~~Growing the credit graph is expensive, so the thing to avoid is more
+seeds.~~ True of the pool path, and it is still paused. False of the
+co-appearance path, which is where the signal is: **more seeds is now the
+point**, on that path only.
 
-**The pool is not trustworthy yet, and that is the real blocker** — not API
-cost. See the entry under Correctness. Nothing credits-based is worth building
-on top of it until that is fixed, and fixing it costs no requests.
+**The pool is still not trustworthy**, and that part of the old framing holds.
+Nothing is built on top of it; the filters under Correctness make it readable,
+not correct.
+
+### The plan, in order
+
+1. **Filter the junk out of the co-artist list.** "Colors" (the *A COLORS
+   SHOW* channel) and "Penelope Cruz" get fluent explanations since
+   [adr/D21](docs/adr/D21-explanations-name-what-the-person-did.md), which
+   makes a wrong row more convincing rather than less. Free. **Blocks
+   everything user-facing.**
+
+2. **Add 6-8 seeds from the profile's 80 `core` artists, by rule.** ~400
+   requests one-off, about four weeks of the Friday radar's own traffic. The
+   rule (band + a months floor) is a `policy.py` number and wants an ADR;
+   picking by hand is what produced the current two.
+
+   Do **Tom Waits and PJ Harvey first, as a probe.** Both current seeds sit in
+   the Iberian/Latin cluster, where guest culture is dense and Qobuz's credits
+   are good. Whether this works outside one scene is unmeasured, and that is
+   cheaper to find out at two seeds than at ten.
+
+3. **Rank across seeds.** The inputs are already stored: how many of your
+   artists made a record with them, how many records each way, the direction
+   (the seed guesting on THEIR album is the stronger claim — your artist chose
+   to show up), the roles, recency. Plus a **ubiquity penalty**, because
+   `selectivity()` exists for the person who appears everywhere and a
+   much-guested singer behaves exactly like Fred Kevorkian.
+
+   Not before step 2: the intersection across the current two seeds is 2 of 67
+   co-artists (Lau Noah, Salvador Sobral), so no weighting has any range.
+
+4. **Keep the sentence through the ranking, and make it multi-seed.**
+   `core/explain.py` takes structured facts, not prose, so it grows with the
+   evidence: *"has made records with 3 artists you play — Drexler (2 of his),
+   Pérez Cruz (1 of hers), ROSALÍA (1 of theirs) — playing guitar on 7 tracks.
+   Never played."* That sentence is the product. A score with no sentence
+   throws away the one thing this has over a similar-artist list.
+
+5. **Log what was shown.** Nothing scores this list, and `roadmap.md` has said
+   so from the start. The radar solved it with a committed state file
+   ([adr/D11](docs/adr/D11-radar-state-in-ci.md)) and this path has no
+   equivalent, so every weight in step 3 stays guesswork and there is no way
+   to tell whether seed 9 earned its 50 requests.
+
+6. **Then delivery.** A weekly co-artist issue is mostly static — it changes
+   only when seeds or credits do. The live form is the **people radar**: new
+   releases BY the artists on this list, costed at 68 `artist/get` per run,
+   cheaper than the Friday job already running.
+
+Still open and not in this plan, because it answers a different question: a
+**similar-artist baseline**. ListenBrainz exposes one and `radars/listenbrainz.py`
+already speaks to that API. Pull a seed's top 30, drop what is already played,
+and two unheard lists sit side by side — then listening to five of each is the
+only comparison that means anything. Guess on record: similarity wins on hit
+rate, co-appearance wins on keepers you would never have found, and the lists
+barely overlap.
 
 ## The product
 
