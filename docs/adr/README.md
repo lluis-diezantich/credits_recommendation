@@ -46,3 +46,4 @@ intended way round from here.
 | [D20](D20-the-funnel-is-queryable.md) | Everything the funnel is made of reaches the store, keyed by seed | Accepted |
 | [D21](D21-explanations-name-what-the-person-did.md) | An explanation names what the person did, and every clause is a row | Accepted |
 | [D22](D22-co-appearance-is-the-second-pipeline.md) | Co-appearance becomes the second pipeline, and more seeds is now the point | Accepted |
+| [D23](D23-ask-musicbrainz-who-the-seed-is.md) | Ask MusicBrainz which names the seed is credited under, and fold editions by title | Accepted |

@@ -89,3 +89,17 @@ def ids_for(key: str, fallback: dict, path: Path = FILE) -> dict:
                   f"using this radar's built-in list instead", file=sys.stderr)
         return fallback
     return found
+
+
+def mbid_for(qobuz_id: int, path: Path = FILE) -> str | None:
+    """The MusicBrainz id of a watched artist, by Qobuz id. None if unknown.
+
+    This file already carries an mbid per artist from the ListenBrainz ranking
+    that produced it, which is what lets a stage ask MusicBrainz about a seed
+    without resolving a name first. None rather than raising: a seed that is
+    not on the watchlist is a normal case.
+    """
+    for entry in load(path):
+        if entry.get("qobuz_id") == qobuz_id and entry.get("mbid"):
+            return str(entry["mbid"])
+    return None

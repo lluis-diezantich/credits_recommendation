@@ -33,7 +33,13 @@ from core.http import get
 from core.paths import CACHE
 
 CACHE_DIR = CACHE / "musicbrainz"
-ARTIST_URL = "https://musicbrainz.org/ws/2/artist/{mbid}?fmt=json"
+# `inc=aliases` rather than a second endpoint: the aliases arrive on the
+# request this module already makes, so the names an artist is credited under
+# cost nothing beyond what --check-active already spends. Cached entries
+# written before this are refetched on demand -- `ended()` reads life-span,
+# which is in both shapes.
+ARTIST_URL = ("https://musicbrainz.org/ws/2/artist/{mbid}"
+              "?inc=aliases+artist-rels&fmt=json")
 
 # Named application plus a contact URL, as MusicBrainz asks. Not decoration:
 # "dormancy-check/1.0 (personal use)" was refused with a 503.
@@ -96,3 +102,44 @@ def why(entity: dict | None) -> str:
     if not stopped:
         return ""
     return "died" if entity and entity.get("type") == "Person" else "split"
+
+
+def names(entity: dict | None) -> list[str]:
+    """Every name MusicBrainz knows this artist by, primary name first.
+
+    The answer to "is this credit the artist themselves or a collaborator",
+    which nothing else on disk can give. Qobuz credits a record to whichever
+    name the label filed -- "Bjork Gudmundsdottir" on 120 of Bjork's own
+    albums, "Simbiatu Ajikawo" on 20 of Little Simz's -- and both read as the
+    seed's biggest collaborator until something knows they are the seed.
+
+    Measured first and rejected: the share of the seed's catalogue (Bjork's
+    legal name holds 81%, but Little Simz's holds 45% against a real
+    producer's 42%, which is no gap at all) and whether the credit holds
+    MainArtist (neither legal name does -- both are filed as Composer).
+    So this is asked rather than inferred, the same stance as `ended()`.
+
+    Three sources, all on the one request: the aliases, and the artists on the
+    other end of an `is person` relationship, which is where MusicBrainz files
+    a legal name that is not an alias -- Little Simz has no alias for
+    "Simbiatu Ajikawo" and is related to it as a person.
+
+    What this does NOT return is a name nobody recorded. Two further spellings
+    of that one ("Simbiatu Abisola Abiola Ajikawo", "Simbi Ajikawo") are in no
+    MusicBrainz field, so 9 of her 29 self-credited albums survive it. The
+    caller reports the residue rather than fuzzy-matching it -- `find_artist`
+    refuses fuzzy matches for the same reason.
+    """
+    if not entity:
+        return []
+    found = [entity.get("name"), entity.get("sort-name")]
+    found += [alias.get("name") for alias in entity.get("aliases") or []]
+    for relation in entity.get("relations") or []:
+        if relation.get("type") == "is person":
+            other = relation.get("artist") or {}
+            found += [other.get("name"), other.get("sort-name")]
+    seen: dict[str, None] = {}
+    for name in found:
+        if name:
+            seen.setdefault(name, None)
+    return list(seen)

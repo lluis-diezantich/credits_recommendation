@@ -17,9 +17,9 @@ that is what it IS now that the decision has moved out.
 
 from __future__ import annotations
 
-from stages.discover import album_billing
+from stages.discover import album_billing, fold_editions
 
-SEED = "jorge drexler"
+SEED = {"jorge drexler"}
 
 
 def track(performers: str) -> dict:
@@ -92,8 +92,66 @@ def test_the_first_spelling_of_a_name_wins():
     assert album_billing(tracks, SEED) == ("own", ["Anavitória"])
 
 
+def test_every_name_the_seed_is_credited_under_counts_as_the_seed():
+    """The defect the Bjork probe found: Qobuz files a record under whichever
+    name the label used, so reading only the performing name made
+    "Bjork Gudmundsdottir" -- 120 of her 148 own albums -- her own biggest
+    collaborator, and would file those albums as guest spots."""
+    tracks = [track("Björk Guðmundsdóttir, MainArtist, Vocal")]
+    # normalise() drops the eth rather than transliterating it, so the key is
+    # "gumundsdottir". MusicBrainz happens to list both spellings, which is
+    # why the real run catches it either way -- but the key is what matches.
+    assert album_billing(tracks, {"bjork", "bjork gumundsdottir"}) == ("own", [])
+    # and with only the performing name, the same album reads as somebody else's
+    assert album_billing(tracks, {"bjork"}) == ("guest", ["Björk Guðmundsdóttir"])
+
+
 def test_the_seed_is_never_their_own_co_appearance_however_it_is_spelled():
     """`seed_key` arrives normalised; the billing does not. "Silvia Perez Cruz"
     must not be billed alongside "Sílvia Pérez Cruz"."""
     tracks = [track("Sílvia Pérez Cruz, MainArtist, Vocal")]
-    assert album_billing(tracks, "silvia perez cruz") == ("own", [])
+    assert album_billing(tracks, {"silvia perez cruz"}) == ("own", [])
+
+
+# ---- editions -----------------------------------------------------------
+
+
+def album(album_id, title, date, provenance="own"):
+    return {"album_id": album_id, "title": title, "date": date,
+            "provenance": provenance}
+
+
+def test_one_single_under_five_ids_counts_once():
+    """"WE PRAY" is five album ids, so Coldplay, Burna Boy, Elyanna and tINI
+    each scored five co-appearances off one song -- and a ranker would have
+    put them at the top of the Little Simz list on the strength of it."""
+    editions = [album(f"id{n}", "WE PRAY ", "2024-09-01") for n in range(5)]
+    assert len(fold_editions(editions)) == 1
+
+
+def test_the_earliest_edition_is_the_one_kept():
+    """The original, not whichever reissue sorted first."""
+    kept = fold_editions([album("b", "Debut", "2015-01-01"),
+                          album("a", "Debut", "1993-07-05")])
+    assert [a["album_id"] for a in kept] == ["a"]
+
+
+def test_different_records_are_not_folded():
+    kept = fold_editions([album("a", "Vespertine", "2001-08-27"),
+                          album("b", "Homogenic", "1997-09-22")])
+    assert len(kept) == 2
+
+
+def test_folding_is_on_the_normalised_title():
+    """Trailing space and case are how Qobuz spells the same release twice."""
+    assert len(fold_editions([album("a", "WE PRAY ", "2024-09-01"),
+                              album("b", "we pray", "2024-09-02")])) == 1
+
+
+def test_the_output_is_ordered_by_date():
+    kept = fold_editions([album("c", "Z", "2020-01-01"), album("a", "A", "1990-01-01")])
+    assert [a["title"] for a in kept] == ["A", "Z"]
+
+
+def test_no_albums_folds_to_nothing():
+    assert fold_editions([]) == []

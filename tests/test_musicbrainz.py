@@ -153,3 +153,56 @@ def test_why_separates_a_death_from_a_split():
     assert mod.why(person(ended=True, end="2019-12-17", kind="Group")) == "split"
     assert mod.why(person()) == ""
     assert mod.why(None) == ""
+
+
+# ---- which names an artist is credited under ----------------------------
+
+
+def test_the_performing_name_comes_first():
+    assert mod.names({"name": "Björk", "sort-name": "Björk"}) == ["Björk"]
+
+
+def test_an_alias_is_a_name_the_artist_is_credited_under():
+    """Björk's legal name is an alias, and Qobuz credits 120 of her 148 own
+    albums to it -- which made her the top of her own collaborator graph."""
+    assert mod.names({
+        "name": "Björk", "sort-name": "Björk",
+        "aliases": [{"name": "Björk Guðmundsdóttir"}, {"name": "Bjork"}],
+    }) == ["Björk", "Björk Guðmundsdóttir", "Bjork"]
+
+
+def test_an_is_person_relationship_is_read_as_well_as_the_aliases():
+    """Aliases alone are not enough: Little Simz has NO alias for "Simbiatu
+    Ajikawo" and is linked to it as a person. Missing this left 20 of her 44
+    own albums credited to her own biggest "collaborator"."""
+    assert mod.names({
+        "name": "Little Simz",
+        "relations": [{"type": "is person",
+                       "artist": {"name": "Simbiatu Ajikawo",
+                                  "sort-name": "Ajikawo, Simbiatu"}}],
+    }) == ["Little Simz", "Simbiatu Ajikawo", "Ajikawo, Simbiatu"]
+
+
+def test_other_relationships_are_not_other_names():
+    """"member of band" is a different claim: SPACE AGE is not Little Simz."""
+    assert mod.names({
+        "name": "Little Simz",
+        "relations": [{"type": "member of band", "artist": {"name": "SPACE AGE"}}],
+    }) == ["Little Simz"]
+
+
+def test_the_same_name_twice_is_listed_once():
+    assert mod.names({"name": "Sjón", "sort-name": "Sjón",
+                      "aliases": [{"name": "Sjón"}]}) == ["Sjón"]
+
+
+def test_an_unreadable_artist_has_no_names_rather_than_raising():
+    """None means MusicBrainz could not be read, and the caller then drops only
+    the performing name -- the old behaviour -- and says so."""
+    assert mod.names(None) == []
+    assert mod.names({}) == []
+
+
+def test_a_nameless_alias_is_skipped():
+    assert mod.names({"name": "X", "aliases": [{"locale": "ja"}, {"name": "Y"}]}) == [
+        "X", "Y"]

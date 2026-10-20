@@ -32,6 +32,7 @@ import time
 import urllib.parse
 from pathlib import Path
 
+from core import favourites, musicbrainz
 from core.credits import main_artists, parse_performers
 from core.names import normalise
 from core.paths import CACHE, DATA
@@ -96,8 +97,53 @@ def album_tracks(album_id: str, store: str, cookies: str,
     return slim, False
 
 
-def album_billing(tracks: list[dict], seed_key: str) -> tuple[str, list[str]]:
+def fold_editions(albums: list[dict]) -> list[dict]:
+    """One row per release, not per edition, keeping the earliest of each.
+
+    Qobuz issues a single under several album ids -- "WE PRAY", the Coldplay
+    single Little Simz features on, is FIVE -- so counting album ids made
+    Coldplay, Burna Boy, Elyanna and tINI score five co-appearances off one
+    song. Bjork's discography is 141 ids for 99 titles.
+
+    Folded on normalise(title), which is the only key the two editions share:
+    there is no release group id in what Qobuz returns here. That is coarse on
+    purpose and it has one known cost -- a genuine reissue with a different
+    track list folds into the original, as "Granada" does in the Perez Cruz
+    corpus (15 tracks and 21) -- and for counting who someone made records
+    with, those two ARE one record.
+    """
+    folded: dict[str, dict] = {}
+    for album in sorted(albums, key=lambda a: a.get("date") or ""):
+        folded.setdefault(normalise(album.get("title") or ""), album)
+    return list(folded.values())
+
+
+def seed_names(qobuz_id: int, name: str, mbid: str | None) -> tuple[set[str], int]:
+    """(every key the seed is credited under, how many MusicBrainz added).
+
+    Qobuz credits a record to whichever name the label filed, so the seed is
+    their own biggest "collaborator" wherever that is not their performing
+    name: "Bjork Gudmundsdottir" held 120 of Bjork's 148 own albums, and
+    "Simbiatu Ajikawo" 20 of Little Simz's 44. Both read as the top of their
+    own crew graph until something knows they are the seed.
+
+    One request, cached, and the mbid comes off data/favourites.json, which
+    already carries one per artist. Without an mbid this returns just the
+    performing name -- the old behaviour, and the caller says so out loud.
+    """
+    keys = {normalise(name)}
+    if not mbid:
+        return keys, 0
+    found = {normalise(n) for n in musicbrainz.names(musicbrainz.artist(mbid))}
+    return keys | found, len(found - keys)
+
+
+def album_billing(tracks: list[dict], seed_keys) -> tuple[str, list[str]]:
     """(provenance, the other artists billed on this album).
+
+    `seed_keys` is every name the seed is credited under, not one: a record
+    billed to "Bjork Gudmundsdottir" is still Bjork's own record, and reading
+    only the performing name files it as a guest spot.
 
     Pure and offline: `tracks` is what album_tracks already returned, so this
     makes no request and the labelling of a whole discography costs nothing.
@@ -122,10 +168,10 @@ def album_billing(tracks: list[dict], seed_key: str) -> tuple[str, list[str]]:
             continue
         billed_tracks += 1
         keys = {normalise(name) for name in billed}
-        if seed_key in keys:
+        if keys & set(seed_keys):
             seed_billed += 1
         for name in billed:
-            if normalise(name) != seed_key:
+            if normalise(name) not in seed_keys:
                 others.setdefault(normalise(name), name)
     return album_provenance(seed_billed, billed_tracks), list(others.values())
 
@@ -137,6 +183,7 @@ def main() -> int:
     parser.add_argument("--include-all", action="store_true",
                         help="keep people with no musical role (designers, studios)")
     parser.add_argument("--refresh", action="store_true", help="ignore the credits cache")
+    parser.add_argument("--mbid", help="seed's MusicBrainz id (default: from favourites.json)")
     parser.add_argument("--out", help="output path (default: discovery_<artist_id>.json)")
     args = parser.parse_args()
 
@@ -145,7 +192,16 @@ def main() -> int:
     if not releases:
         raise SystemExit(f"no releases for artist {args.artist} in the {args.store} store")
     print(f"seed: {seed_name} ({args.artist}) - {len(releases)} releases", file=sys.stderr)
-    seed_key = normalise(seed_name)
+    mbid = args.mbid or favourites.mbid_for(args.artist)
+    seed_keys, from_mb = seed_names(args.artist, seed_name, mbid)
+    if mbid:
+        print(f"  seed credited under {len(seed_keys)} names "
+              f"({from_mb} from MusicBrainz)", file=sys.stderr)
+    else:
+        print("  no mbid for this artist in favourites.json: only the exact "
+              "performing name will be dropped, so check the top of the "
+              "people list below for the seed under another spelling",
+              file=sys.stderr)
 
     # key -> evidence
     people: dict[str, dict] = collections.defaultdict(
@@ -165,9 +221,11 @@ def main() -> int:
             failed += 1
             continue
         fetched += 1
-        provenance, billed_with = album_billing(tracks, seed_key)
+        provenance, billed_with = album_billing(tracks, seed_keys)
         provenances[provenance] += 1
         for name in billed_with:
+            if normalise(name) in seed_keys:
+                continue              # the seed, under a name Qobuz filed
             entry = co_artists[normalise(name)]
             entry["names"].add(name)
             entry["albums"].append({
@@ -208,8 +266,10 @@ def main() -> int:
         return any(r.lower() in MUSICAL_ROLES for r in entry["roles"])
 
     kept, dropped = [], 0
+    dropped_as_seed: list[set[str]] = []
     for key, entry in people.items():
-        if key == seed_key:
+        if key in seed_keys:
+            dropped_as_seed.append(entry["names"].copy())
             continue                      # the seed is not their own collaborator
         if not args.include_all and not is_musical(entry):
             dropped += 1
@@ -245,9 +305,9 @@ def main() -> int:
     # seed's records: measured against real listening it carries 59% (Drexler)
     # and 40% (Perez Cruz) artists already played, against 13-16% for the crew
     # graph above -- see docs/adr/D14-co-appearance-is-its-own-output.md.
-    together = []
+    together: list[dict] = []
     for key, entry in co_artists.items():
-        albums = sorted(entry["albums"], key=lambda a: a["date"] or "")
+        albums = fold_editions(entry["albums"])
         billing = collections.Counter(a["provenance"] for a in albums)
         together.append({
             "key": key,
@@ -278,6 +338,7 @@ def main() -> int:
         "dropped_non_musical": dropped,
     }, indent=2, ensure_ascii=False))
 
+    own_albums = provenances["own"]
     multi = [p for p in kept if p["stats"]["albums"] >= 2]
     covers = [p for p in kept if p["cover_source_only"]]
     by_class = collections.Counter(c for p in kept for c in p["classes"])
@@ -287,7 +348,21 @@ def main() -> int:
     print(f"{provenances['own']} of {fetched} albums are the seed's own, "
           f"{provenances['guest']} are guest spots on someone else's"
           + (f", {unbilled} with nobody billed" if unbilled else ""))
+    if dropped_as_seed:
+        shown = ", ".join(sorted(n for names in dropped_as_seed for n in names)[:4])
+        print(f"{len(dropped_as_seed)} credits were the seed under another name "
+              f"({shown}) - not collaborators")
     print(f"{len(kept)} musical people kept, {dropped} non-musical dropped")
+    # The residue MusicBrainz cannot catch: a spelling nobody recorded. Two of
+    # Little Simz's three self-credits are like this, so the top of the list is
+    # printed with its share for a human to check rather than fuzzy-matched.
+    if kept and own_albums:
+        top = kept[0]
+        share = (top["stats"].get("own_albums") or 0) / own_albums
+        if share >= 0.5:
+            print(f"CHECK: {top['names'][0]} holds {share:.0%} of the seed's own "
+                  "albums - if that is the seed under a spelling MusicBrainz "
+                  "does not know, add it to the mbid's aliases there")
     print(f"{len(multi)} appear on 2+ of the seed's albums")
     print("by class: " + ", ".join(f"{k} {v}" for k, v in by_class.most_common()))
     print(f"{len(covers)} are cover sources only (wrote a song the seed recorded, "

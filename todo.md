@@ -372,19 +372,23 @@ Where the code can be wrong without anything noticing.
   per-seed table are in
   [adr/D22](docs/adr/D22-co-appearance-is-the-second-pipeline.md).
 
-  - **The seed is credited under a legal name, so the seed-drop misses it.**
-    `discover.py` skips `normalise(seed_name)` only, so "Björk Guðmundsdóttir"
-    — 120 albums, 581 tracks — is the biggest collaborator in Björk's own
-    graph, and Little Simz appears three times under her legal name for 33
-    albums. Drexler and Pérez Cruz are credited under their performing names,
-    which is why this never showed.
+  - **~~The seed is credited under a legal name.~~** Fixed 2026-10-20
+    ([adr/D23](docs/adr/D23-ask-musicbrainz-who-the-seed-is.md)): MusicBrainz
+    is asked which names the seed is credited under — aliases, sort-name and
+    the far side of an `is person` relationship — one cached request per seed,
+    with the mbid off `favourites.json`. Björk's own graph now tops at Nellee
+    Hooper instead of herself.
 
-    Not a one-liner, because the test has to distinguish the seed from a
-    lifelong writing partner: Sjón holds 12 of Björk's 148 own albums and
-    Carles Campi Campón 21 of Drexler's 48 (44%), so a bare share threshold
-    would catch a real producer. What separates them is measurable — the seed
-    holds `MainArtist`, a producer does not — and that wants checking before
-    a number goes in `policy.py`.
+    Both cheaper tests were measured and failed, which is why this went to an
+    external source: a share threshold puts Little Simz's legal name at 45%
+    against a real producer at 42%, and NEITHER legal name holds `MainArtist`
+    — both are filed as Composer, exactly like Sjón and Inflo.
+
+    **Residue:** "Simbiatu Abisola Abiola Ajikawo" (5 albums) and "Simbi
+    Ajikawo" (4) are in no MusicBrainz field, so 9 of her 29 self-credits
+    survive. `discover.py` prints a CHECK line when the top person holds half
+    the catalogue, which catches a Björk-sized residue and not a 5-album one.
+    The real fix is an edit at MusicBrainz.
 
   - **One person splits across names, and it hits the best collaborators.**
     Sjón is four people (Sjon 12, Sigurjon Sigurdsson 11, Sigurjon Birgir
@@ -396,10 +400,16 @@ Where the code can be wrong without anything noticing.
     most. Needs a source of aliases: a hand-edited file like
     `favourites.json`, or a Qobuz lookup per name, which costs requests.
 
-  - **Editions inflate every count.** "WE PRAY" is one Coldplay single stored
-    as five album ids. Björk has 141 album ids for 99 distinct titles, 42
-    surplus. This is the "Album identity" entry below, now with a measured
-    consequence rather than a theoretical one.
+  - **~~Editions inflate every count.~~** Fixed for co-appearance 2026-10-20
+    (`discover.fold_editions`, same ADR): folded on `normalise(title)`, since
+    Qobuz returns no release-group id here. Coldplay, Burna Boy, Elyanna and
+    tINI went from 5 co-appearances each to 1, and Obongjayar correctly kept 2.
+
+    Two things this does not do. It merges genuine reissues — "Granada" is in
+    the Pérez Cruz corpus at 15 tracks and 21 — which is right for counting who
+    made records together and wrong for anything needing a track list. And the
+    pools are untouched: `releases` still holds one row per edition, which is
+    the "Album identity" entry below.
 
   A fourth, subtler: `policy.album_provenance` assumes one `MainArtist` per
   record, so "WE PRAY" reads as Little Simz's OWN record because she is billed
