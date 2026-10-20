@@ -77,6 +77,7 @@ matters, and todo.md has the measurement.
 | [duckdb.md](docs/duckdb.md) | optional query layer over the store — measured, not quoted |
 | [sources.md](docs/sources.md) | other discovery signals, and what each was tested to carry |
 | [disco-bahia.md](docs/disco-bahia.md) | one recommendation this project could not have made |
+| [adr/](docs/adr/README.md) | one file per decision, with the option it was weighed against and the measurement it rests on |
 
 ## TODO
 

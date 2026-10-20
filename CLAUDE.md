@@ -1,8 +1,9 @@
 # Working in this repo
 
 Pointers and traps only. The layout is in `README.md`, the reasoning in
-`docs/architecture.md`, the backlog in `todo.md` — **do not restate them here.**
-This file is for what those do not say and what a first read gets wrong.
+`docs/architecture.md`, the backlog in `todo.md`, and what was decided against
+which alternative in `docs/adr/` — **do not restate them here.** This file is
+for what those do not say and what a first read gets wrong.
 
 ## Invariants
 
@@ -16,6 +17,12 @@ This file is for what those do not say and what a first read gets wrong.
 - Decisions get extracted into pure functions and then tested, rather than left
   wedged between a fetch and a print. `stages/writing.py` and
   `stages/resolve_discogs.py` are what that looks like when it is done.
+- A decision that shapes what this recommends gets an ADR in `docs/adr/`, with
+  the option it was weighed against and the measurement it rests on. Write it as
+  the change is made, not afterwards, and never rewrite an accepted one —
+  supersede it, because the reason it went the other way is the point of keeping
+  it. `docs/adr/README.md` says how; D1-D13 are backfilled and D14 is the shape
+  to copy.
 
 ## Measuring
 
