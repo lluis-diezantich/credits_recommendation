@@ -136,12 +136,18 @@ CREATE TABLE person_classes (person_key TEXT, class TEXT,
                              PRIMARY KEY (person_key, class));
 CREATE TABLE person_roles   (person_key TEXT, role TEXT, role_key TEXT,
                              role_class TEXT, role_weight REAL, n INTEGER);
-CREATE TABLE person_albums  (person_key TEXT, album_id TEXT, title TEXT,
+CREATE TABLE person_albums  (seed_qobuz_id INTEGER, person_key TEXT,
+                             album_id TEXT, title TEXT,
                              provenance TEXT,
---  ^ own/guest, from discover.py: a credit on a record the seed only guested
---    on is not a credit on one of the seed's records.
+--  ^ own/guest/compilation, from discover.py: a credit on a record the seed
+--    only guested on is not a credit on one of the seed's records. It is a
+--    fact about (album, SEED), which is why the seed leads the key -- one
+--    album is Bjork's OWN record and a guest spot for ROSALIA, and Noah
+--    Goldstein and Sega Bodega are credited on it in both walks. D28 finishes
+--    what D19 started: an album is per (person, seed), the grain person_seeds
+--    and co_artist_albums already use.
                              date TEXT, tracks INTEGER, roles TEXT,
-                             PRIMARY KEY (person_key, album_id));
+                             PRIMARY KEY (seed_qobuz_id, person_key, album_id));
 CREATE TABLE person_edges   (person_key TEXT, other_name TEXT, releases INTEGER,
                              roles TEXT, kind TEXT,
                              PRIMARY KEY (person_key, other_name, kind));
@@ -323,6 +329,9 @@ CREATE INDEX ix_person_names_name     ON person_names (name);
 CREATE INDEX ix_person_roles_key      ON person_roles (person_key);
 CREATE INDEX ix_person_roles_class    ON person_roles (role_class);
 CREATE INDEX ix_person_albums_album   ON person_albums (album_id);
+CREATE INDEX ix_person_albums_person  ON person_albums (person_key);
+--  ^ the key leads with the seed now, so "every album this person worked on,
+--    across seeds" lost the prefix it used to scan.
 CREATE INDEX ix_person_edges_other    ON person_edges (other_name);
 
 -- releases: album_id joins, sig_score and date are what a ranker will order by
@@ -591,8 +600,9 @@ def load_people(ld: Loader) -> None:
             classes += [(key, c) for c in person.get("classes") or []]
             roles += role_rows(key, person.get("roles"))
             for alb in person.get("albums") or []:
-                albums.append((key, alb.get("album_id"), alb.get("provenance"),
-                               alb.get("title"), alb.get("date"), alb.get("tracks"),
+                albums.append((seed_id, key, alb.get("album_id"),
+                               alb.get("provenance"), alb.get("title"),
+                               alb.get("date"), alb.get("tracks"),
                                joined(alb.get("roles"))))
         ld.note("people", path.name, len(blob.get("people") or []), blob.get("generated"))
         ld.note("co_artists", path.name, len(blob.get("co_artists") or []),
@@ -718,8 +728,8 @@ def load_people(ld: Loader) -> None:
               ["person_key", "role", "role_key", "role_class", "role_weight", "n"],
               deduped(roles))
     ld.insert("person_albums",
-              ["person_key", "album_id", "provenance", "title", "date", "tracks",
-               "roles"],
+              ["seed_qobuz_id", "person_key", "album_id", "provenance", "title",
+               "date", "tracks", "roles"],
               deduped(albums))
     ld.insert("seeds",
               ["seed_qobuz_id", "name", "store", "releases", "albums_own",

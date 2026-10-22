@@ -102,7 +102,7 @@ def test_every_index_is_created_after_the_rows_not_in_the_schema(store):
     """The 2s rebuild depends on it: an index in SCHEMA is maintained per
     INSERT across 216k rows. If one migrates into SCHEMA this fails."""
     assert "CREATE INDEX" not in load.SCHEMA
-    assert load.INDEXES.count("CREATE INDEX") == 35
+    assert load.INDEXES.count("CREATE INDEX") == 36
 
 
 def test_the_indexes_name_only_real_columns(store):
@@ -688,7 +688,7 @@ def test_a_full_build_from_nothing_produces_an_empty_but_valid_store(store, monk
     con = sqlite3.connect(db)
     kinds = con.execute("SELECT type, COUNT(*) FROM sqlite_master GROUP BY type"
                         ).fetchall()
-    assert dict(kinds)["index"] == 53
+    assert dict(kinds)["index"] == 54
     assert dict(kinds)["view"] == 4
 
 
@@ -880,7 +880,7 @@ def test_the_tables_whose_key_is_real_have_one(store):
 
     assert keyed["people"] == ["person_key"]
     assert keyed["person_names"] == ["person_key", "name"]
-    assert keyed["person_albums"] == ["person_key", "album_id"]
+    assert keyed["person_albums"] == ["seed_qobuz_id", "person_key", "album_id"]
     assert keyed["person_edges"] == ["person_key", "other_name", "kind"]
     assert keyed["releases"] == ["album_id", "source"]
     assert keyed["songs"] == ["song_key", "artist_query"]
@@ -928,10 +928,11 @@ def test_the_failure_names_the_table_and_the_offending_row(store):
     """sqlite says "UNIQUE constraint failed: person_albums.person_key,
     person_albums.album_id" and names no row. Over a 216k-row build that is not
     a place to go looking, so insert() finds the duplicate and prints it."""
-    row = ("jorge drexler", "a1", "Title", "2020-01-01", 10, "Producer")
+    row = (41620, "jorge drexler", "a1", "Title", "2020-01-01", 10, "Producer")
     with pytest.raises(SystemExit) as caught:
         store.ld.insert("person_albums",
-                        ["person_key", "album_id", "title", "date", "tracks", "roles"],
+                        ["seed_qobuz_id", "person_key", "album_id", "title",
+                         "date", "tracks", "roles"],
                         [row, row])
     message = str(caught.value)
     assert "person_albums" in message
@@ -1008,31 +1009,43 @@ def test_a_full_build_still_satisfies_every_key_it_declares(store, monkeypatch):
     assert con.execute("SELECT COUNT(*) FROM releases").fetchone() == (2,)
 
 
-def test_two_sources_disagreeing_about_one_album_fails_the_build_loudly(store):
-    """The one key here that rests on an empirical fact rather than a structural
-    one, recorded so it is known rather than discovered.
+def test_two_seeds_may_disagree_about_one_album_because_they_are_not_wrong(store):
+    """This used to fail the build, and the key was wrong rather than the data.
 
-    person_albums is keyed (person_key, album_id), which says a person worked
-    on an album once. Two discovery files can describe the same (person,
-    album) -- 14 people are in two seeds' walks -- and nothing in the loader
-    makes them agree on the title, date or track count. Measured on the real
-    corpus: zero such pairs disagree, which is why the key holds.
-
-    If a future file breaks that, this is the behaviour: the build stops and
-    says which row, rather than writing two rows for one album. Loud is the
-    right failure -- the alternative is a person_albums count that silently
-    double-counts an album, which no query would reveal.
+    `provenance` is a fact about (album, SEED): "Oral (Olof Dreijer Remix)" is
+    Bjork's OWN record and a guest spot for ROSALIA, and Noah Goldstein and
+    Sega Bodega are credited on it in both walks. Keyed (person_key, album_id)
+    those two rows collided, and the sixth seed is where that finally happened.
+    D28 put the seed in the key, which is D19's grain argument reaching the one
+    table it had missed.
     """
-    store.write("discovery_1.json", {"people": [{"names": ["P"], "albums": [
-        {"album_id": "a1", "title": "Libertad", "tracks": 13}]}]})
-    store.write("discovery_2.json", {"people": [{"names": ["P"], "albums": [
-        {"album_id": "a1", "title": "Libertad (Deluxe)", "tracks": 15}]}]})
+    store.write("discovery_1.json", {
+        "seed": {"qobuz_id": 27940, "name": "Björk"},
+        "people": [{"names": ["P"], "albums": [
+            {"album_id": "a1", "title": "Oral", "provenance": "own"}]}]})
+    store.write("discovery_2.json", {
+        "seed": {"qobuz_id": 219860, "name": "ROSALÍA"},
+        "people": [{"names": ["P"], "albums": [
+            {"album_id": "a1", "title": "Oral", "provenance": "guest"}]}]})
 
+    load.load_people(store.ld)
+    assert dict(store.rows("person_albums", "seed_qobuz_id, provenance")) == {
+        27940: "own", 219860: "guest"}
+
+
+def test_one_seed_claiming_an_album_twice_still_fails_the_build_loudly(store):
+    """What the key protects now. A seed's own walk writing the same (person,
+    album) twice means the loader produced data its schema forbids, and loud is
+    the right failure -- the alternative is a count that double-counts an album
+    where no query would reveal it."""
+    row = (41620, "p", "a1", "own", "Libertad", "2020-01-01", 13, "Producer")
     with pytest.raises(SystemExit) as caught:
-        load.load_people(store.ld)
-    message = str(caught.value)
-    assert "person_albums" in message
-    assert "UNIQUE constraint failed" in message
+        store.ld.insert("person_albums",
+                        ["seed_qobuz_id", "person_key", "album_id", "provenance",
+                         "title", "date", "tracks", "roles"],
+                        [row, (*row[:6], 15, "Producer")])
+    assert "person_albums" in str(caught.value)
+    assert "UNIQUE constraint failed" in str(caught.value)
 
 
 def test_the_derived_watchlist_is_not_a_second_source_for_an_album(store):

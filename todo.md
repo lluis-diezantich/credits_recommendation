@@ -74,11 +74,12 @@ not correct.
    against `DEEP_FLOOR`'s 24 and is the seed that proved the method
    generalises.
 
-   **Still to do: walk them.** 27 candidates, ~50 requests each. The first
-   five are guaranteed intersections (ROSALÍA, Natalia Lafourcade, Residente,
-   C. Tangana, Rubén Blades) and `seeds.py` orders them first on purpose, so
-   step 3 gets a column with range after two or three walks instead of after
-   eight. Each walk wants its alias report read once afterwards
+   **Still to do: walk them.** 27 candidates, ~50 requests each, and
+   `discover.py --artist a b c` takes them in one run now. Nathy Peluso and
+   ROSALÍA are walked (6 seeds), which took intersections from 2 to 4; the next
+   four guaranteed ones are Natalia Lafourcade, Residente, C. Tangana and
+   Rubén Blades, and `seeds.py` orders them first on purpose, so step 3 gets a
+   column with range after two or three walks instead of after eight. Each walk wants its alias report read once afterwards
    ([adr/D25](docs/adr/D25-one-person-one-key.md)) — ten minutes, and the
    counts are right before anything ranks them.
 
@@ -733,12 +734,20 @@ Where the code can be wrong without anything noticing.
     where a source file omitted a field. This is also where the engines
     diverge: DuckDB follows the standard and refuses NULL in a key, so a
     `song_performers` key would build under sqlite and fail under duckdb.
-  - `person_albums (person_key, album_id)` rests on an empirical fact, not a
-    structural one. Two files describe those albums and nothing makes them
-    agree; measured, there are 214 shared `(person, album)` pairs and zero
-    disagreements, because `appearances` derives from the same discovery pass.
-    If that ever breaks, the build stops and names the row — which is the right
-    failure, since the alternative is a count that silently double-counts.
+  - ~~`person_albums (person_key, album_id)` rests on an empirical fact, not a
+    structural one.~~ **It broke, on the sixth seed.** Fixed 2026-10-22
+    ([adr/D28](docs/adr/D28-an-album-is-per-person-seed.md)): the key is
+    `(seed_qobuz_id, person_key, album_id)` now, because `provenance` is a fact
+    about (album, SEED) — "Oral (Olof Dreijer Remix)" is Björk's own record and
+    a guest spot for ROSALÍA, and Noah Goldstein and Sega Bodega are credited
+    on it in both walks. 2 pairs disagreed and `provenance` was the only field
+    that did, in both. D19's grain argument reaching the one table it missed.
+
+    Worth remembering how it surfaced: the build stopped, which was the right
+    failure, but `load.py` unlinks the store before building, so **the previous
+    store was already gone** and nothing was queryable until the key was fixed.
+    A loud failure that takes the last good artefact with it is louder than
+    intended.
 
 - **~~Two hand-rolled retry loops are left.~~** Done: both deleted.
   `stages/writing.py` goes through `core.qobuz.get_json` now, so the adapter's

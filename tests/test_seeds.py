@@ -180,10 +180,15 @@ def test_the_listing_says_how_many_are_left_to_walk(run):
     assert "to go" in said
 
 
-def test_next_prints_a_runnable_command_per_seed(run):
+def test_next_prints_one_command_for_the_whole_batch(run):
+    """discover.py takes several ids now and reads the storefront cookie and
+    the alias file once for the run, so a batch is one command."""
     said = run("--next", "2").out
-    assert "./stages/discover.py --artist 3526537" in said
-    assert said.count("./stages/discover.py") == 2
+    assert said.count("./stages/discover.py") == 1
+    # Drexler first: with no store nothing counts as walked, so the order is
+    # the recent-months fallback and his 24/24 and 6,988 plays lead.
+    assert "--artist 41620 3526537" in said
+    assert "./stages/load.py" in said
     # And the step that must not be skipped between the walk and the ranking.
     assert "aliases.json" in said
 

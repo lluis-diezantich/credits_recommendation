@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Step 1 of 2 - DISCOVERY: who made a seed artist's records.
 
-Walks every release by one seed artist, reads the per-track `performers` credits
-Qobuz ships with each album, and reduces them to distinct people with the
-evidence for each: which of the seed's albums they worked on, how many tracks,
-and in what roles.
+Walks every release by each seed artist given, reads the per-track `performers`
+credits Qobuz ships with each album, and reduces them to distinct people with
+the evidence for each: which of the seed's albums they worked on, how many
+tracks, and in what roles. One file per seed, one `walk()` per seed, and the
+storefront login and the alias file read once for the run.
 
 Exact and cacheable: this only parses what Qobuz already returned, so it does no
 name matching and makes no guesses. The fuzzy part (name -> Qobuz artist id) is
@@ -13,12 +14,21 @@ qobuz_resolve.py, kept separate so it can be re-run without re-crawling albums.
 No login, no API key -- a public app id plus the cookies any storefront page
 issues. Album credits are cached, so a second run costs one request.
 
-    ./qobuz_discover.py                      # the seed in SEED_ARTIST
-    ./qobuz_discover.py --artist 41620
-    ./qobuz_discover.py --include-all        # keep artwork/studio people too
-    ./qobuz_discover.py --refresh            # ignore the credits cache
+    ./stages/discover.py                     # the seed in SEED_ARTIST
+    ./stages/discover.py --artist 41620
+    ./stages/discover.py --artist 219860 148515 717509      # in one run
+    ./stages/discover.py --include-all       # keep artwork/studio people too
+    ./stages/discover.py --refresh           # ignore the credits cache
 
-Writes discovery_<artist_id>.json, the input to qobuz_resolve.py.
+`./stages/seeds.py --next 5` prints the ids worth walking, in the order worth
+walking them (D26). A seed that cannot be read is fatal to its own file and not
+to the batch, so the run reports which ones failed and exits non-zero.
+
+--out and --mbid name ONE artist, so they are refused with several ids rather
+than silently applied to the first: Björk's mbid on Residente's walk would
+label his own records as somebody else's.
+
+Writes discovery_<artist_id>.json per seed, the input to resolve_qobuz.py.
 """
 
 from __future__ import annotations
@@ -253,26 +263,25 @@ def alias_report(keys) -> dict[str, list[tuple[str, str]]]:
     return found
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Discover who made a seed artist's records.")
-    parser.add_argument("--artist", type=int, default=SEED_ARTIST, help="Qobuz seed artist id")
-    parser.add_argument("--store", default=STORE, help=f"storefront (default: {STORE})")
-    parser.add_argument("--include-all", action="store_true",
-                        help="keep people with no musical role (designers, studios)")
-    parser.add_argument("--refresh", action="store_true", help="ignore the credits cache")
-    parser.add_argument("--mbid", help="seed's MusicBrainz id (default: from favourites.json)")
-    parser.add_argument("--out", help="output path (default: discovery_<artist_id>.json)")
-    args = parser.parse_args()
+def walk(artist_id: int, cookies: str, alias_map, alias_display, args) -> int:
+    """One seed, end to end: fetch, reduce, write discovery_<id>.json, report.
 
-    alias_map = aliases.load()
-    alias_display = aliases.display_names()
-    cookies = store_cookies(args.store)
-    seed_name, releases = seed_releases(args.artist, args.store, cookies)
+    Extracted from main() so several seeds can be walked in one run -- the five
+    guaranteed intersections D26 puts first are one command now rather than
+    five. The body is unchanged; what moved out is the login and the alias
+    file, which are per-RUN and were being re-read per seed.
+
+    Raises SystemExit for anything fatal to THIS seed, which the caller catches
+    so one bad discography does not waste the walks queued behind it. A partial
+    discography is still fatal -- seed_releases says why -- it is just fatal to
+    one file instead of to the batch.
+    """
+    seed_name, releases = seed_releases(artist_id, args.store, cookies)
     if not releases:
-        raise SystemExit(f"no releases for artist {args.artist} in the {args.store} store")
-    print(f"seed: {seed_name} ({args.artist}) - {len(releases)} releases", file=sys.stderr)
-    mbid = args.mbid or favourites.mbid_for(args.artist)
-    seed_keys, from_mb = seed_names(args.artist, seed_name, mbid)
+        raise SystemExit(f"no releases for artist {artist_id} in the {args.store} store")
+    print(f"seed: {seed_name} ({artist_id}) - {len(releases)} releases", file=sys.stderr)
+    mbid = args.mbid or favourites.mbid_for(artist_id)
+    seed_keys, from_mb = seed_names(artist_id, seed_name, mbid)
     if mbid:
         print(f"  seed credited under {len(seed_keys)} names "
               f"({from_mb} from MusicBrainz)", file=sys.stderr)
@@ -413,11 +422,11 @@ def main() -> int:
         })
     together.sort(key=lambda p: (-p["stats"]["albums"], p["key"]))
 
-    out = Path(args.out) if args.out else DATA / f"discovery_{args.artist}.json"
+    out = Path(args.out) if args.out else DATA / f"discovery_{artist_id}.json"
     out.write_text(json.dumps({
         "version": 1,
         "generated": dt.date.today().isoformat(),
-        "seed": {"qobuz_id": args.artist, "name": seed_name, "store": args.store,
+        "seed": {"qobuz_id": artist_id, "name": seed_name, "store": args.store,
                  "releases": len(releases), "albums_fetched": fetched,
                  "albums_failed": failed,
                  "albums_own": provenances["own"],
@@ -491,6 +500,56 @@ def main() -> int:
                 print(f"  {kind:<8} {counts[a]:>2}+{counts[b]:<2} "
                       f"{display[a][:32]:<32} | {display[b][:32]}")
     print(f"\nwrote {out.name}")
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Discover who made a seed artist's records.")
+    parser.add_argument("--artist", type=int, nargs="+", default=[SEED_ARTIST],
+                        metavar="ID",
+                        help="one or more Qobuz seed artist ids, walked in order")
+    parser.add_argument("--store", default=STORE, help=f"storefront (default: {STORE})")
+    parser.add_argument("--include-all", action="store_true",
+                        help="keep people with no musical role (designers, studios)")
+    parser.add_argument("--refresh", action="store_true", help="ignore the credits cache")
+    parser.add_argument("--mbid", help="seed's MusicBrainz id (default: from favourites.json)")
+    parser.add_argument("--out", help="output path (default: discovery_<artist_id>.json)")
+    args = parser.parse_args()
+
+    if len(args.artist) > 1:
+        for flag, value in (("--out", args.out), ("--mbid", args.mbid)):
+            if value:
+                raise SystemExit(f"{flag} names one artist, and {len(args.artist)} "
+                                 "were given - run them one at a time")
+
+    # Once per run, not once per seed: a storefront cookie is good for the
+    # whole batch and the alias file does not change while it is walking.
+    alias_map = aliases.load()
+    alias_display = aliases.display_names()
+    cookies = store_cookies(args.store)
+
+    failed: list[int] = []
+    for position, artist_id in enumerate(args.artist, 1):
+        if len(args.artist) > 1:
+            print(f"\n=== {position}/{len(args.artist)}: artist {artist_id} ===",
+                  file=sys.stderr)
+        try:
+            if walk(artist_id, cookies, alias_map, alias_display, args) != 0:
+                failed.append(artist_id)
+        except SystemExit as stop:
+            # Fatal to this seed, not to the ones behind it.
+            print(f"artist {artist_id}: {stop}", file=sys.stderr)
+            failed.append(artist_id)
+
+    if len(args.artist) > 1:
+        walked = len(args.artist) - len(failed)
+        print(f"\n{walked} of {len(args.artist)} seeds walked", file=sys.stderr)
+        print("read each one's 'might be one person' list above and add to "
+              f"{aliases.FILE} before ranking (D25), then ./stages/load.py",
+              file=sys.stderr)
+    if failed:
+        print("failed: " + ", ".join(str(a) for a in failed), file=sys.stderr)
+        return 1
     return 0
 
 

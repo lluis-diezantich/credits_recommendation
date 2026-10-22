@@ -138,13 +138,18 @@ def main() -> int:
 
     if args.next:
         count = min(args.next, len(fresh))
+        picked = fresh[:args.next]
         print(f"# the next {count} seeds, ~50 requests each, "
-              f"~{count * 50} in total\n")
-        for row in fresh[:args.next]:
+              f"~{count * 50} in total")
+        for row in picked:
             note = "intersects the graph already" if row["intersects"] else "new cluster"
-            print(f"./stages/discover.py --artist {row['qobuz_id']:<8} "
-                  f"# {row['name']} - {note}")
-        print("\n# then read each one's alias report and add to "
+            print(f"#   {row['name']} - {note}")
+        # One command: discover.py takes several ids and reads the storefront
+        # cookie and the alias file once for the run.
+        print("\n./stages/discover.py --artist "
+              + " ".join(str(row["qobuz_id"]) for row in picked))
+        print("./stages/load.py")
+        print("\n# read each walk's 'might be one person' list and add to "
               "data/aliases.json before ranking (D25)")
         return 0
 

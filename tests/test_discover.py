@@ -17,6 +17,8 @@ that is what it IS now that the decision has moved out.
 
 from __future__ import annotations
 
+import pytest
+
 from stages.discover import album_billing, collapse_credits, fold_editions, preferred_first
 
 SEED = {"jorge drexler"}
@@ -262,3 +264,120 @@ def test_every_spelling_is_still_kept_behind_the_preferred_one():
 def test_a_person_the_file_does_not_name_is_sorted_as_before():
     names = {"Mark Bell", "M. Bell"}
     assert preferred_first(names, "mark bell", {}) == ["M. Bell", "Mark Bell"]
+
+
+# ---- several seeds in one run -------------------------------------------
+
+
+@pytest.fixture
+def batch(monkeypatch, capsys):
+    """main() with the network and the alias file stubbed, recording the walks.
+
+    `walk` is the seam: everything above it in main() is the batch handling --
+    the per-seed argument guard, the failure isolation, the summary -- and
+    everything below it is one seed's walk, which has its own tests above and
+    needs Qobuz.
+    """
+    import stages.discover as mod
+
+    calls: list[int] = []
+    loaded: list[str] = []
+    monkeypatch.setattr(mod, "store_cookies",
+                        lambda store: loaded.append("cookies") or "c=1")
+    monkeypatch.setattr(mod.aliases, "load",
+                        lambda *a, **k: loaded.append("aliases") or {})
+    monkeypatch.setattr(mod.aliases, "display_names", lambda *a, **k: {})
+
+    def invoke(*argv, outcome=None):
+        def walk(artist_id, cookies, alias_map, alias_display, args):
+            calls.append(artist_id)
+            return (outcome or {}).get(artist_id, 0)
+        monkeypatch.setattr(mod, "walk", walk)
+        monkeypatch.setattr("sys.argv", ["discover.py", *argv])
+        code = mod.main()
+        return code, calls, capsys.readouterr(), loaded
+    return invoke
+
+
+def test_several_ids_are_walked_in_the_order_given(batch):
+    """`./stages/seeds.py --next 5` prints them in the order worth walking, so
+    the batch must not reorder them."""
+    code, calls, _, _ = batch("--artist", "219860", "148515", "717509")
+    assert code == 0
+    assert calls == [219860, 148515, 717509]
+
+
+def test_the_login_and_the_alias_file_are_read_once_for_the_run(batch):
+    """They were per-seed when this was one walk per process. A cookie is good
+    for the batch and the alias file does not change while it runs."""
+    _, _, _, loaded = batch("--artist", "1", "2", "3")
+    assert loaded.count("cookies") == 1
+    assert loaded.count("aliases") == 1
+
+
+def test_one_unreadable_discography_does_not_waste_the_walks_behind_it():
+    """seed_releases raises for a partial discography because every later
+    number is computed over it. That stays fatal to the seed's own file and
+    stops being fatal to the batch."""
+    import stages.discover as mod
+
+    calls = []
+
+    def walk(artist_id, cookies, alias_map, alias_display, args):
+        calls.append(artist_id)
+        if artist_id == 2:
+            raise SystemExit("could not read the discography")
+        return 0
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(mod, "store_cookies", lambda store: "c=1")
+        mp.setattr(mod.aliases, "load", lambda *a, **k: {})
+        mp.setattr(mod.aliases, "display_names", lambda *a, **k: {})
+        mp.setattr(mod, "walk", walk)
+        mp.setattr("sys.argv", ["discover.py", "--artist", "1", "2", "3"])
+        assert mod.main() == 1
+    assert calls == [1, 2, 3]
+
+
+def test_a_failed_seed_is_named_and_the_run_exits_non_zero(batch):
+    code, _, said, _ = batch("--artist", "1", "2", outcome={2: 1})
+    assert code == 1
+    assert "failed: 2" in said.err
+
+
+def test_a_batch_ends_by_naming_the_step_between_walking_and_ranking(batch):
+    """Reading the alias report is the thing D25 says must not be skipped, and
+    six walks of output is where it would get lost."""
+    _, _, said, _ = batch("--artist", "1", "2")
+    assert "2 of 2 seeds walked" in said.err
+    assert "aliases.json" in said.err
+    assert "load.py" in said.err
+
+
+def test_one_seed_prints_no_batch_framing(batch):
+    """The single-seed output is what every earlier run produced, and a
+    "1 of 1 seeds walked" line would be noise in it."""
+    code, calls, said, _ = batch("--artist", "41620")
+    assert (code, calls) == (0, [41620])
+    assert "seeds walked" not in said.err
+    assert "===" not in said.err
+
+
+def test_the_default_is_still_the_one_seed_in_the_file(batch):
+    import stages.discover as mod
+    _, calls, _, _ = batch()
+    assert calls == [mod.SEED_ARTIST]
+
+
+@pytest.mark.parametrize("flag", ["--out", "--mbid"])
+def test_a_single_seed_flag_is_refused_for_a_batch(batch, flag):
+    """Bjork's mbid on Residente's walk would label his own records as
+    somebody else's, and one --out cannot hold two discographies."""
+    with pytest.raises(SystemExit, match=flag):
+        batch("--artist", "1", "2", flag, "x")
+
+
+@pytest.mark.parametrize("flag", ["--out", "--mbid"])
+def test_the_same_flag_is_fine_for_one_seed(batch, flag):
+    code, calls, _, _ = batch("--artist", "1", flag, "x")
+    assert (code, calls) == (0, [1])

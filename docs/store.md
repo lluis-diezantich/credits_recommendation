@@ -81,7 +81,10 @@ regenerated. `meta` is authoritative.
     person_sources     412   which file contributed each person (multi-seed joins)
     person_classes     396   production / engineering / writing / billing / performance
     person_roles       923   role + policy's role_key, role_class, role_weight, count
-    person_albums      777   which of the seed's albums they appear on
+    person_albums     3233   which of the seed's albums they appear on, per SEED:
+                             provenance is own/guest RELATIVE to the seed walked,
+                             so one album is Björk's own and ROSALÍA's guest spot
+                             (adr/D28)
     person_edges       123   worked_with edges from the Discogs path
 
     releases          7860   pool.json + pool_discogs.json, keyed (album_id, source)
