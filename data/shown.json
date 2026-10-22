@@ -1,0 +1,262 @@
+{
+  "version": 1,
+  "runs": [
+    {
+      "shown": "2026-10-22",
+      "strategy": "breadth",
+      "candidates": 165,
+      "top": [
+        {
+          "rank": 1,
+          "person_key": "conrad taylor",
+          "name": "Conrad Taylor",
+          "score": [
+            2.0,
+            3.406
+          ],
+          "seeds": 2
+        },
+        {
+          "rank": 2,
+          "person_key": "conociendo rusia",
+          "name": "Conociendo Rusia",
+          "score": [
+            2.0,
+            3.291
+          ],
+          "seeds": 2
+        },
+        {
+          "rank": 3,
+          "person_key": "los cojolites",
+          "name": "Los Cojolites",
+          "score": [
+            1.0,
+            7.839
+          ],
+          "seeds": 1
+        },
+        {
+          "rank": 4,
+          "person_key": "supermambo",
+          "name": "SUPERMAMBO",
+          "score": [
+            1.0,
+            7.429
+          ],
+          "seeds": 1
+        },
+        {
+          "rank": 5,
+          "person_key": "making movies",
+          "name": "Making Movies",
+          "score": [
+            1.0,
+            5.385
+          ],
+          "seeds": 1
+        },
+        {
+          "rank": 6,
+          "person_key": "juan falu",
+          "name": "Juan Falú",
+          "score": [
+            1.0,
+            5.224
+          ],
+          "seeds": 1
+        },
+        {
+          "rank": 7,
+          "person_key": "carmen linares",
+          "name": "Carmen Linares",
+          "score": [
+            1.0,
+            3.974
+          ],
+          "seeds": 1
+        },
+        {
+          "rank": 8,
+          "person_key": "the weeknd",
+          "name": "The Weeknd",
+          "score": [
+            1.0,
+            3.882
+          ],
+          "seeds": 1
+        },
+        {
+          "rank": 9,
+          "person_key": "la hungara",
+          "name": "La Hungara",
+          "score": [
+            1.0,
+            3.652
+          ],
+          "seeds": 1
+        },
+        {
+          "rank": 10,
+          "person_key": "sticky m.a.",
+          "name": "Sticky M.A.",
+          "score": [
+            1.0,
+            3.551
+          ],
+          "seeds": 1
+        },
+        {
+          "rank": 11,
+          "person_key": "nino josele",
+          "name": "Niño Josele",
+          "score": [
+            1.0,
+            3.489
+          ],
+          "seeds": 1
+        },
+        {
+          "rank": 12,
+          "person_key": "ramses araya",
+          "name": "Ramses Araya",
+          "score": [
+            1.0,
+            3.489
+          ],
+          "seeds": 1
+        },
+        {
+          "rank": 13,
+          "person_key": "bclip",
+          "name": "Bclip",
+          "score": [
+            1.0,
+            3.469
+          ],
+          "seeds": 1
+        },
+        {
+          "rank": 14,
+          "person_key": "lynkx",
+          "name": "LYNKX",
+          "score": [
+            1.0,
+            3.463
+          ],
+          "seeds": 1
+        },
+        {
+          "rank": 15,
+          "person_key": "rueda de candombe",
+          "name": "Rueda de Candombe",
+          "score": [
+            1.0,
+            3.408
+          ],
+          "seeds": 1
+        },
+        {
+          "rank": 16,
+          "person_key": "carminho",
+          "name": "Carminho",
+          "score": [
+            1.0,
+            3.357
+          ],
+          "seeds": 1
+        },
+        {
+          "rank": 17,
+          "person_key": "dougie f",
+          "name": "Dougie F",
+          "score": [
+            1.0,
+            3.357
+          ],
+          "seeds": 1
+        },
+        {
+          "rank": 18,
+          "person_key": "yahritza y su esencia",
+          "name": "Yahritza Y Su Esencia",
+          "score": [
+            1.0,
+            3.357
+          ],
+          "seeds": 1
+        },
+        {
+          "rank": 19,
+          "person_key": "jazz at lincoln center orchestra",
+          "name": "Jazz At Lincoln Center Orchestra",
+          "score": [
+            1.0,
+            3.299
+          ],
+          "seeds": 1
+        },
+        {
+          "rank": 20,
+          "person_key": "clementaum",
+          "name": "Clementaum",
+          "score": [
+            1.0,
+            3.293
+          ],
+          "seeds": 1
+        },
+        {
+          "rank": 21,
+          "person_key": "diego del morao",
+          "name": "Diego Del Morao",
+          "score": [
+            1.0,
+            3.276
+          ],
+          "seeds": 1
+        },
+        {
+          "rank": 22,
+          "person_key": "israel fernandez",
+          "name": "Israel Fernandez",
+          "score": [
+            1.0,
+            3.276
+          ],
+          "seeds": 1
+        },
+        {
+          "rank": 23,
+          "person_key": "magdalena matthey",
+          "name": "Magdalena Matthey",
+          "score": [
+            1.0,
+            3.193
+          ],
+          "seeds": 1
+        },
+        {
+          "rank": 24,
+          "person_key": "arcangel",
+          "name": "Arcangel",
+          "score": [
+            1.0,
+            3.1
+          ],
+          "seeds": 1
+        },
+        {
+          "rank": 25,
+          "person_key": "christian nodal",
+          "name": "Christian Nodal",
+          "score": [
+            1.0,
+            3.1
+          ],
+          "seeds": 1
+        }
+      ]
+    }
+  ]
+}

@@ -1004,3 +1004,116 @@ def nameable_roles(roles) -> list[str]:
     judgement ROLE_WEIGHTS has encoded at 0.15 all along.
     """
     return [r for r in roles or [] if role_class(r) in NAMEABLE_CLASSES]
+
+
+# ---------------------------------------------------------------------------
+# RANKING STRATEGIES
+#
+# todo.md step 3, and the first thing in this file whose numbers are NOT
+# measured. They cannot be yet: nothing scores this list, which roadmap.md has
+# said from the start, so every weight below is a HYPOTHESIS about what makes a
+# credit worth following. D4's rule is that a threshold arrives with evidence
+# or not at all, and the honest form of "not at all" is to say so here and to
+# ship the thing that produces the evidence -- stages/rank.py --log and
+# --score, which record what each strategy showed and later ask how many of
+# those names you played. docs/adr/D29 states this as the decision it is.
+#
+# So there are several strategies rather than one blend, and they disagree on
+# purpose. Each is one claim about the signal, written so the claim can lose:
+#
+#   breadth     corroboration across seeds is the strongest evidence. The
+#               thesis of the whole project (D22): a person several of your
+#               artists chose is better evidence than one your favourite
+#               chose repeatedly.
+#   direction   who chose whom. Your artist turning up on SOMEBODY ELSE's
+#               record is a deliberate act by the artist you trust; a guest on
+#               your artist's record was chosen by them or their label.
+#   depth       one relationship, many records, over years. The producer who
+#               made four albums with one artist, against the singer on one
+#               feature.
+#   taste       weight every co-appearance by how much you actually play the
+#               seed it came through. 6,988 Drexler plays is not the same
+#               evidence as 327 Kali Uchis plays, and the other three treat
+#               them alike.
+#
+# A strategy is a function and not a weight vector, because two of these are
+# not weighted sums: `breadth` gates on the seed count before anything else,
+# and `depth` multiplies rather than adds. A registry of callables holds both
+# shapes; a dict of numbers would have held neither.
+# ---------------------------------------------------------------------------
+
+# Shared by more than one strategy, so they are named once and the strategies
+# below read as the claim they are making rather than as arithmetic.
+GUEST_ON_THEIRS = 2.0    # your artist chose to appear: the stronger direction
+GUEST_ON_OURS = 1.0      # they appeared on your artist's record
+RECENCY_PULL = 1.5       # at most this, for a record out today
+SPAN_PULL = 0.5          # per year a collaboration ran
+PLAYS_PER_POINT = 500    # listens that count as one point of seed weight
+
+
+def _direction(row) -> float:
+    """Records each way, weighted by who chose whom."""
+    return (row["on_theirs"] * GUEST_ON_THEIRS
+            + row["on_seeds"] * GUEST_ON_OURS)
+
+
+def rank_breadth(row) -> tuple[float, float]:
+    """How many of your artists made a record with this person, first.
+
+    Lexicographic, and that is the point rather than a convenience. Written as
+    a weighted sum it needed a seed constant big enough to beat every possible
+    direction score, and at 10.0 eight records tied with one extra seed -- so
+    the strategy did not make the claim its own name does. There is no honest
+    constant, because the record count has no ceiling. A tuple has no constant
+    to get wrong.
+    """
+    return (float(row["seeds"]),
+            _direction(row) + RECENCY_PULL * row["recency"])
+
+
+def rank_direction(row) -> float:
+    """Only who chose whom, and how recently. Ignores the seed count."""
+    return _direction(row) + RECENCY_PULL * row["recency"]
+
+
+def rank_depth(row) -> float:
+    """One relationship, many records, over years.
+
+    Multiplied rather than added: four records over eight years is a different
+    claim from four records in one week, and adding the two terms would score
+    them the same.
+    """
+    return _direction(row) * (1.0 + SPAN_PULL * row["span"])
+
+
+def rank_taste(row) -> float:
+    """Every co-appearance, weighted by how much you play the seed."""
+    return _direction(row) * (1.0 + row["seed_plays"] / PLAYS_PER_POINT)
+
+
+# float for a weighted sum, tuple for a lexicographic rule. core.rank.ranked
+# takes both, and a strategy's shape is part of the claim it makes.
+RANKING_STRATEGIES = {
+    "breadth": rank_breadth,
+    "direction": rank_direction,
+    "depth": rank_depth,
+    "taste": rank_taste,
+}
+
+# `breadth` is the default because it is the project's own claim (D22), which
+# makes it the one with the most to lose from being measured.
+DEFAULT_STRATEGY = "breadth"
+
+
+def strategy(name: str | None):
+    """One strategy by name, or the default. Raises on an unknown name.
+
+    Raises rather than falling back: a typo that silently returns the default
+    would make two runs look like they used different strategies and produce
+    the same order, which is the one thing the log must never record wrongly.
+    """
+    chosen = name or DEFAULT_STRATEGY
+    if chosen not in RANKING_STRATEGIES:
+        known = ", ".join(sorted(RANKING_STRATEGIES))
+        raise KeyError(f"unknown ranking strategy {chosen!r} - known: {known}")
+    return RANKING_STRATEGIES[chosen]

@@ -52,3 +52,4 @@ intended way round from here.
 | [D26](D26-seeds-by-rule.md) | A seed is chosen by rule from the profile, and walked intersections-first | Accepted |
 | [D27](D27-the-class-fallback-gets-rules.md) | The role-class fallback gets marker rules, sleeve credits get their own class | Accepted |
 | [D28](D28-an-album-is-per-person-seed.md) | An album is a fact about a (person, seed) pair, not a person | Accepted |
+| [D29](D29-strategies-are-hypotheses-and-the-log-judges-them.md) | Ranking is several named strategies, unmeasured on purpose, with a committed log to settle them | Accepted |

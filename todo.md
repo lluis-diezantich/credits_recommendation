@@ -83,8 +83,34 @@ not correct.
    ([adr/D25](docs/adr/D25-one-person-one-key.md)) — ten minutes, and the
    counts are right before anything ranks them.
 
-3. **Rank across seeds.** Unblocked as of 2026-10-22 — this is the next thing
-   to build. Rank on
+3. **~~Rank across seeds.~~** Built 2026-10-22
+   ([adr/D29](docs/adr/D29-strategies-are-hypotheses-and-the-log-judges-them.md)):
+   `stages/rank.py`, four named strategies in `policy.RANKING_STRATEGIES`, the
+   ordering in `core/rank.py`.
+
+   **None of the weights is measured, and that is the decision rather than a
+   shortcut.** Nothing scores this list, so each strategy is one claim written
+   so it can lose — `breadth` (corroboration across seeds, the default and the
+   project's own thesis), `direction` (who chose whom), `depth` (one
+   relationship over years), `taste` (weighted by how much you play the seed).
+   `--compare breadth taste` shows that they genuinely disagree: **164 of 165
+   candidates change rank**, Tabaré Cardozo moving 154th to 16th.
+
+   `breadth` is lexicographic because its own test caught it lying: as a
+   weighted sum with a seed constant of 10.0, eight records tied with one extra
+   seed, and no honest constant exists because the record count has no ceiling.
+   Strategies are functions rather than weight vectors for exactly that reason.
+
+   **Still open and it needs requests: the ubiquity penalty has no input.**
+   `selectivity()` wants `discogs_total_releases`; 8 people in the store have
+   it and **none is a co-artist** (0 of 307). Our corpus only sees a person's
+   appearances with our own seeds, so graph degree collapses into the seed
+   count. A much-guested singer still behaves like Fred Kevorkian. 307 requests
+   would fix it, and it is the strongest case for spending them.
+
+   What the strategies read (one feature was not on this list before):
+   `seed_plays` — a co-appearance through Drexler at 6,988 plays is not the
+   evidence one through an artist played 327 times is. Rank on
    `seed_records + their_records` and not on `albums`, which counts every
    sleeve two artists are printed on: it put Coldplay, Burna Boy, Elyanna and
    tINI at the top of the Little Simz list on the strength of one single stored
@@ -104,18 +130,36 @@ not correct.
    other or with the Iberian pair. The ranker's main input is constant, so
    there is nothing to weight. D26's walk order exists to fix exactly this.
 
-4. **Keep the sentence through the ranking, and make it multi-seed.**
-   `core/explain.py` takes structured facts, not prose, so it grows with the
-   evidence: *"has made records with 3 artists you play — Drexler (2 of his),
-   Pérez Cruz (1 of hers), ROSALÍA (1 of theirs) — playing guitar on 7 tracks.
-   Never played."* That sentence is the product. A score with no sentence
-   throws away the one thing this has over a similar-artist list.
+4. **~~Keep the sentence through the ranking, and make it multi-seed.~~** Done
+   2026-10-22 with step 3, because it turned out to be load-bearing rather than
+   cosmetic: ranking across seeds puts multi-seed rows at the top by
+   construction, and passing "2 artists you play" to `co_artist_sentence` as if
+   it were a name produced *"billed on 2 of 2 artists you play's records"*. A
+   ranker whose top rows have broken sentences has no product.
 
-5. **Log what was shown.** Nothing scores this list, and `roadmap.md` has said
-   so from the start. The radar solved it with a committed state file
-   ([adr/D11](docs/adr/D11-radar-state-in-ci.md)) and this path has no
-   equivalent, so every weight in step 3 stays guesswork and there is no way
-   to tell whether seed 9 earned its 50 requests.
+   `core.explain.cross_seed_sentence` now reads *"Conrad Taylor has made 2
+   records with 2 artists you play — ROSALÍA and Björk — e.g. Berghain (Remix)
+   (2026). Never played."* One seed delegates to the old function, so there is
+   one sentence shape per claim rather than two that drift.
+
+   Still thinner than the form this entry asked for: it names the seeds and the
+   total, not the per-seed split ("2 of his, 1 of hers"). The counts are in the
+   row beside it and `--json` carries them.
+
+5. **~~Log what was shown.~~** Built 2026-10-22 alongside step 3, same ADR.
+   `./stages/rank.py --log` appends the strategy, the date, the ranked names
+   and the score the ordering used to `data/shown.json` — un-ignored and
+   committed, the stance [adr/D11](docs/adr/D11-radar-state-in-ci.md) took for
+   the radar. `--score` reads it back and asks, per strategy, how many of those
+   names were played **after** the run that showed them.
+
+   **It says nothing yet, and cannot.** It needs runs on file and a month of
+   listening to arrive. The first number will be noise; the tenth will not.
+   Until then every weight in step 3 is a hypothesis with an order.
+
+   Still not answered by it: whether seed 9 earned its 50 requests. The log
+   scores strategies, not seeds. A per-seed version is the same file with a
+   different group-by, once there is anything in it.
 
 6. **Then delivery.** A weekly co-artist issue is mostly static — it changes
    only when seeds or credits do. The live form is the **people radar**: new
