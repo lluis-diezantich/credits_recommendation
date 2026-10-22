@@ -273,3 +273,34 @@ def test_a_store_with_no_such_table_says_to_build_it(tmp_path, monkeypatch):
                         ["rank.py", "--db", str(tmp_path / "empty.db")])
     with pytest.raises(SystemExit, match="load.py"):
         mod.main()
+
+
+# ---- a remix is not a collaboration -------------------------------------
+
+
+def test_a_remix_only_candidate_is_not_ranked(store):
+    """He was first under breadth. His two seeds were one record, and his one
+    credit on it was the remix."""
+    store.co_artist(1, "conrad taylor", "Conrad Taylor", own=1)
+    store.co_artist(2, "conrad taylor", "Conrad Taylor", own=1)
+    store.credit("conrad taylor-1-0", "conrad taylor", "Re-Mixer")
+    store.credit("conrad taylor-2-0", "conrad taylor", "Re-Mixer")
+    store.co_artist(1, "p", "P", own=1)
+    assert [r["person_key"] for r in store.rows()] == ["p"]
+
+
+def test_two_seeds_on_one_record_corroborate_once(store):
+    """The feature that was double-counting. Same album_id under both seeds is
+    what the real store had for "Berghain (Remix)"."""
+    store.co_artist(1, "p", "P", own=1)
+    store.album(2, "p", "p-1-0", "own")        # the SAME album, second seed
+    con_rows = {r["person_key"]: r for r in store.rows()}
+    row = con_rows["p"]
+    assert (row["seeds"], row["albums"], row["corroboration"]) == (1, 1, 1)
+
+
+def test_distinct_records_across_seeds_corroborate_twice(store):
+    store.co_artist(1, "p", "P", own=1)
+    store.co_artist(2, "p", "P", own=1)
+    row, = store.rows()
+    assert (row["seeds"], row["albums"], row["corroboration"]) == (2, 2, 2)

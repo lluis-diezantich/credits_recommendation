@@ -8,7 +8,9 @@ the same shape `core` already uses for every threshold.
 
 The features are the ones todo.md step 3 named, plus one it did not:
 
-    seeds        how many of your artists made a record with this person
+    seeds          how many of your artists made a record with this person
+    albums         how many DISTINCT records that is, across those seeds
+    corroboration  the smaller of the two -- independent evidence
     on_seeds     records where they guested on YOUR artist's record
     on_theirs    records where your artist guested on THEIRS
     roles        what they did, already filtered to what may be named
@@ -20,6 +22,10 @@ The features are the ones todo.md step 3 named, plus one it did not:
 `seed_plays` is the addition. A co-appearance with Jorge Drexler, whom the
 export has 6,988 times, is not the same evidence as one with an artist played
 327 times, and every strategy that ignores it is treating the two alike.
+
+`corroboration` is the second. Two of your artists billed on ONE record are
+one piece of evidence and two seeds, and the seed count cannot tell the
+difference -- which put a remixer at the top of the list on a single single.
 """
 from __future__ import annotations
 
@@ -86,6 +92,10 @@ def features(row, today: dt.date) -> dict:
         "person_key": row["person_key"],
         "name": row["name"],
         "seeds": row["seeds"] or 0,
+        "albums": row["albums"] or 0,
+        # Bounded by both: a person cannot be corroborated by more artists
+        # than chose them, nor by more records than exist.
+        "corroboration": min(row["seeds"] or 0, row["albums"] or 0),
         "seed_names": row["seed_names"],
         "on_seeds": row["on_seeds"] or 0,
         "on_theirs": row["on_theirs"] or 0,

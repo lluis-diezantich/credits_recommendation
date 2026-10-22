@@ -37,7 +37,7 @@ from core import rank
 from core.explain import cross_seed_sentence
 from core.names import normalise
 from core.paths import DATA
-from policy import MADE_TOGETHER, billed_as_artist, billed_as_musician, nameable_roles
+from policy import MADE_TOGETHER, nameable_roles, why_not_a_co_artist
 
 TOGETHER = ", ".join(f"'{p}'" for p in sorted(MADE_TOGETHER))
 
@@ -50,6 +50,9 @@ ROWS = """
 SELECT c.person_key,
        MIN(c.name) AS name,
        COUNT(DISTINCT c.seed_qobuz_id) AS seeds,
+       (SELECT COUNT(DISTINCT a.album_id) FROM co_artist_albums a
+        WHERE a.person_key = c.person_key
+          AND a.provenance IN ('own', 'guest')) AS albums,
        GROUP_CONCAT(DISTINCT s.name) AS seed_names,
        SUM(c.seed_records) AS on_seeds,
        SUM(c.their_records) AS on_theirs,
@@ -94,11 +97,13 @@ SELECT person_key, title, date, provenance FROM (
 def candidates(con: sqlite3.Connection, today: dt.date) -> list[dict]:
     """Every co-artist as a feature row, with its roles and example record.
 
-    The two read-side filters `co_artists.py` applies are applied here too, and
-    for the same reason: a billing that is not an artist (D24) or did nothing
-    musical (D27) is not a candidate to rank, and ranking it would put a
-    channel or an illustrator at the top of a list somebody acts on.
+    The three read-side filters `co_artists.py` applies are applied here too,
+    and for the same reason: a billing that is not an artist (D24), one that
+    did nothing musical (D27) or one that only remixed (D30) is not a
+    candidate to rank. None of these is hypothetical -- a channel, an
+    illustrator and a remixer have each been at or near the top of this list.
     """
+    dropped: dict[str, set[str]] = {}
     roles: dict[str, list[tuple[str, int]]] = {}
     for row in con.execute(ROLES):
         roles.setdefault(row["person_key"], []).append((row["role"], row["tracks"]))
@@ -114,8 +119,9 @@ def candidates(con: sqlite3.Connection, today: dt.date) -> list[dict]:
     for row in con.execute(ROWS):
         key = row["person_key"]
         held = roles.get(key, [])
-        if not billed_as_artist(key) or not billed_as_musician(
-                [role for role, _ in held]):
+        reason = why_not_a_co_artist(key, [role for role, _ in held])
+        if reason:
+            dropped.setdefault(reason, set()).add(row["name"])
             continue
         named = nameable_roles([role for role, _ in held])
         features = rank.features(
@@ -128,6 +134,9 @@ def candidates(con: sqlite3.Connection, today: dt.date) -> list[dict]:
         features["tracks"] = max((n for role, n in held if role in named), default=0)
         features["example"] = examples.get(key)
         out.append(features)
+    for reason, names in sorted(dropped.items()):
+        print(f"{len(names)} dropped as {reason}: " + ", ".join(sorted(names)),
+              file=sys.stderr)
     return out
 
 

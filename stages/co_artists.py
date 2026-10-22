@@ -24,7 +24,7 @@ import sys
 
 from core.explain import co_artist_sentence
 from core.paths import DATA
-from policy import MADE_TOGETHER, billed_as_artist, billed_as_musician, nameable_roles
+from policy import MADE_TOGETHER, nameable_roles, why_not_a_co_artist
 
 # The provenances worth counting, as a SQL list. Built from policy so the
 # filter here and the labelling in discover.py cannot drift apart.
@@ -139,19 +139,29 @@ def main() -> int:
     for r in con.execute(ROLES_HELD):
         held.setdefault((r["seed_qobuz_id"], r["person_key"]), []).append(r["role"])
 
-    def keep(row: sqlite3.Row) -> bool:
-        return (billed_as_artist(row["person_key"])
-                and billed_as_musician(held.get((row["seed_qobuz_id"],
-                                                 row["person_key"]))))
+    def why(row: sqlite3.Row) -> str | None:
+        return why_not_a_co_artist(
+            row["person_key"], held.get((row["seed_qobuz_id"],
+                                         row["person_key"])))
 
-    # Before the counts, not after: a billing with nothing musical behind it is
-    # not a co-appearance to report the total of either. Named on stderr so
-    # --json stays parseable and the drop is still visible to whoever ran it.
-    dropped = [r["name"] for r in rows if not keep(r)]
-    rows = [r for r in rows if keep(r)]
-    if dropped:
-        print(f"{len(dropped)} billing(s) dropped as not an artist: "
-              + ", ".join(sorted(dropped)), file=sys.stderr)
+    # Before the counts, not after: a billing with nothing musical behind it,
+    # or nothing but a remix, is not a co-appearance to report the total of
+    # either. On stderr so --json stays parseable, and grouped by reason
+    # because reporting them all as "not an artist" said that about
+    # Gesaffelstein, who is one.
+    dropped: dict[str, list[str]] = {}
+    kept = []
+    for row in rows:
+        reason = why(row)
+        if reason:
+            dropped.setdefault(reason, []).append(row["name"])
+        else:
+            kept.append(row)
+    rows = kept
+    for reason, names in sorted(dropped.items()):
+        unique = sorted(set(names))
+        print(f"{len(unique)} dropped as {reason}: " + ", ".join(unique),
+              file=sys.stderr)
 
     out = [describe(con, r) for r in rows if args.all or not r["plays"]]
     if args.json:

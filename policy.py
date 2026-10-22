@@ -733,6 +733,66 @@ def billed_as_artist(person_key: str) -> bool:
     return person_key not in NOT_ARTISTS
 
 
+# ---------------------------------------------------------------------------
+# A REMIX IS NOT A COLLABORATION
+#
+# Conrad Taylor ranked FIRST under `breadth` on one credit: he remixed
+# "Berghain", which ROSALIA and Bjork made together. He reworked a finished
+# record, plausibly without meeting either of them, and the sentence the list
+# prints about him -- "has made 2 records with 2 artists you play" -- is simply
+# false.
+#
+# D27 decided a remixer passes `billed_as_musician`, and that stands: they did
+# touch the record, and ROLE_WEIGHTS has scored "remix" at 0.4 since this file
+# was written. But "worked on the same record" and "made a record together"
+# are different claims, and the co-appearance list makes the second one.
+#
+# Measured 2026-10-22 over ten seeds: 3 of 287 candidates hold nothing beyond
+# the billing except a remix credit -- Conrad Taylor, Gesaffelstein, Joe
+# Claussell -- and 5 of 251 shared albums are a remix record. Small, sharply
+# defined, and one of the three was the top recommendation.
+#
+# Dropped rather than penalised, which is D24 and D27's stance rather than
+# D13's. A penalty is right when the evidence is weak; here the claim is
+# wrong, and no weight makes a false sentence true. The cost is stated: a real
+# artist reached only by remixing leaves the list, and comes back the moment
+# they play on something. They stay in the crew graph throughout, which is
+# where a remixer belongs.
+# ---------------------------------------------------------------------------
+
+# Matched on role_key() output, so "Re-Mixer", "Remixer" and "RemixingEngineer"
+# all reduce to a string containing "remix".
+REMIX_MARKER = "remix"
+
+
+def why_not_a_co_artist(person_key: str, roles) -> str | None:
+    """Which read-side filter this row fails, in words, or None if it passes.
+
+    One place, so the three reasons cannot be reported as each other: calling
+    them all "not an artist" said that about Gesaffelstein, who is one.
+    """
+    if not billed_as_artist(person_key):
+        return "not an artist"
+    if not billed_as_musician(roles):
+        return "nothing musical"
+    if remix_only(roles):
+        return "a remix only"
+    return None
+
+
+def remix_only(roles) -> bool:
+    """Is a remix the only thing this person did on the shared records?
+
+    Billing is ignored, as it is everywhere else: every co-artist carries it
+    and it is the reason they are in the list at all. No role beyond the
+    billing returns False -- an absence of evidence is not evidence of a
+    remix, and 57 of the candidates are billing-only.
+    """
+    beyond = [role for role in roles or [] if role_class(role) != "billing"]
+    return bool(beyond) and all(REMIX_MARKER in role_key(role)
+                                for role in beyond)
+
+
 def billed_as_musician(roles) -> bool:
     """Did this co-artist do anything musical on the records they share?
 
@@ -1058,7 +1118,7 @@ def _direction(row) -> float:
 
 
 def rank_breadth(row) -> tuple[float, float]:
-    """How many of your artists made a record with this person, first.
+    """How many of your artists INDEPENDENTLY made a record with this person.
 
     Lexicographic, and that is the point rather than a convenience. Written as
     a weighted sum it needed a seed constant big enough to beat every possible
@@ -1066,8 +1126,14 @@ def rank_breadth(row) -> tuple[float, float]:
     the strategy did not make the claim its own name does. There is no honest
     constant, because the record count has no ceiling. A tuple has no constant
     to get wrong.
+
+    `corroboration`, not `seeds`. Two of your artists billed on ONE record
+    give one piece of evidence and the seed count says two: Conrad Taylor
+    ranked first on ROSALIA and Bjork both appearing on "Berghain", which is a
+    single single. D22's thesis is that several of your artists CHOSE this
+    person, and two artists who chose each other chose once.
     """
-    return (float(row["seeds"]),
+    return (float(row["corroboration"]),
             _direction(row) + RECENCY_PULL * row["recency"])
 
 

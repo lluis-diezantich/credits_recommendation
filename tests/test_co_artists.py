@@ -173,7 +173,7 @@ def test_a_billing_that_is_not_an_artist_is_dropped_and_named(store, run):
                     [("Biophilia", "own", "2011-01-01")])
     said = run()
     assert "Colors" not in said.out
-    assert "1 billing(s) dropped as not an artist: Colors" in said.err
+    assert "1 dropped as not an artist: Colors" in said.err
     assert "1 artists, from 1 co-appearances" in said.out
 
 
@@ -210,7 +210,7 @@ def test_a_billing_with_nothing_musical_behind_it_is_dropped(store, run):
                     [("Biophilia", "own", "2011-01-01")])
     said = run()
     assert "Liniers" not in said.out
-    assert "1 billing(s) dropped as not an artist: Liniers" in said.err
+    assert "1 dropped as nothing musical: Liniers" in said.err
     assert "1 artists, from 1 co-appearances" in said.out
 
 
@@ -244,3 +244,25 @@ def test_the_report_groups_by_seed_instead_of_interleaving(store, run):
     assert len(headers) == 1
     # And inside the group the stronger co-appearance still comes first.
     assert said.index("David Arnold") < said.index("Thom Yorke")
+
+
+def test_a_remix_and_nothing_else_is_not_a_co_appearance(store, run):
+    """Conrad Taylor remixed "Berghain", which ROSALÍA and Björk made
+    together. The sentence would have said he made a record with them."""
+    store.co_artist("conrad taylor", "Conrad Taylor",
+                    [("Berghain (Remix)", "own", "2026-03-06")])
+    store.credit("Berghain (Remix)", "conrad taylor", "MainArtist")
+    store.credit("Berghain (Remix)", "conrad taylor", "Re-Mixer")
+    store.co_artist("thom yorke", "Thom Yorke",
+                    [("Biophilia", "own", "2011-01-01")])
+    said = run()
+    assert "Conrad Taylor" not in said.out
+    assert "1 dropped as a remix only: Conrad Taylor" in said.err
+    assert "1 artists, from 1 co-appearances" in said.out
+
+
+def test_a_remixer_who_also_played_is_kept(store, run):
+    store.co_artist("p", "P", [("Berghain (Remix)", "own", "2026-03-06")])
+    store.credit("Berghain (Remix)", "p", "Re-Mixer")
+    store.credit("Berghain (Remix)", "p", "Guitar")
+    assert "P" in run().out

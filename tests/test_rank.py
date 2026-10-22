@@ -23,12 +23,17 @@ TODAY = dt.date(2026, 10, 22)
 def feat(**over) -> dict:
     """A feature row with everything at nothing, so a test sets only its axis."""
     row = {"person_key": over.get("person_key", "p"), "name": "P", "seeds": 1,
-           "seed_names": "Jorge Drexler", "on_seeds": 0, "on_theirs": 0,
-           "records": 0, "roles": [], "role_weight": 0.0, "first_seen": None,
-           "last_seen": None, "recency": 0.0, "span": 0.0, "seed_plays": 0,
-           "plays": 0}
+           "albums": None, "seed_names": "Jorge Drexler", "on_seeds": 0,
+           "on_theirs": 0, "records": 0, "roles": [], "role_weight": 0.0,
+           "first_seen": None, "last_seen": None, "recency": 0.0, "span": 0.0,
+           "seed_plays": 0, "plays": 0}
     row.update(over)
     row["records"] = row["on_seeds"] + row["on_theirs"]
+    # Default: as many distinct records as there are seeds, which is the case
+    # a test means unless it says otherwise. `corroboration` is the smaller.
+    if row["albums"] is None:
+        row["albums"] = max(row["seeds"], row["records"])
+    row["corroboration"] = min(row["seeds"], row["albums"])
     return row
 
 
@@ -129,6 +134,21 @@ def test_breadth_puts_one_extra_seed_above_any_amount_of_records():
     assert policy.rank_breadth(two_seeds) > policy.rank_breadth(one_seed_many)
 
 
+def test_two_seeds_on_one_record_corroborate_once():
+    """Conrad Taylor ranked FIRST on ROSALÍA and Björk both being billed on
+    "Berghain", which is one single. Two artists who chose each other chose
+    once, and the seed count cannot tell the difference."""
+    one_record = feat(seeds=2, albums=1, on_seeds=2)
+    assert one_record["corroboration"] == 1
+    real = feat(seeds=2, albums=2, on_seeds=2)
+    assert policy.rank_breadth(real) > policy.rank_breadth(one_record)
+
+
+def test_more_records_than_seeds_does_not_inflate_corroboration():
+    """Bounded by both. Five records with three artists is three artists."""
+    assert feat(seeds=3, albums=5, on_seeds=5)["corroboration"] == 3
+
+
 def test_direction_prefers_your_artist_turning_up_on_their_record():
     """A guest on your artist's record was chosen by them or their label. Your
     artist appearing on somebody else's is a deliberate act."""
@@ -139,7 +159,8 @@ def test_direction_prefers_your_artist_turning_up_on_their_record():
 
 def test_direction_ignores_the_seed_count_and_breadth_does_not():
     """Two strategies that agree about everything would not be two."""
-    one, two = feat(seeds=1, on_theirs=2), feat(seeds=2, on_theirs=2)
+    one = feat(seeds=1, albums=2, on_theirs=2)
+    two = feat(seeds=2, albums=2, on_theirs=2)
     assert policy.rank_direction(one) == policy.rank_direction(two)
     assert policy.rank_breadth(one) < policy.rank_breadth(two)
 
@@ -160,6 +181,7 @@ def test_taste_weights_a_co_appearance_by_how_much_you_play_the_seed():
     light = feat(on_theirs=1, seed_plays=327)
     assert policy.rank_taste(heavy) > policy.rank_taste(light)
     assert policy.rank_breadth(heavy) == policy.rank_breadth(light)
+    assert policy.rank_direction(heavy) == policy.rank_direction(light)
 
 
 def test_every_strategy_scores_an_empty_candidate_at_zero():
@@ -211,13 +233,14 @@ def test_each_strategy_documents_the_claim_it_makes():
 
 def test_a_tuple_strategy_orders_on_its_first_element_first():
     rows = [feat(person_key="a", seeds=1), feat(person_key="b", seeds=2)]
-    out = rank.ranked(rows, lambda r: (float(r["seeds"]), 99.0 if r["seeds"] == 1 else 0.0))
+    out = rank.ranked(rows, lambda r: (float(r["seeds"]),
+                                       99.0 if r["seeds"] == 1 else 0.0))
     assert [r["person_key"] for r in out] == ["b", "a"]
 
 
 def test_the_second_element_breaks_a_first_element_tie():
-    rows = [feat(person_key="a", seeds=2, on_theirs=1),
-            feat(person_key="b", seeds=2, on_theirs=5)]
+    rows = [feat(person_key="a", seeds=2, albums=2, on_theirs=1),
+            feat(person_key="b", seeds=2, albums=2, on_theirs=5)]
     out = rank.ranked(rows, policy.rank_breadth)
     assert [r["person_key"] for r in out] == ["b", "a"]
 
@@ -225,7 +248,8 @@ def test_the_second_element_breaks_a_first_element_tie():
 def test_the_displayed_score_is_the_leading_number_of_the_key():
     """A tuple strategy still has one number to print, and it is never
     recomputed from the row."""
-    out = rank.ranked([feat(seeds=3, on_theirs=2)], policy.rank_breadth)
+    out = rank.ranked([feat(seeds=3, albums=3, on_theirs=2)],
+                      policy.rank_breadth)
     assert out[0]["score"] == 3.0
     assert out[0]["sort_key"][0] == 3.0
     assert out[0]["sort_key"][1] > 0
@@ -238,3 +262,42 @@ def test_breadth_has_no_seed_constant_left_to_get_wrong():
     eight_records = feat(seeds=1, on_theirs=4, on_seeds=4)
     one_more_seed = feat(seeds=2, on_theirs=1)
     assert policy.rank_breadth(one_more_seed) > policy.rank_breadth(eight_records)
+
+
+# ---- a remix is not a collaboration -------------------------------------
+
+
+def test_a_remix_and_nothing_else_is_not_a_collaboration():
+    """Conrad Taylor remixed "Berghain", which ROSALÍA and Björk made
+    together. He reworked a finished record, plausibly without meeting
+    either, and "has made 2 records with 2 artists you play" is false."""
+    assert policy.remix_only(["MainArtist", "Re-Mixer"])
+    assert policy.remix_only(["Remixer"])
+    assert policy.remix_only(["RemixingEngineer"])
+
+
+def test_a_remixer_who_also_played_is_a_collaborator():
+    assert not policy.remix_only(["MainArtist", "Re-Mixer", "Guitar"])
+
+
+def test_billing_alone_is_not_a_remix():
+    """An absence of evidence is not evidence of a remix, and 57 of the
+    candidates hold nothing beyond the billing."""
+    assert not policy.remix_only(["MainArtist"])
+    assert not policy.remix_only([])
+    assert not policy.remix_only(None)
+
+
+def test_a_remixer_still_passes_the_musician_test():
+    """D27 decided they did touch the record, and that stands -- these are two
+    different claims, and only the co-appearance list makes the second."""
+    assert policy.billed_as_musician(["MainArtist", "Re-Mixer"])
+
+
+def test_each_filter_reports_its_own_reason():
+    """Calling all three "not an artist" said that about Gesaffelstein, who
+    is one."""
+    assert policy.why_not_a_co_artist("colors", ["MainArtist"]) == "not an artist"
+    assert policy.why_not_a_co_artist("x", ["MainArtist", "Designer"]) == "nothing musical"
+    assert policy.why_not_a_co_artist("x", ["MainArtist", "Remixer"]) == "a remix only"
+    assert policy.why_not_a_co_artist("x", ["MainArtist", "Guitar"]) is None

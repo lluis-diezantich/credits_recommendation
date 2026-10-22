@@ -108,9 +108,20 @@ not correct.
    count. A much-guested singer still behaves like Fred Kevorkian. 307 requests
    would fix it, and it is the strongest case for spending them.
 
-   What the strategies read (one feature was not on this list before):
+   **The first thing it ranked top was wrong, twice over**, and both are fixed
+   in [adr/D30](docs/adr/D30-a-remix-is-not-a-collaboration.md). Conrad Taylor
+   led the list on "Berghain (Remix)": his two seeds were ONE record (ROSALÍA
+   and Björk are both billed on it, so the album counted twice), and his only
+   credit on it was `Re-Mixer` — he reworked a finished record and the sentence
+   claimed he made two with them. `breadth` leads on `corroboration` now, the
+   smaller of seeds and distinct albums, and a remix-only candidate is dropped
+   on read. 165 candidates → 162, and the list leads with Conociendo Rusia on
+   a real two seeds and two records.
+
+   What the strategies read (two features were not on this list before):
    `seed_plays` — a co-appearance through Drexler at 6,988 plays is not the
-   evidence one through an artist played 327 times is. Rank on
+   evidence one through an artist played 327 times is — and `corroboration`.
+   Rank on
    `seed_records + their_records` and not on `albums`, which counts every
    sleeve two artists are printed on: it put Coldplay, Burna Boy, Elyanna and
    tINI at the top of the Little Simz list on the strength of one single stored
