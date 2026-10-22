@@ -60,18 +60,21 @@ def parse_performers(credits: str) -> list[tuple[str, list[str]]]:
         became a role and reached the printed explanation: "credited on 1
         track (re-mixer, rosalía, björk & yves tumor)", which is exactly what
         D21 promised an explanation would never say.
-      - NAMES JOINED WITH "&". "Björk & Yves Tumor" is two heads in one token
-        and is no head at all, so each side is tested on its own.
+      - NAMES JOINED WITH "&", OR WITH "feat.". "Björk & Yves Tumor" is two
+        heads in one token and is no head at all, so each side is tested on
+        its own. "Nicki Nicole feat. Nathy Peluso" is the same shape with a
+        different joiner, and it reached a printed explanation as a role.
 
     This also catches the three the docstring used to call uncatchable --
     "Angeles Toledano", "Ruben Blades", "Americo Young". They were never
     role-slot-only; they head segments of their own, spelled with the accents
     the role slot drops.
 
-    Measured over all of cache/credits and cache/search: 18 distinct tokens,
-    29 occurrences, and every one of them is an artist name. No instrument,
-    no genuine role. The allowlist objection above is why that mattered enough
-    to measure rather than assume.
+    Measured over all of cache/credits and cache/search: 18 distinct tokens
+    and 29 occurrences for the fold alone, then 6 more tokens and 7
+    occurrences when "feat." was added as a joiner. Every one of the 24 is an
+    artist name -- no instrument, no genuine role. The allowlist objection
+    above is why that mattered enough to measure rather than assume.
     """
     segments = [[part.strip() for part in segment.split(",") if part.strip()]
                 for segment in credits.split(" - ")]
@@ -86,20 +89,38 @@ def parse_performers(credits: str) -> list[tuple[str, list[str]]]:
     return people
 
 
+# How Qobuz joins two artists inside one token. "&" and "feat." both appear,
+# and both produce a token that is no head at all while each of its sides is
+# one: "Björk & Yves Tumor", "Nicki Nicole feat. Nathy Peluso".
+JOINERS = ("&", " feat. ", " feat ", " featuring ")
+
+
+def split_billing(token: str) -> list[str]:
+    """One token broken on every joiner, as normalised keys."""
+    parts = [token]
+    for joiner in JOINERS:
+        parts = [piece for part in parts for piece in part.split(joiner)]
+    return [normalise(piece) for piece in parts if normalise(piece)]
+
+
 def names_a_co_artist(token: str, head: str, folded: set[str]) -> bool:
     """Is this role-slot token actually somebody's name?
 
     `folded` is every segment head in the same string, normalised. A token is
     a name when it matches one of them, or when it is several of them joined
-    with "&" -- and never when it matches its OWN head, which is a string
+    together -- and never when it matches its OWN head, which is a string
     repeating itself rather than naming a collaborator.
+
+    Positive evidence only, in the joined case as well: every side has to be a
+    head of this same string. "Björk & Somebody Else" where the string never
+    names Somebody Else stays a role, because nothing in it says otherwise.
     """
     key = normalise(token)
     if not key or key == normalise(head):
         return False
     if key in folded:
         return True
-    pieces = [normalise(piece) for piece in token.split("&")]
+    pieces = split_billing(token)
     return len(pieces) > 1 and all(piece in folded for piece in pieces)
 
 

@@ -252,3 +252,31 @@ def test_an_instrument_is_never_mistaken_for_a_name():
     said = dict(parse_performers(
         "Jorge Drexler, Spanish Guitar, Berimbau, Theremin - Borja Barrueta, Timpani"))
     assert said["Jorge Drexler"] == ["Spanish Guitar", "Berimbau", "Theremin"]
+
+
+def test_two_names_joined_with_feat_are_both_names():
+    """Same shape as "&" with a different joiner, and it reached a printed
+    explanation: "credited on 1 track (nicki nicole feat. nathy peluso)"."""
+    said = dict(parse_performers(
+        "Christina Aguilera, MainArtist - Nicki Nicole, MainArtist - "
+        "Nathy Peluso, MainArtist - "
+        "Christina Aguilera, Nicki Nicole feat. Nathy Peluso, AssociatedPerformer"))
+    assert said["Christina Aguilera"] == ["AssociatedPerformer"]
+
+
+def test_every_joiner_qobuz_uses_is_split():
+    from core.credits import split_billing
+    for joined in ("A & B", "A feat. B", "A feat B", "A featuring B"):
+        assert split_billing(joined) == ["a", "b"], joined
+
+
+def test_a_name_with_no_joiner_is_one_piece():
+    from core.credits import split_billing
+    assert split_billing("Nellee Hooper") == ["nellee hooper"]
+
+
+def test_a_feat_token_with_one_side_unknown_stays_a_role():
+    """Positive evidence only, in the joined case too."""
+    said = dict(parse_performers(
+        "Amaral, MainArtist - Amaral, Sidonie feat. Dani Martín, AssociatedPerformer"))
+    assert "Sidonie feat. Dani Martín" in said["Amaral"]

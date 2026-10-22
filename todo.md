@@ -306,10 +306,13 @@ The gap between "a credits database" and "recommends music".
     returned the discography. `luis eduardo aute` has three roles at 1 each and
     `juan falu` four at 13. A rebuild on a different day can flip it, which
     means the field is not a fact about the person. Pick a tie-break.
-  - **"Sidonie feat. Dani Martín" is a role.** Same class as the fix below and
-    not caught by it: the name is joined by `feat.` rather than `&`, and it
-    heads no segment of its own, so the string holds no evidence to catch it
-    with. One row. Listed because the next one may not be.
+  - **~~"Sidonie feat. Dani Martín" is a role.~~** Fixed 2026-10-22:
+    `core.credits.split_billing` breaks a token on every joiner Qobuz uses —
+    `&`, `feat.`, `feat`, `featuring` — and the positive-evidence rule is
+    unchanged, so every side still has to head a segment of the same string.
+    6 more tokens and 7 occurrences over the whole cache, all artist names.
+    "Sidonie feat. Dani Martín" itself stays a role, correctly: the string
+    never names Dani Martín on his own.
   - **~~An artist's name in a role slot, spelled differently.~~** Fixed
     2026-10-22, found by reading the printed list rather than by a test.
     `core.credits.parse_performers` already dropped a packed co-artist name
@@ -370,10 +373,29 @@ The gap between "a credits database" and "recommends music".
     means re-running `resolve_qobuz.py`. The crew pipeline is paused, so this
     is a known stale column rather than a fixed one.
 
-    **Also still open and free: `MUSICAL_ROLES` is the same gap one layer
-    down.** `discover.py` uses it to drop non-musical people from the crew
-    graph, and it holds none of `vocalist`, `rap` or `backgroundvocalist`.
-    Fold it into `role_class`.
+    **`MUSICAL_ROLES` looked like the same gap one layer down, and measuring
+    it said leave it alone.** 2026-10-22, over the ten-seed corpus:
+
+    - the gap is real but **latent: 0 of 2,772 people change verdict**.
+      `is_musical` is `any()` over a person's whole role list, and a real
+      person holding `Vocalist` almost always holds something the allowlist
+      does know.
+    - the tail is not three tokens, it is **255** (5,831 credits rows) —
+      `Congas`, `Banjo`, `Vibraphone`, `Spanish Guitar`. Adding three would be
+      arbitrary; adding 255 rebuilds the allowlist `core/credits.py` measured
+      against in the first place.
+    - replacing it with `role_class` has two forms and neither is free:
+      `!= non-musical` keeps a `FeaturedArtist`-only person who is today
+      dropped, and `not in {non-musical, billing}` **drops 165 people**, all
+      billing-only.
+    - and the comment above `MUSICAL_ROLES` already rejected merging the two
+      vocabularies, because `discovery_*.json` and `watchlist.json` carry the
+      coarser classes and unifying would change data already written. It calls
+      that "a decision to make on purpose, not a side effect of tidying".
+
+    So: not changed. The latent gap is recorded here instead, and the thing
+    that would make it worth fixing is a person whose ONLY credit is one of
+    the missing tokens. There is none yet.
   - **"WE PRAY" is three album ids on three dates, and that is correct.**
     Checked 2026-10-22 rather than fixed. The single is `k3qvjdv4dc7yb`
     (2024-08-23), `dyo5uicjiqi4a` (2025-02-13) and `j5jjsjkkq0aaa`
