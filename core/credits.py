@@ -8,14 +8,17 @@ collaborator names as instrument credits for as long as both existed.
 
 It belongs in core/ rather than policy.py because there is no judgement here.
 Splitting "Name, Role - Name, Role" is mechanical; what a role is WORTH is the
-contestable part, and that stays in policy.py. For the same reason this module
-imports neither policy nor core.names: it returns the raw strings Qobuz sent,
-and the caller decides how to fold them.
+contestable part, and that stays in policy.py. It imports no policy, and what
+it RETURNS is still the raw strings Qobuz sent, for the caller to fold -- but it
+folds names internally now, with core.names, because one string spells the same
+artist two ways and the comparison below has to see through that.
 
     parse_performers("Jorge Drexler, MainArtist, Vocal - Ana Prada, Voices")
     -> [("Jorge Drexler", ["MainArtist", "Vocal"]), ("Ana Prada", ["Voices"])]
 """
 from __future__ import annotations
+
+from core.names import normalise
 
 
 def parse_performers(credits: str) -> list[tuple[str, list[str]]]:
@@ -46,26 +49,58 @@ def parse_performers(credits: str) -> list[tuple[str, list[str]]]:
     it is dropped here rather than re-emitted -- re-emitting would double-count
     its tracks and add nothing.
 
-    Catches 9 of the ~13 packed segments in that corpus. The rest ("Angeles
-    Toledano", "Ruben Blades", "Americo Young") appear ONLY in a role slot, so
-    the string holds no evidence to catch them with; guessing from
-    capitalisation would put every instrument at risk, a worse trade.
+    TWO WAYS THAT TEST USED TO MISS, both found 2026-10-22 in the three seeds
+    walked after it was written, and both fixed by `names_a_co_artist`:
 
-    Removing those tokens changed 0 rows of discovery_41620.json: every packed
-    segment in the corpus has the seed in the name slot, and discover.py drops
-    the seed as not their own collaborator.
+        Conrad Taylor, ..., Re-Mixer - Rosalia, MainArtist, ... -
+        Conrad Taylor, ROSALÍA, Björk & Yves Tumor, AssociatedPerformer
+
+      - ONE STRING, TWO SPELLINGS. "ROSALÍA" is a head of this very string,
+        as "Rosalia". An exact comparison does not see it, so an artist's name
+        became a role and reached the printed explanation: "credited on 1
+        track (re-mixer, rosalía, björk & yves tumor)", which is exactly what
+        D21 promised an explanation would never say.
+      - NAMES JOINED WITH "&". "Björk & Yves Tumor" is two heads in one token
+        and is no head at all, so each side is tested on its own.
+
+    This also catches the three the docstring used to call uncatchable --
+    "Angeles Toledano", "Ruben Blades", "Americo Young". They were never
+    role-slot-only; they head segments of their own, spelled with the accents
+    the role slot drops.
+
+    Measured over all of cache/credits and cache/search: 18 distinct tokens,
+    29 occurrences, and every one of them is an artist name. No instrument,
+    no genuine role. The allowlist objection above is why that mattered enough
+    to measure rather than assume.
     """
     segments = [[part.strip() for part in segment.split(",") if part.strip()]
                 for segment in credits.split(" - ")]
-    heads = {parts[0] for parts in segments if parts}
+    folded = {normalise(parts[0]) for parts in segments if parts}
     people = []
     for parts in segments:
         if not parts:
             continue
         roles = [token for token in parts[1:]
-                 if not (token in heads and token != parts[0])]
+                 if not names_a_co_artist(token, parts[0], folded)]
         people.append((parts[0], roles))
     return people
+
+
+def names_a_co_artist(token: str, head: str, folded: set[str]) -> bool:
+    """Is this role-slot token actually somebody's name?
+
+    `folded` is every segment head in the same string, normalised. A token is
+    a name when it matches one of them, or when it is several of them joined
+    with "&" -- and never when it matches its OWN head, which is a string
+    repeating itself rather than naming a collaborator.
+    """
+    key = normalise(token)
+    if not key or key == normalise(head):
+        return False
+    if key in folded:
+        return True
+    pieces = [normalise(piece) for piece in token.split("&")]
+    return len(pieces) > 1 and all(piece in folded for piece in pieces)
 
 
 # Qobuz's spelling of the billing credit, lowercased. The one role token this

@@ -535,12 +535,24 @@ MADE_TOGETHER = {"own", "guest"}
 # next seed will turn up.
 #
 # Deliberately NOT here: ensembles billed alongside the seed (Javier Colina
-# Trio, Falta y Resto, the Hamrahlid Choir) are artists with records, and
-# Liniers, who draws on stage at Drexler's live shows, is a judgement call
-# nobody has made yet rather than a defect.
+# Trio, Falta y Resto, the Hamrahlid Choir) are artists with records.
+#
+# A RULE WAS TRIED FOR THIS AND MEASURED DOWN. "Drop a co-artist whose only
+# credit beyond the billing is non-musical" would catch Liniers off his
+# `Designer` credit without a hand entry. Over the four corpora it also cuts
+# Rosie Lowe (Vocalist, BackgroundVocalist), Yuna (Vocalist), PJ Sin Suela
+# (Rap) and Tosca -- 5 real features to catch 1 illustrator -- because
+# MUSICAL_ROLES is an allowlist and those four tokens are not in it, and
+# because role_class() files an unknown role under "performance", which is
+# what it calls `Designer`. core.credits already recorded this lesson: 65 of
+# 124 role tokens in one corpus are in no table here and nearly all are
+# genuine. So these four stay a list of four names.
 # ---------------------------------------------------------------------------
 
 NOT_ARTISTS = {"colors", "penelope cruz",
+               # An illustrator, billed because he draws on stage at Drexler's
+               # live shows. His only credit on the record is `Designer`.
+               "liniers",
                # Bjork's own bands, which are the seed under another name
                # rather than a collaborator. MusicBrainz states both as
                # `member of band` on the request core.musicbrainz already

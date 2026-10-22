@@ -205,3 +205,50 @@ def test_a_co_artist_packed_into_a_role_slot_is_not_billed_by_accident():
     packed = ("Jorge Drexler, Rueda de Candombe, MainArtist"
               " - Rueda de Candombe, MainArtist, AssociatedPerformer")
     assert main_artists(packed) == ["Jorge Drexler", "Rueda de Candombe"]
+
+
+# ---- a name in the role slot, spelled differently -----------------------
+
+
+def test_the_same_artist_spelled_two_ways_in_one_string_is_not_a_role():
+    """Berghain (Remix), as Qobuz returns it: "ROSALÍA" sits in a role slot and
+    "Rosalia" heads a segment of the same string. An exact comparison does not
+    see it, and the name reached the printed explanation as a role -- "credited
+    on 1 track (re-mixer, rosalia, bjork & yves tumor)"."""
+    said = dict(parse_performers(
+        "Conrad Taylor, MainArtist, Re-Mixer - Rosalia, MainArtist - "
+        "Conrad Taylor, ROSALÍA, AssociatedPerformer"))
+    assert said["Conrad Taylor"] == ["AssociatedPerformer"]
+
+
+def test_two_names_joined_with_an_ampersand_are_both_names():
+    """"Björk & Yves Tumor" is two heads in one token and no head at all, so
+    each side is tested on its own."""
+    said = dict(parse_performers(
+        "Rosalia, MainArtist - Bjork, MainArtist - Yves Tumor, MainArtist - "
+        "Rosalia, Björk & Yves Tumor, AssociatedPerformer"))
+    assert said["Rosalia"] == ["AssociatedPerformer"]
+
+
+def test_an_ampersand_token_with_one_side_unknown_stays_a_role():
+    """Positive evidence only: if the string does not name both sides, it does
+    not hold the evidence to call the token a billing."""
+    said = dict(parse_performers(
+        "Bjork, MainArtist - Bjork, Björk & Somebody Else, AssociatedPerformer"))
+    assert "Björk & Somebody Else" in said["Bjork"]
+
+
+def test_a_token_matching_its_own_head_is_still_a_role():
+    """A string repeating itself is not a collaborator, and dropping the token
+    would lose a real role on a segment that has only one."""
+    said = dict(parse_performers("Bjork, Bjork - Mark Bell, Composer"))
+    assert said["Bjork"] == ["Bjork"]
+
+
+def test_an_instrument_is_never_mistaken_for_a_name():
+    """The allowlist objection in the module docstring, as a test: 65 of 124
+    role tokens in one corpus are in no policy table and nearly all are
+    genuine, so the fold must not widen what counts as a name."""
+    said = dict(parse_performers(
+        "Jorge Drexler, Spanish Guitar, Berimbau, Theremin - Borja Barrueta, Timpani"))
+    assert said["Jorge Drexler"] == ["Spanish Guitar", "Berimbau", "Theremin"]

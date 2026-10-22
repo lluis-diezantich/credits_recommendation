@@ -234,6 +234,55 @@ The gap between "a credits database" and "recommends music".
     returned the discography. `luis eduardo aute` has three roles at 1 each and
     `juan falu` four at 13. A rebuild on a different day can flip it, which
     means the field is not a fact about the person. Pick a tie-break.
+  - **~~An artist's name in a role slot, spelled differently.~~** Fixed
+    2026-10-22, found by reading the printed list rather than by a test.
+    `core.credits.parse_performers` already dropped a packed co-artist name
+    that also heads a segment of the same string, but it compared the raw
+    tokens, and Qobuz spells one artist two ways inside one string:
+
+        Conrad Taylor, ..., Re-Mixer - Rosalia, MainArtist, ... -
+        Conrad Taylor, ROSALÍA, Björk & Yves Tumor, AssociatedPerformer
+
+    So "ROSALÍA" was a role, and reached the page as *"credited on 1 track
+    (re-mixer, rosalía, björk & yves tumor)"* — which is the one thing
+    [adr/D21](docs/adr/D21-explanations-name-what-the-person-did.md) promised
+    an explanation would never say. `names_a_co_artist` now folds both sides
+    with `normalise` and splits a token on `&`, since "Björk & Yves Tumor" is
+    two heads in one token and no head at all.
+
+    Measured over all of `cache/credits` and `cache/search`: **18 distinct
+    tokens, 29 occurrences, every one an artist name** — no instrument, no
+    genuine role. It also catches the three the old docstring called
+    uncatchable ("Angeles Toledano", "Ruben Blades", "Americo Young"); they
+    were never role-slot-only, they head segments spelled with the accents the
+    role slot drops. Those tokens were scoring 0.8 as unknown instruments and
+    `role_class` was filing them under `performance`.
+  - **~~"Liniers" is billed on a Drexler live record.~~** On the hand list
+    2026-10-22 — an illustrator who draws on stage, whose only credit is
+    `Designer`.
+
+    **A rule was tried for this and measured down**, and the measurement is
+    worth keeping: "drop a co-artist whose only credit beyond the billing is
+    non-musical" also cuts Rosie Lowe (Vocalist), Yuna (Vocalist), PJ Sin
+    Suela (Rap) and Tosca — 5 real features to catch 1 illustrator. Because
+    `MUSICAL_ROLES` is an allowlist missing all four tokens, and because
+    `role_class` files an unknown role under `performance`, which is what it
+    calls `Designer`. `core/credits.py` recorded the same lesson first: 65 of
+    124 role tokens in one corpus are in no table in `policy.py` and nearly
+    all are genuine. So `NOT_ARTISTS` is four names, not a predicate.
+  - **"WE PRAY" is three album ids on three dates, and that is correct.**
+    Checked 2026-10-22 rather than fixed. The single is `k3qvjdv4dc7yb`
+    (2024-08-23), `dyo5uicjiqi4a` (2025-02-13) and `j5jjsjkkq0aaa`
+    (2025-04-17); all three bill Little Simz, and the later two add Jasleen
+    Royal and Twice respectively — Coldplay shipped regional variants with
+    different features. `fold_editions` folds inside one person's album list,
+    so each co-artist keeps the earliest edition THEY are on, which is why one
+    single is dated 2024 for Burna Boy and 2025 for Twice.
+
+    Each count is right and each date is right for its person. What is wrong
+    is only that the list prints "WE PRAY" three times and reads as three
+    records. Left alone: making the date seed-wide would tell Twice they
+    appear on a 2024 record they are not on.
 
 - **The credits pool itself has four defects, all measured 2026-10-18.**
 
