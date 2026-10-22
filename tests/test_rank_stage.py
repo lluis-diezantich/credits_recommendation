@@ -199,7 +199,7 @@ def test_log_then_score_closes_the_loop(store, capsys):
 
     logged = json.loads((store.dir / mod.LOG).read_text())
     assert len(logged["runs"]) == 1
-    assert logged["runs"][0]["strategy"] == "breadth"
+    assert logged["runs"][0]["source"] == "breadth"
     assert [r["rank"] for r in logged["runs"][0]["top"]] == [1, 2]
 
     store.listen("played later", when="2099-01-01")
@@ -223,7 +223,7 @@ def test_each_run_is_appended_rather_than_replacing_the_last(store, capsys):
     store.run("--log", "--top", "1")
     store.run("--strategy", "taste", "--log", "--top", "1")
     runs = json.loads((store.dir / mod.LOG).read_text())["runs"]
-    assert [r["strategy"] for r in runs] == ["breadth", "taste"]
+    assert [r["source"] for r in runs] == ["breadth", "taste"]
 
 
 def test_a_hand_mangled_log_does_not_lose_the_run(store, capsys):
@@ -264,7 +264,7 @@ def test_an_empty_log_says_so_rather_than_dividing_by_zero(store, capsys,
     monkeypatch.setattr(sys, "argv",
                         ["rank.py", "--db", str(store.path), "--score"])
     assert mod.main() == 1
-    assert "no runs yet" in capsys.readouterr().err
+    assert "no runs in" in capsys.readouterr().err
 
 
 def test_a_store_with_no_such_table_says_to_build_it(tmp_path, monkeypatch):

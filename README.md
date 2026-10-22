@@ -38,7 +38,7 @@ resumes a run that died partway through its fan-out.
     policy.py          scoring judgement calls - ONE copy, at the root, on purpose
     core/              plumbing - http, names, aliases, credits, qobuz, discogs,
                        favourites, listens, musicbrainz, state, paths, radar,
-                       explain, rank
+                       explain, rank, shown, similar
     stages/            the pipeline, in order
       favourites.py      ListenBrainz top artists -> Qobuz ids -> favourites.json
       profile.py         listens -> who you still play, in months  [DERIVED]
@@ -50,6 +50,7 @@ resumes a run that died partway through its fan-out.
       load.py            all of the above -> data/music.db         [DERIVED]
       co_artists.py      who a seed made records WITH, explained   [OFFLINE]
       rank.py            all seeds at once, by strategy            [OFFLINE]
+      baseline.py        the similar-artist opponent, same log     [CACHED]
     radars/            new-release watchers, one thin source each - docs/radars.md
       qobuz.py  listenbrainz.py  itunes.py    core/radar.py drives these three
       remezcla.py        a blog, not an id namespace - its own script

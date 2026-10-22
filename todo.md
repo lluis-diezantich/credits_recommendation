@@ -177,13 +177,45 @@ not correct.
    releases BY the artists on this list, costed at 68 `artist/get` per run,
    cheaper than the Friday job already running.
 
-Still open and not in this plan, because it answers a different question: a
-**similar-artist baseline**. ListenBrainz exposes one and `radars/listenbrainz.py`
-already speaks to that API. Pull a seed's top 30, drop what is already played,
-and two unheard lists sit side by side — then listening to five of each is the
-only comparison that means anything. Guess on record: similarity wins on hit
-rate, co-appearance wins on keepers you would never have found, and the lists
-barely overlap.
+**~~A similar-artist baseline.~~** Built 2026-10-22
+([adr/D31](docs/adr/D31-the-baseline-is-the-opponent.md)) and it answers
+`roadmap.md`'s founding question, or will: `stages/baseline.py`, one cached
+request per seed to the ListenBrainz labs endpoint, and it logs into the SAME
+`data/shown.json` as the strategies so `rank.py --score` reports both in one
+table. Built as an opponent rather than as a report, because a hit rate is only
+a comparison if both sides are scored the same way over the same window.
+
+**One third of the guess is now measured, and it was right: the lists barely
+overlap.**
+
+| | |
+|---|---|
+| similar-artist list, unheard | 207 |
+| co-appearance list, unheard | 162 |
+| in both | **23** — 6.6% of the union |
+
+The shared 23 are mostly contemporary Latin pop reachable both ways (Nicki
+Nicole, Ozuna, Sech, Paloma Mami, The Weeknd). The similar list leads with
+Röyksopp, Garbage, The Prodigy — plausible, well-known, mostly reachable from
+Björk alone. Ours leads with Conociendo Rusia and Los Cojolites.
+
+**The other two thirds — "similarity wins on hit rate, co-appearance wins on
+keepers" — are not measured and cannot be yet.** Both sources log; `--score`
+will say. The algorithm is pinned in `core.similar.ALGORITHM` and carried in
+the cache filename, because ListenBrainz exposes several and a comparison
+across two of them measures nothing.
+
+**The ordering was wrong on the first read and is fixed.** ListenBrainz returns
+a session co-occurrence COUNT that scales with global listening, not closeness:
+Björk's top is 6,682 and Sílvia Pérez Cruz's is 24, a factor of 278, so merging
+on the raw maximum ranked "artists ListenBrainz has data about" and put her best
+neighbour below Björk's hundredth. Each seed is divided by its own ceiling now
+(`affinity`, 0–1), the seed count is a tie-break only, and the raw number stays
+beside it as provenance. An opponent weakened by a scale artefact would have
+flattered our own list in `--score`.
+
+Run 1 of `similar` in `data/shown.json` used the old order and is left as it
+is: the log records what was shown.
 
 ## The product
 

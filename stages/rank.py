@@ -33,7 +33,7 @@ import sys
 from contextlib import closing
 
 import policy
-from core import rank
+from core import rank, shown
 from core.explain import cross_seed_sentence
 from core.names import normalise
 from core.paths import DATA
@@ -41,7 +41,7 @@ from policy import MADE_TOGETHER, nameable_roles, why_not_a_co_artist
 
 TOGETHER = ", ".join(f"'{p}'" for p in sorted(MADE_TOGETHER))
 
-LOG = "shown.json"
+LOG = shown.FILE
 
 # One row per person, aggregated over every seed they connect to. The grain is
 # the person, which is what makes this different from co_artists.py: `seeds` is
@@ -174,79 +174,44 @@ def show(rows: list[dict], limit: int) -> None:
         print(f"     {sentence(row)}")
 
 
-def write_log(path, strategy_name: str, rows: list[dict], limit: int,
+def write_log(directory, source: str, rows: list[dict], limit: int,
               today: dt.date) -> int:
     """Append what this run showed. Returns the number of runs on file.
 
     A committed file, the stance D11 took for the radar: the only way to learn
-    whether a strategy was right is to have written down what it claimed
-    BEFORE the listens that would confirm it arrived. Scores are kept with the
-    keys so a later --score reads the number the ordering used, not a
-    recomputed one.
+    whether a ranking was right is to have written down what it claimed BEFORE
+    the listens that would confirm it arrived. `core.shown` owns the format,
+    because stages/baseline.py writes to the same file and a hit rate is only a
+    comparison if both sources are recorded identically.
     """
-    try:
-        blob = json.loads(path.read_text())
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        blob = {}
-    runs = blob.get("runs") if isinstance(blob, dict) else None
-    if not isinstance(runs, list):
-        # A file somebody hand-edited into a different shape is not a reason to
-        # lose the run, but it is a reason not to append to whatever is there.
-        runs = []
-    blob = {"version": 1, "runs": runs}
-    runs.append({
-        "shown": today.isoformat(),
-        "strategy": strategy_name,
-        "candidates": len(rows),
-        "top": [{"rank": i, "person_key": r["person_key"], "name": r["name"],
-                 "score": [round(part, 3) for part in r["sort_key"]],
-                 "seeds": r["seeds"]}
-                for i, r in enumerate(rows[:limit], 1)],
-    })
-    path.write_text(json.dumps(blob, indent=2, ensure_ascii=False) + "\n")
-    return len(runs)
+    return shown.append(directory, shown.entry(source, today.isoformat(),
+                                               rows, limit))
 
 
-def score_log(con: sqlite3.Connection, path) -> int:
-    """Per strategy: of the names it showed, how many have been played since.
+def score_log(con: sqlite3.Connection, directory) -> int:
+    """Per source: of the names it showed, how many were played since.
 
-    The measurement every weight in policy's strategy block is waiting for.
-    Plays are counted as of NOW against a run recorded THEN, so a name only
-    counts if the listening arrived after the run -- which is why the log
-    stores the date.
+    The measurement every weight in policy's strategy block is waiting for,
+    and the one that tells a credit graph from a similarity model.
     """
-    try:
-        blob = json.loads(path.read_text())
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        print(f"no {LOG} yet - run with --log first", file=sys.stderr)
+    runs = shown.load(directory)
+    if not runs:
+        print(f"no runs in {LOG} yet - run with --log first", file=sys.stderr)
         return 1
 
-    runs = blob.get("runs") if isinstance(blob, dict) else None
-    if not runs or not isinstance(runs, list):
-        print(f"{LOG} has no runs yet", file=sys.stderr)
-        return 1
+    def played_after(person_key: str, when: str) -> bool:
+        return bool(con.execute(
+            "SELECT 1 FROM listens WHERE artist_key = ? AND listened_date > ? "
+            "LIMIT 1", (person_key, when)).fetchone())
 
-    by_strategy: dict[str, list[tuple[int, int]]] = {}
-    for run in runs:
-        hits = 0
-        for row in run.get("top") or []:
-            played = con.execute(
-                "SELECT COUNT(*) FROM listens WHERE artist_key = ? "
-                "AND listened_date > ?",
-                (row["person_key"], run["shown"])).fetchone()[0]
-            hits += bool(played)
-        by_strategy.setdefault(run["strategy"], []).append(
-            (hits, len(run.get("top") or [])))
-
+    results = shown.hit_rate(runs, played_after)
     print(f"{len(runs)} run(s) on file\n")
-    print(f"  {'strategy':<12} {'runs':>5} {'shown':>6} {'played since':>13}")
-    for name, results in sorted(by_strategy.items()):
-        hits = sum(h for h, _ in results)
-        shown = sum(n for _, n in results)
-        rate = f"{hits / shown:.0%}" if shown else "-"
-        print(f"  {name:<12} {len(results):>5} {shown:>6} "
-              f"{f'{hits} ({rate})':>13}")
-    print("\nA name counts only if it was played AFTER the run that showed it.")
+    print(f"  {'source':<12} {'runs':>5} {'shown':>6} {'played since':>13}")
+    for source, (count, names, hits) in sorted(results.items()):
+        rate = f"{hits / names:.0%}" if names else "-"
+        print(f"  {source:<12} {count:>5} {names:>6} {f'{hits} ({rate})':>13}")
+    print("\nA name counts once per source, and only if it was played AFTER "
+          "the run that showed it.")
     return 0
 
 
@@ -286,10 +251,8 @@ def report(con: sqlite3.Connection, args) -> int:
     Closed rather than left to the interpreter: this runs under pytest as well
     as from a shell, and a leaked read handle is a ResourceWarning per test.
     """
-    log_path = DATA / LOG
-
     if args.score:
-        return score_log(con, log_path)
+        return score_log(con, DATA)
 
     today = dt.date.today()
     try:
@@ -328,7 +291,7 @@ def report(con: sqlite3.Connection, args) -> int:
         show(ordered, args.top)
 
     if args.log:
-        runs = write_log(log_path, name, ordered, args.top, today)
+        runs = write_log(DATA, name, ordered, args.top, today)
         print(f"\nlogged run {runs} to data/{LOG} - "
               "./stages/rank.py --score reads it back", file=sys.stderr)
     return 0
