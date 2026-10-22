@@ -31,11 +31,23 @@ not correct.
 
 ### The plan, in order
 
-1. **Filter the junk out of the co-artist list.** "Colors" (the *A COLORS
-   SHOW* channel) and "Penelope Cruz" get fluent explanations since
-   [adr/D21](docs/adr/D21-explanations-name-what-the-person-did.md), which
-   makes a wrong row more convincing rather than less. Free. **Blocks
-   everything user-facing.**
+1. **~~Filter the junk out of the co-artist list.~~** Done 2026-10-22
+   ([adr/D24](docs/adr/D24-a-record-nobody-holds.md)), and the thing it was
+   named for was the small half of it. "Colors" and "Penelope Cruz" are two
+   rows on a hand list; the 20 others were **one album**. *Army Of Me*, Björk's
+   remix record, is 20 tracks by 20 remixers, so she holds none of it and D14
+   labelled it a guest spot once per remixer — 20 of her 35 co-artists, and the
+   same 20 in her crew graph. `album_provenance` now returns a fourth value
+   when no artist holds half the billed tracks, which reuses
+   `OWN_ALBUM_MAIN_SHARE` rather than adding a number: 1 album of 258 is under
+   it, at 5%, and the next one up is at 91%.
+
+   **121 co-appearances → 97, and 73 unheard artists shown → 51.** Filtered on
+   read, so the rows stay queryable (D15).
+
+   Residue: the hand list does not generalise — seed 5 arrives with its own
+   channel or actor and nothing notices. If three more turn up, the rule to
+   write is a session brand's name appearing in the album title.
 
 2. **~~Probe two seeds outside the Iberian cluster.~~** Done 2026-10-20 with
    Little Simz and Björk, ~200 requests, and it paid for itself immediately —
@@ -45,7 +57,9 @@ not correct.
    Dirty Projectors, Shygirl, ANOHNI, Yves Tumor and alt-J are real, checkable
    collaborations no genre model would produce. But three identity defects that
    two Iberian seeds could never have shown now corrupt every count — see
-   **Correctness** below. **Those block step 3.**
+   **Correctness** below. Two are fixed (D23) and so is the compilation the
+   probe turned up with them (D24); **the collaborator aliases still block
+   step 3.**
 
    Still to do: **6-8 more seeds from the profile's 80 `core` artists, by
    rule** — ~50 requests each, about four weeks of the Friday radar's traffic
@@ -53,13 +67,16 @@ not correct.
    number and wants an ADR; picking by hand is what produced the first four.
    Candidates by recent months, from `profile.json`: Nathy Peluso 24/24, El
    Gran Combo 23/24, Celia Cruz 22, Kali Uchis 22, Ca7riel 21, ROSALÍA 21,
-   Willie Colón 21. Not before the three fixes, or every new seed arrives with
-   the same corrupted counts.
+   Willie Colón 21. Not before the alias fix, or every new seed arrives with
+   its best collaborators split across spellings.
 
-3. **Rank across seeds.** Blocked on the three identity fixes below: ranking
-   by `albums` today puts Coldplay, Burna Boy, Elyanna and tINI at the top of
-   the Little Simz list on the strength of one single stored five times. The
-   inputs are already stored: how many of your
+3. **Rank across seeds.** Blocked on the one identity fix left below. Rank on
+   `seed_records + their_records` and not on `albums`, which counts every
+   sleeve two artists are printed on: it put Coldplay, Burna Boy, Elyanna and
+   tINI at the top of the Little Simz list on the strength of one single stored
+   five times (fixed by D23), and a remix compilation above a real record
+   (fixed by D24). `stages/co_artists.py` and `docs/store.md` already order on
+   the right number. The inputs are already stored: how many of your
    artists made a record with them, how many records each way, the direction
    (the seed guesting on THEIR album is the stronger claim — your artist chose
    to show up), the roles, recency. Plus a **ubiquity penalty**, because
@@ -197,12 +214,19 @@ The gap between "a credits database" and "recommends music".
     `person_albums.provenance`, and both halves of the funnel as queries in
     [store.md](docs/store.md). `co_artists` is still read by nothing that
     recommends — it is now one join away rather than absent.
-  - **The co-artist list inherits the name problem.** "Colors" (from *A COLORS
-    SHOW*) and "Penelope Cruz" are among Pérez Cruz's 28, and since 2026-10-20
-    they get a fluent explanation each
-    ([adr/D21](docs/adr/D21-explanations-name-what-the-person-did.md)), which
-    makes a wrong row more convincing rather than less. It needs the same
-    stance as the pools before anything ranks it.
+  - **~~The co-artist list inherits the name problem.~~** Filtered 2026-10-22
+    ([adr/D24](docs/adr/D24-a-record-nobody-holds.md)): `policy.NOT_ARTISTS`
+    names "Colors", "Penelope Cruz" and Björk's own two bands, with a reason
+    each, and `stages/co_artists.py` drops them on read and says on stderr that
+    it did. A hand list, because each one is genuinely billed on a track the
+    seed is genuinely on — that is every piece of evidence this project
+    collects about them.
+
+    **MusicBrainz could do the two bands and cannot be used yet.** It states
+    both as `member of band`, on the request `core.musicbrainz` already makes,
+    so the data is free — but `normalise` keeps the periods in "K.U.K.L." and
+    MusicBrainz files the band as "KUKL". A name key that strips punctuation
+    touches every match in the project and wants its own measurement.
   - **`top_role` is order-dependent on a tie.** Found while verifying this
     change was behaviour-preserving, and it predates it: `Counter.most_common(1)`
     breaks a tie by insertion order, so the role depends on the order Qobuz
@@ -370,7 +394,15 @@ Where the code can be wrong without anything noticing.
   all invisible until a seed outside the Iberian cluster was walked, and
   together they corrupt every co-appearance and crew count. Numbers and the
   per-seed table are in
-  [adr/D22](docs/adr/D22-co-appearance-is-the-second-pipeline.md).
+  [adr/D22](docs/adr/D22-co-appearance-is-the-second-pipeline.md). **Two are
+  fixed** (D23); the collaborator aliases are not, and they are the one that
+  blocks ranking.
+
+  A fourth was found while filtering the list on 2026-10-22 and is fixed in the
+  same place: **a record nobody holds read as 20 guest spots**
+  ([adr/D24](docs/adr/D24-a-record-nobody-holds.md)). It belongs with these
+  because it is the same kind of error — a count asserting a relationship that
+  is not there — and it was the largest of the four by volume.
 
   - **~~The seed is credited under a legal name.~~** Fixed 2026-10-20
     ([adr/D23](docs/adr/D23-ask-musicbrainz-who-the-seed-is.md)): MusicBrainz

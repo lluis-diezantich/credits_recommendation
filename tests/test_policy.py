@@ -504,7 +504,7 @@ def test_half_the_record_is_enough_to_own_it():
     assert policy.album_provenance(4, 10) == "guest"
 
 
-def test_one_track_of_twenty_is_a_compilation():
+def test_one_track_of_twenty_does_not_make_it_the_seeds_record():
     assert policy.album_provenance(1, 20) == "guest"
 
 
@@ -512,6 +512,80 @@ def test_nobody_billed_is_unknown_not_guest():
     """Guards the division, and says the right thing: no billing, no verdict."""
     assert policy.album_provenance(0, 0) == "unknown"
     assert policy.album_provenance(3, 0) == "unknown"
+
+
+# ---- a record nobody holds ----------------------------------------------
+
+
+def test_a_record_nobody_holds_is_a_compilation_not_a_guest_spot():
+    """Army Of Me: 20 billed tracks, 20 artists, the seed on none of them. It
+    labelled as a guest spot twenty times over, which is 20 of Bjork's 35
+    co-artists off one remix album."""
+    assert policy.album_provenance(0, 20, 1) == "compilation"
+
+
+def test_the_compilation_test_reuses_the_own_album_floor():
+    """No second number to calibrate: the same share, read against whoever
+    holds the most of the record rather than against the seed. The one case
+    sits at 5% and the next album up at 91%, so the floor's exact value is as
+    untested here as it is for own/guest."""
+    assert policy.album_provenance(0, 20, 10) == "guest"
+    assert policy.album_provenance(0, 20, 9) == "compilation"
+
+
+def test_a_record_the_seed_holds_is_never_a_compilation():
+    """The seed is one of the holders, so owning the record wins outright."""
+    assert policy.album_provenance(11, 11, 11) == "own"
+
+
+def test_no_billing_at_all_is_still_unknown_rather_than_a_compilation():
+    """Both are an absence, and they are not the same absence: "unknown" is
+    nothing billed, "compilation" is a billing on every track and no owner."""
+    assert policy.album_provenance(0, 0, 0) == "unknown"
+
+
+def test_a_file_written_before_the_count_keeps_the_label_it_had():
+    """A discovery file from before D24 carries no top-billed count, and
+    reading its albums as compilations would be worse than reading them as
+    what they were labelled."""
+    assert policy.album_provenance(0, 20) == "guest"
+    assert policy.album_provenance(20, 20) == "own"
+
+
+def test_only_own_and_guest_say_the_two_made_a_record_together():
+    assert policy.MADE_TOGETHER == {"own", "guest"}
+    assert "compilation" not in policy.MADE_TOGETHER
+    assert "unknown" not in policy.MADE_TOGETHER
+
+
+# ---- billings that are not an artist ------------------------------------
+
+
+def test_a_channel_and_an_actor_are_not_artists():
+    """Both get a fluent explanation since D21, which makes a wrong row more
+    convincing rather than less. Neither has a discography to recommend."""
+    assert not policy.billed_as_artist("colors")
+    assert not policy.billed_as_artist("penelope cruz")
+
+
+def test_the_seeds_own_bands_are_not_collaborators():
+    """K.U.K.L. and the Sugarcubes are Bjork. MusicBrainz says so as `member
+    of band`, on the request core.musicbrainz already makes, but normalise()
+    keeps the periods and MusicBrainz files the band as "KUKL"."""
+    assert not policy.billed_as_artist("k.u.k.l.")
+    assert not policy.billed_as_artist("the sugarcubes")
+
+
+def test_an_ensemble_billed_alongside_the_seed_is_an_artist():
+    """Deliberately NOT on the list: a trio, a murga and a choir all have
+    records of their own."""
+    for key in ("javier colina trio", "falta y resto", "the hamrahlid choir"):
+        assert policy.billed_as_artist(key)
+
+
+def test_the_list_is_read_as_a_key_not_a_spelling():
+    """The spelling Qobuz filed does not decide it."""
+    assert policy.billed_as_artist("Colors")
 
 
 # ---- pool filters -------------------------------------------------------

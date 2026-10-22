@@ -62,11 +62,13 @@ regenerated. `meta` is authoritative.
 
     meta                     provenance: which file each table came from, row counts, dates
 
-    seeds                2   one row per seed walked - the TOP of the funnel:
-                             releases, albums_own/albums_guest, people, co_artists
-    co_artists          67   who a seed has made a record WITH, per seed. 59%
+    seeds                4   one row per seed walked - the TOP of the funnel:
+                             releases, albums_own/albums_guest/albums_compilation,
+                             people, co_artists
+    co_artists         121   who a seed has made a record WITH, per seed. 59%
                              already-played against the crew graph's 13% (adr/D14)
-    co_artist_albums    85   the records behind each co-appearance, own/guest
+    co_artist_albums   143   the records behind each co-appearance - own, guest,
+                             or compilation, which is nobody's (adr/D24)
 
     people             551   the credit graph, one row per person, merged from 5 places
                              albums/own_albums/tracks are SUMMED over seeds
@@ -232,9 +234,14 @@ plus one condition.
 
 ```sql
 SELECT name, releases AS albums_walked, albums_own, albums_guest,
-       people AS credited_people, co_artists
+       albums_compilation, people AS credited_people, co_artists
 FROM seeds;
 ```
+
+`albums_compilation` is a various-artists record in the seed's discography —
+neither theirs nor anybody else's. One in four corpora, and it was worth a
+column because that one produced 20 of Björk's 35 co-artists
+([adr/D24](adr/D24-a-record-nobody-holds.md)).
 
 ```sql
 WITH pool AS (SELECT * FROM releases WHERE seed_qobuz_id = 41620 AND source = 'qobuz')
@@ -256,17 +263,31 @@ one — 872 of the 1,255 rows are the referring person's own albums.
 with the best hit rate. Unheard only:
 
 ```sql
-SELECT c.name, c.albums, c.seed_records, c.their_records, c.last_seen
+SELECT c.name, c.seed_records + c.their_records AS together,
+       c.seed_records, c.their_records, c.last_seen
 FROM co_artists c
 WHERE c.seed_qobuz_id = 41620
+  AND c.seed_records + c.their_records > 0
   AND NOT EXISTS (SELECT 1 FROM listens l WHERE l.artist_key = c.person_key)
-ORDER BY c.albums DESC, c.last_seen DESC;
+ORDER BY together DESC, c.last_seen DESC;
 ```
 
 `seed_records` is them guesting on the seed's album, `their_records` is the seed
 guesting on theirs. Both are a record the two made together — see
 [adr/D14](adr/D14-co-appearance-is-its-own-output.md). Joining on `person_key`
 works because it is `normalise(name)`, the same key `listens.artist_key` carries.
+
+**Count on those two and not on `albums`.** `albums` counts every sleeve the two
+are printed on, including a various-artists record that is nobody's, so it both
+admits rows that are not collaborations and ranks them above real ones — 20 of
+Björk's 35 co-artists came off one remix album
+([adr/D24](adr/D24-a-record-nobody-holds.md)). The rows stay in the store and
+`co_artist_albums.provenance` says which is which, so the filter is this `WHERE`
+clause rather than a rewalk.
+
+`stages/co_artists.py` applies one more cut that no query can: `policy.NOT_ARTISTS`,
+a hand list of billings that are not an artist at all — the *A COLORS SHOW*
+channel, an actor reading on a track, Björk's own former bands.
 
 **The shortlist** — the credits thesis, as something a person can actually read.
 Filtered first, then ordered: `policy.shortlisted`'s three cuts, then

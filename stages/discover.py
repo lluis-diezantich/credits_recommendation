@@ -159,8 +159,14 @@ def album_billing(tracks: list[dict], seed_keys) -> tuple[str, list[str]]:
     Either way the names returned are artists the seed has made a record with,
     and that is a different list from the people who worked ON the seed's
     records -- the crew graph the rest of this file builds.
+
+    There is a third answer, and it is why the top billed share is counted here
+    as well as the seed's: on a various-artists record nobody holds the sleeve,
+    so it is neither. "Army Of Me" is 20 tracks by 20 artists and labelled as
+    20 separate guest spots until something asks who holds the most of it.
     """
     seed_billed = billed_tracks = 0
+    held: collections.Counter[str] = collections.Counter()
     others: dict[str, str] = {}
     for track in tracks:
         billed = main_artists(track.get("performers") or "")
@@ -172,8 +178,15 @@ def album_billing(tracks: list[dict], seed_keys) -> tuple[str, list[str]]:
             seed_billed += 1
         for name in billed:
             if normalise(name) not in seed_keys:
+                held[normalise(name)] += 1
                 others.setdefault(normalise(name), name)
-    return album_provenance(seed_billed, billed_tracks), list(others.values())
+    # The seed's own count is the union across every name they are filed
+    # under, which is what seed_billed already holds -- summing `held` per key
+    # would split one artist's hold over two spellings and read a record they
+    # plainly own as a compilation.
+    top_billed = max(seed_billed, max(held.values(), default=0))
+    return (album_provenance(seed_billed, billed_tracks, top_billed),
+            list(others.values()))
 
 
 def main() -> int:
@@ -331,6 +344,7 @@ def main() -> int:
                  "albums_failed": failed,
                  "albums_own": provenances["own"],
                  "albums_guest": provenances["guest"],
+                 "albums_compilation": provenances["compilation"],
                  "albums_unbilled": provenances["unknown"],
                  "tracks": total_tracks, "credited_tracks": credited_tracks},
         "people": kept,
@@ -345,8 +359,11 @@ def main() -> int:
     print(f"\n{credited_tracks}/{total_tracks} tracks credited"
           f"{f' ({failed} albums failed)' if failed else ''}")
     unbilled = provenances["unknown"]
+    compilations = provenances["compilation"]
     print(f"{provenances['own']} of {fetched} albums are the seed's own, "
           f"{provenances['guest']} are guest spots on someone else's"
+          + (f", {compilations} various-artists records nobody holds"
+             if compilations else "")
           + (f", {unbilled} with nobody billed" if unbilled else ""))
     if dropped_as_seed:
         shown = ", ".join(sorted(n for names in dropped_as_seed for n in names)[:4])

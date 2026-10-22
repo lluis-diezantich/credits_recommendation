@@ -55,15 +55,50 @@ def test_a_guest_on_the_seeds_own_record_is_still_a_co_appearance():
     assert album_billing(tracks, SEED) == ("own", ["C. Tangana"])
 
 
-def test_one_track_of_twenty_is_a_compilation_not_the_seeds_record():
+def test_one_track_of_twenty_does_not_make_it_the_seeds_record():
     """Why the rule is a share and not "is the seed billed anywhere on it".
     No album in either corpus is in between, so this case is the floor's only
-    witness -- see policy.OWN_ALBUM_MAIN_SHARE."""
+    witness -- see policy.OWN_ALBUM_MAIN_SHARE. One artist holds 19 of the 20,
+    so the record is theirs: this is a guest spot and not a compilation."""
     tracks = ([track("Jorge Drexler, MainArtist")]
               + [track("Various Hands, MainArtist")] * 19)
     provenance, others = album_billing(tracks, SEED)
     assert provenance == "guest"
     assert others == ["Various Hands"]
+
+
+def test_a_record_nobody_holds_is_neither_the_seeds_nor_anybody_elses():
+    """Army Of Me, in the shape Qobuz returns it: 20 tracks, a different
+    remixer billed on each, Bjork filed as the composer throughout. Every one
+    of the 20 read as an artist whose own record she had appeared on."""
+    tracks = [track(f"Remixer {i}, MainArtist - Jorge Drexler, Composer")
+              for i in range(20)]
+    provenance, others = album_billing(tracks, SEED)
+    assert provenance == "compilation"
+    assert len(others) == 20
+
+
+def test_a_four_way_single_is_not_a_compilation():
+    """"WE PRAY" is four artists on one track, so each of them holds the whole
+    record -- the opposite shape from 20 artists on 20 tracks, and the reason
+    the test counts the top HOLDER rather than the artists."""
+    tracks = [track("Coldplay, MainArtist - Burna Boy, MainArtist - "
+                    "Elyanna, MainArtist - Jorge Drexler, MainArtist")]
+    provenance, others = album_billing(tracks, SEED)
+    assert provenance == "own"
+    assert others == ["Coldplay", "Burna Boy", "Elyanna"]
+
+
+def test_the_seeds_hold_is_counted_over_every_name_they_are_filed_under():
+    """D23 gave the seed a SET of keys, and summing per key would split one
+    artist's hold over two spellings and read a record they plainly own as a
+    record nobody holds."""
+    both = {"jorge drexler", "jorge drexler prada"}
+    tracks = [track("Jorge Drexler, MainArtist"),
+              track("Jorge Drexler, MainArtist"),
+              track("Jorge Drexler Prada, MainArtist"),
+              track("Jorge Drexler Prada, MainArtist")]
+    assert album_billing(tracks, both) == ("own", [])
 
 
 def test_an_album_nobody_is_billed_on_is_unknown_rather_than_guest():

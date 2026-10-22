@@ -1252,7 +1252,8 @@ def discovery_with_co_artists(store):
         "generated": "2026-10-20",
         "seed": {"qobuz_id": 41620, "name": "Jorge Drexler", "store": "gb-en",
                  "releases": 63, "albums_own": 48, "albums_guest": 15,
-                 "albums_unbilled": 0, "tracks": 265, "credited_tracks": 265},
+                 "albums_compilation": 0, "albums_unbilled": 0,
+                 "tracks": 265, "credited_tracks": 265},
         "people": [{"key": "borja barrueta", "names": ["Borja Barrueta"],
                     "stats": {"albums": 10, "own_albums": 10, "tracks": 25},
                     "albums": [{"album_id": "a1", "title": "Eco", "date": "2004-01-01",
@@ -1278,6 +1279,36 @@ def test_the_top_of_the_funnel_is_now_a_table(store):
     assert store.rows(
         "seeds", "name, releases, albums_own, albums_guest, people, co_artists"
     )[0] == ("Jorge Drexler", 63, 48, 15, 1, 2)
+
+
+def discovery_with_a_compilation(store):
+    """One seed, one co-artist, reached only through a record nobody holds."""
+    store.write("discovery_27940.json", {
+        "generated": "2026-10-20",
+        "seed": {"qobuz_id": 27940, "name": "Björk", "store": "gb-en",
+                 "releases": 153, "albums_own": 148, "albums_guest": 2,
+                 "albums_compilation": 1, "albums_unbilled": 2,
+                 "tracks": 1800, "credited_tracks": 1700},
+        "people": [],
+        "co_artists": [
+            {"key": "dr. gunni", "names": ["Dr. Gunni"],
+             "albums": [{"album_id": "c1", "title": "Army Of Me",
+                         "date": "2005-01-01", "provenance": "compilation"}],
+             "stats": {"albums": 1, "their_records": 0, "seed_records": 0,
+                       "first": "2005-01-01", "last": "2005-01-01"}}]})
+
+
+def test_a_various_artists_record_reaches_the_store_labelled(store):
+    """Stored rather than dropped, so a label that turns out to be wrong costs
+    a different WHERE clause and not a rewalk -- the same stance as D15. The
+    counts beside it say nobody holds the record: neither direction scored."""
+    discovery_with_a_compilation(store)
+    load.load_people(store.ld)
+    assert store.rows("seeds", "name, albums_compilation")[0] == ("Björk", 1)
+    assert store.rows("co_artist_albums", "title, provenance")[0] == (
+        "Army Of Me", "compilation")
+    assert store.rows("co_artists", "name, albums, seed_records, their_records"
+                      )[0] == ("Dr. Gunni", 1, 0, 0)
 
 
 def test_both_directions_of_a_co_appearance_are_kept(store):

@@ -191,6 +191,9 @@ CREATE TABLE releases (
 -- "what did discovery actually produce" could not be asked of the store.
 CREATE TABLE seeds (seed_qobuz_id INTEGER PRIMARY KEY, name TEXT, store TEXT,
                     releases INTEGER, albums_own INTEGER, albums_guest INTEGER,
+                    albums_compilation INTEGER,
+--  ^ various-artists records in the seed's discography, which are neither the
+--    seed's own nor anybody else's. NULL from a file written before D24.
                     albums_unbilled INTEGER, tracks INTEGER,
                     credited_tracks INTEGER, people INTEGER,
                     co_artists INTEGER, source TEXT, generated TEXT);
@@ -209,6 +212,10 @@ CREATE TABLE co_artist_albums (seed_qobuz_id INTEGER, person_key TEXT,
                                provenance TEXT,
 --  ^ "own": they guested on the seed's record. "guest": the seed guested on
 --    theirs. Both are a record the two of them made together.
+--    "compilation": a various-artists record neither of them holds, which is
+--    not a collaboration at all -- 20 of Bjork's 35 co-artists are one remix
+--    album (D24). Stored rather than dropped, and excluded on read by
+--    stages/co_artists.py, so a wrong label costs a query and not a rewalk.
                                PRIMARY KEY (seed_qobuz_id, person_key, album_id));
 
 -- One row per (person, seed): albums and tracks are facts about a person IN
@@ -532,6 +539,7 @@ def load_people(ld: Loader) -> None:
         seeds.append((
             seed_id, seed.get("name"), seed.get("store"), seed.get("releases"),
             seed.get("albums_own"), seed.get("albums_guest"),
+            seed.get("albums_compilation"),
             seed.get("albums_unbilled"), seed.get("tracks"),
             seed.get("credited_tracks"), len(blob.get("people") or []),
             len(blob.get("co_artists") or []), path.name, blob.get("generated")))
@@ -707,8 +715,9 @@ def load_people(ld: Loader) -> None:
               deduped(albums))
     ld.insert("seeds",
               ["seed_qobuz_id", "name", "store", "releases", "albums_own",
-               "albums_guest", "albums_unbilled", "tracks", "credited_tracks",
-               "people", "co_artists", "source", "generated"], deduped(seeds))
+               "albums_guest", "albums_compilation", "albums_unbilled",
+               "tracks", "credited_tracks", "people", "co_artists",
+               "source", "generated"], deduped(seeds))
     ld.insert("co_artists",
               ["seed_qobuz_id", "person_key", "name", "albums", "their_records",
                "seed_records", "first_seen", "last_seen"], deduped(co_artists))

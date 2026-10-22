@@ -449,28 +449,115 @@ def ranked_score(score: float, flags) -> float:
 # compilation bills the seed on one track of twenty and is not his record
 # either.
 #
-# 0.5, and the exact value is UNTESTED on purpose: across all 106 albums in the
-# two corpora the seed holds MainArtist on every billed track or on none, never
-# in between, so any floor in (0, 1] labels them identically. A compilation is
-# the case that would tell two floors apart and there is not one yet. Half is
-# the value that reads as "most of the record", which is the intent.
+# 0.5, and the exact value is still UNTESTED: across the four corpora the seed
+# holds MainArtist on every billed track or on none, never in between, so any
+# floor in (0, 1] separates own from guest identically. Half is the value that
+# reads as "most of the record", which is the intent.
+#
+# COMPILATIONS. The comment here used to say a compilation was the case that
+# would tell two floors apart and that there was not one yet. The Bjork walk
+# produced one, and it is the same share read against a different artist:
+#
+#     Army Of Me   Bjork's 2005 remix and covers album. 20 billed tracks, 20
+#                  different artists, so the top share is 5% -- and because
+#                  Bjork holds none of them it labelled as a GUEST spot,
+#                  twenty times over. Every remixer read as an artist whose
+#                  own record she had appeared on.
+#
+# So a record nobody holds is neither the seed's nor anybody else's, and the
+# seed sharing a sleeve with twenty strangers is not twenty collaborations.
+# Measured 2026-10-20 over cache/credits for all four seeds, no requests:
+#
+#     258 albums with any billing
+#       1 where no artist holds half the billed tracks   Army Of Me, at 5%
+#         next lowest album                              Family Tree, at 91%
+#
+# One case, and a 5%-to-91% gap around the floor, so this reuses
+# OWN_ALBUM_MAIN_SHARE rather than introducing a second number to calibrate.
+# docs/adr/D24 has the argument and what it was weighed against.
 # ---------------------------------------------------------------------------
 
 OWN_ALBUM_MAIN_SHARE = 0.5
 
 
-def album_provenance(seed_billed: int, billed_tracks: int) -> str:
-    """"own", "guest" or "unknown" for one album in the seed's discography.
+def album_provenance(seed_billed: int, billed_tracks: int,
+                     top_billed: int | None = None) -> str:
+    """"own", "guest", "compilation" or "unknown" for one album.
+
+    `top_billed` is the number of billed tracks held by the artist who holds
+    the most of them, the seed included. Optional, and omitting it restores the
+    three-value behaviour: a discovery file written before D24 carries no such
+    count, and reading its albums as compilations would be worse than reading
+    them as what they were labelled.
 
     "unknown" is an absence of evidence, not a verdict of guest: no track on
     the album names a MainArtist, so the string holds nothing to decide with.
     Every one of the 500 cached tracks carries one today, which makes this a
     guard rather than a case -- and the reason it is not an exception is that a
     silent relabel of the whole album is the failure that matters here.
+
+    "compilation" is also an absence, but of a different thing: the record has
+    a billing on every track and no artist whose record it is. It is checked
+    before the seed's own share, because on Army Of Me the seed's share is 0
+    and "guest" is the wrong answer rather than a near one.
     """
     if billed_tracks <= 0:
         return "unknown"
+    if top_billed is not None and top_billed / billed_tracks < OWN_ALBUM_MAIN_SHARE:
+        return "compilation"
     return "own" if seed_billed / billed_tracks >= OWN_ALBUM_MAIN_SHARE else "guest"
+
+
+# The provenances that assert the two made a record TOGETHER. Neither of the
+# other two says whose record it is -- "compilation" because nobody holds it,
+# "unknown" because nothing is billed -- so neither supports the sentence
+# core.explain would write about it. stages/co_artists.py reads this on the way
+# out of the store, so a record that turns out to be wrongly labelled costs a
+# different WHERE clause rather than a rewalk (D15, D24).
+MADE_TOGETHER = {"own", "guest"}
+
+
+# ---------------------------------------------------------------------------
+# BILLINGS THAT ARE NOT AN ARTIST
+#
+# A hand list, because no structural signal separates these from a real
+# collaborator: each one is genuinely billed on the record, on a track the seed
+# is also on, which is every piece of evidence this project collects.
+#
+#     colors          the A COLORS SHOW channel, billed on "Capitana - A
+#                     COLORS SHOW". A venue, not a musician
+#     penelope cruz   an actor, reading on Residente's "313" alongside
+#                     Silvia Perez Cruz. Has no discography to recommend
+#
+# Same stance as data/favourites.json: where nothing can be derived, the fact
+# is written down by hand with its reason beside it. Kept to names seen in a
+# walked corpus, so the list stays checkable -- it is not a guess at what the
+# next seed will turn up.
+#
+# Deliberately NOT here: ensembles billed alongside the seed (Javier Colina
+# Trio, Falta y Resto, the Hamrahlid Choir) are artists with records, and
+# Liniers, who draws on stage at Drexler's live shows, is a judgement call
+# nobody has made yet rather than a defect.
+# ---------------------------------------------------------------------------
+
+NOT_ARTISTS = {"colors", "penelope cruz",
+               # Bjork's own bands, which are the seed under another name
+               # rather than a collaborator. MusicBrainz states both as
+               # `member of band` on the request core.musicbrainz already
+               # makes, but normalise() keeps the periods in "K.U.K.L." and
+               # MusicBrainz files it as "KUKL", so the keys do not meet.
+               # Listed here until a name key that strips punctuation is
+               # worth its own measurement.
+               "k.u.k.l.", "the sugarcubes"}
+
+
+def billed_as_artist(person_key: str) -> bool:
+    """Is this billing somebody with records of their own?
+
+    Reads the normalised key rather than the display name, so the spelling
+    Qobuz filed does not decide it.
+    """
+    return person_key not in NOT_ARTISTS
 
 
 # ---------------------------------------------------------------------------

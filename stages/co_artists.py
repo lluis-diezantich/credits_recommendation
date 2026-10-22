@@ -24,34 +24,53 @@ import sys
 
 from core.explain import co_artist_sentence
 from core.paths import DATA
-from policy import nameable_roles
+from policy import MADE_TOGETHER, billed_as_artist, nameable_roles
 
-ROWS = """
+# The provenances worth counting, as a SQL list. Built from policy so the
+# filter here and the labelling in discover.py cannot drift apart.
+TOGETHER = ", ".join(f"'{p}'" for p in sorted(MADE_TOGETHER))
+
+# `albums` counts every record the two are printed on; seed_records +
+# their_records counts the ones somebody HOLDS. The difference is a
+# various-artists record, which is nobody's and was being reported as a
+# collaboration -- 20 of Bjork's 35 co-artists came off "Army Of Me" alone
+# (D24). The ordering moves to the same number for the same reason: ranking by
+# `albums` would still put a remix compilation above a real record.
+ROWS = f"""
 SELECT c.seed_qobuz_id, s.name AS seed, c.person_key, c.name,
        c.seed_records, c.their_records, c.last_seen,
+       c.seed_records + c.their_records AS together,
        (SELECT COUNT(*) FROM listens l WHERE l.artist_key = c.person_key) AS plays
 FROM co_artists c JOIN seeds s USING (seed_qobuz_id)
 WHERE (:seed IS NULL OR c.seed_qobuz_id = :seed)
-ORDER BY c.albums DESC, c.last_seen DESC
+  AND EXISTS (SELECT 1 FROM co_artist_albums a
+              WHERE a.seed_qobuz_id = c.seed_qobuz_id
+                AND a.person_key = c.person_key
+                AND a.provenance IN ({TOGETHER}))
+ORDER BY together DESC, c.last_seen DESC
 """
 
 # The roles a person holds on the records they share with the seed, and the
 # tracks they hold them on. Scoped by co_artist_albums so a role earned on one
 # seed's record is never reported under the other's.
-EVIDENCE = """
+EVIDENCE = f"""
 SELECT cr.role, COUNT(DISTINCT cr.track_id) AS tracks
 FROM co_artist_albums a
 JOIN credits cr ON cr.person_key = a.person_key AND cr.album_id = a.album_id
 WHERE a.seed_qobuz_id = ? AND a.person_key = ?
+  AND a.provenance IN ({TOGETHER})
 GROUP BY cr.role ORDER BY tracks DESC
 """
 
 # The record to name. Prefer one the seed is a guest on -- that direction is
 # the stronger claim, since it is the seed choosing to appear on someone
-# else's album -- then the most recent.
-EXAMPLE = """
+# else's album -- then the most recent. Never a record nobody holds: naming
+# "Army Of Me" as the album two artists made together is the junk row at its
+# most convincing.
+EXAMPLE = f"""
 SELECT title, date FROM co_artist_albums
 WHERE seed_qobuz_id = ? AND person_key = ?
+  AND provenance IN ({TOGETHER})
 ORDER BY CASE provenance WHEN 'guest' THEN 0 ELSE 1 END, date DESC LIMIT 1
 """
 
@@ -94,13 +113,27 @@ def main() -> int:
     except sqlite3.OperationalError as exc:
         raise SystemExit(f"{args.db}: {exc} - run ./stages/load.py first") from exc
 
+    # Before the counts, not after: a billing that is not an artist is not a
+    # co-appearance to report the total of either. Named on stderr so --json
+    # stays parseable and the drop is still visible to whoever ran it.
+    dropped = [r["name"] for r in rows if not billed_as_artist(r["person_key"])]
+    rows = [r for r in rows if billed_as_artist(r["person_key"])]
+    if dropped:
+        print(f"{len(dropped)} billing(s) dropped as not an artist: "
+              + ", ".join(sorted(dropped)), file=sys.stderr)
+
     out = [describe(con, r) for r in rows if args.all or not r["plays"]]
     if args.json:
         print(json.dumps(out, indent=2, ensure_ascii=False))
         return 0
 
     if not out:
-        print("nothing to show - every co-artist is one you already play")
+        # Two ways to empty now, and they mean opposite things: an empty list
+        # because you play everybody is a result, an empty one because nothing
+        # survived the filters is a corpus with no co-appearance in it.
+        print("nothing to show - "
+              + ("every co-artist is one you already play" if rows else
+                 "no co-appearance here is a record somebody holds"))
         return 0
     seed = None
     for item in out:
