@@ -15,7 +15,8 @@
 # Deliberately NOT here: pytest and ty. Both read the whole project rather than
 # the staged files, so they belong in CI where they can take as long as they
 # need -- a commit hook that runs the suite is a commit hook people start
-# passing --no-verify to, which costs the lint checks as well.
+# passing --no-verify to, which costs the lint checks as well. ruff-format was
+# that hook for a while; it is `stages: [manual]` now, for the reason beside it.
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.17.1                 # keep in step with the ruff in requirements-dev.lock
@@ -27,7 +28,18 @@ repos:
         # deliberate in places ruff-format disagrees with -- the aligned
         # columns in policy.py's ROLE_WEIGHTS, the comment-per-value layout in
         # load.py's SCHEMA. Reformatting those would cost more than it buys.
+        #
+        # ADVISORY IN FACT, not just in the comment. --diff exits non-zero
+        # whenever it WOULD reformat, which here is 53 of 93 files and will
+        # stay that way as long as the layouts above are deliberate. As a
+        # commit-stage hook that made every commit unpassable, so each one
+        # went through with --no-verify -- which skips ruff-check and the
+        # whitespace hooks too, and those are the ones worth having. D12 says
+        # this check is advisory; `manual` is what makes that true.
+        #
+        #     pre-commit run --hook-stage manual ruff-format
         args: [--diff]
+        stages: [manual]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0

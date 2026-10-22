@@ -17,9 +17,12 @@ that is what it IS now that the decision has moved out.
 
 from __future__ import annotations
 
-from stages.discover import album_billing, fold_editions
+from stages.discover import album_billing, collapse_credits, fold_editions, preferred_first
 
 SEED = {"jorge drexler"}
+
+# The shape core/aliases.load() returns: every spelling -> the performing name.
+INFLO = {"inflo": "inflo", "dean josiah cover": "inflo"}
 
 
 def track(performers: str) -> dict:
@@ -190,3 +193,72 @@ def test_the_output_is_ordered_by_date():
 
 def test_no_albums_folds_to_nothing():
     assert fold_editions([]) == []
+
+
+# ---- one person, one key ------------------------------------------------
+
+
+def test_two_spellings_on_one_track_count_as_one_credit():
+    """Inflo is credited as Producer and his legal name as Composer on 37 of
+    Little Simz's tracks. Accumulating per parsed name counts the track twice
+    and both roles twice, so the merge would inflate exactly the person it was
+    written to fix."""
+    collapsed = collapse_credits(
+        "Inflo, Producer - Dean Josiah Cover, Composer", INFLO)
+    assert list(collapsed) == ["inflo"]
+    assert collapsed["inflo"]["names"] == ["Inflo", "Dean Josiah Cover"]
+    assert list(collapsed["inflo"]["roles"]) == ["Producer", "Composer"]
+
+
+def test_two_people_on_one_track_stay_two():
+    collapsed = collapse_credits(
+        "Inflo, Producer - Rosie Danvers, MusicArranger", INFLO)
+    assert sorted(collapsed) == ["inflo", "rosie danvers"]
+
+
+def test_the_same_role_under_both_spellings_is_counted_once():
+    """It does not happen in the corpus -- the whole reason the split exists is
+    that a label files one name for the production and another for the
+    publishing -- but counting it twice would be a weight, not a cosmetic."""
+    collapsed = collapse_credits(
+        "Inflo, Composer - Dean Josiah Cover, Composer", INFLO)
+    assert list(collapsed["inflo"]["roles"]) == ["Composer"]
+
+
+def test_roles_keep_the_order_the_string_gave_them():
+    """`album["roles"]` is built from this, and a set would make a rebuild on
+    another day produce a different file. todo.md already tracks one
+    order-dependent field; this is not going to be the second."""
+    collapsed = collapse_credits(
+        "Dean Josiah Cover, Composer - Inflo, Producer, Programmer", INFLO)
+    assert list(collapsed["inflo"]["roles"]) == ["Composer", "Producer",
+                                                 "Programmer"]
+
+
+def test_no_alias_map_leaves_both_spellings_as_two_people():
+    """The behaviour before the file existed, which is what a missing file has
+    to give back."""
+    assert sorted(collapse_credits(
+        "Inflo, Producer - Dean Josiah Cover, Composer", {})) == [
+            "dean josiah cover", "inflo"]
+
+
+def test_a_merged_person_is_displayed_under_their_performing_name():
+    """Sorted alphabetically, Bjork's merged composer showed as "Sigurjon
+    Birgir Sigurdsson" -- the legal name, the half nobody recognises."""
+    names = {"Sjon", "Sigurjon Sigurdsson", "Sigurjon Birgir Sigurdsson"}
+    assert preferred_first(names, "sjon", {"sjon": "Sjón"})[0] == "Sjón"
+
+
+def test_every_spelling_is_still_kept_behind_the_preferred_one():
+    """person_names is how a reader gets from a spelling in a sleeve to a key,
+    so nothing may be dropped on the way to choosing a display name."""
+    names = {"Sjon", "Sigurjon Sigurdsson"}
+    out = preferred_first(names, "sjon", {"sjon": "Sjón"})
+    assert set(out) == names | {"Sjón"}
+    assert out[1:] == sorted(names)
+
+
+def test_a_person_the_file_does_not_name_is_sorted_as_before():
+    names = {"Mark Bell", "M. Bell"}
+    assert preferred_first(names, "mark bell", {}) == ["M. Bell", "Mark Bell"]

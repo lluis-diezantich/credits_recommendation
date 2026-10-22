@@ -36,8 +36,8 @@ resumes a run that died partway through its fan-out.
 ## Layout
 
     policy.py          scoring judgement calls - ONE copy, at the root, on purpose
-    core/              plumbing - http, names, credits, qobuz, discogs, favourites,
-                       listens, musicbrainz, state, paths, radar, explain
+    core/              plumbing - http, names, aliases, credits, qobuz, discogs,
+                       favourites, listens, musicbrainz, state, paths, radar, explain
     stages/            the pipeline, in order
       favourites.py      ListenBrainz top artists -> Qobuz ids -> favourites.json
       profile.py         listens -> who you still play, in months  [DERIVED]
@@ -53,7 +53,8 @@ resumes a run that died partway through its fan-out.
       report.py          a radar's JSON -> markdown, for the weekly issue
     tests/             pytest, offline - every network call stubbed at the seam
                        `pytest --cov` names what is uncovered; todo.md tracks it
-    data/              generated JSON, gitignored except favourites.json
+    data/              generated JSON, gitignored except favourites.json and
+                       aliases.json - the two that are hand-edited
     cache/             API responses - the source of truth, never regenerated
     .github/workflows/ radar.yml runs any radar; one caller per schedule
                        tests.yml: ruff, ty, pytest --cov on 3.11/3.12/3.13

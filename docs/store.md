@@ -70,8 +70,10 @@ regenerated. `meta` is authoritative.
     co_artist_albums   143   the records behind each co-appearance - own, guest,
                              or compilation, which is nobody's (adr/D24)
 
-    people             551   the credit graph, one row per person, merged from 5 places
-                             albums/own_albums/tracks are SUMMED over seeds
+    people             835   the credit graph, one row per person, merged from 5 places
+                             albums/own_albums/tracks are SUMMED over seeds.
+                             person_key folds the alias map, so Sjon is one row
+                             and not four - adr/D25
     person_seeds       565   one row per (person, seed) - the grain those counts
                              are really measured at. Read this, not people.albums,
                              for "how embedded in ONE seed's catalogue"

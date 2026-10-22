@@ -1012,13 +1012,11 @@ def test_two_sources_disagreeing_about_one_album_fails_the_build_loudly(store):
     """The one key here that rests on an empirical fact rather than a structural
     one, recorded so it is known rather than discovered.
 
-    person_albums is keyed (person_key, album_id), which says a person worked on
-    an album once. Two files describe those albums -- discovery_*.json `albums`
-    and watchlist.json `appearances` -- and nothing in the loader makes them
-    agree on the title, date or track count. Measured on the real corpus: 214
-    shared (person, album) pairs, and ZERO where the two disagree on any field,
-    because `appearances` is derived from the same discovery pass. That is why
-    the key holds.
+    person_albums is keyed (person_key, album_id), which says a person worked
+    on an album once. Two discovery files can describe the same (person,
+    album) -- 14 people are in two seeds' walks -- and nothing in the loader
+    makes them agree on the title, date or track count. Measured on the real
+    corpus: zero such pairs disagree, which is why the key holds.
 
     If a future file breaks that, this is the behaviour: the build stops and
     says which row, rather than writing two rows for one album. Loud is the
@@ -1027,7 +1025,7 @@ def test_two_sources_disagreeing_about_one_album_fails_the_build_loudly(store):
     """
     store.write("discovery_1.json", {"people": [{"names": ["P"], "albums": [
         {"album_id": "a1", "title": "Libertad", "tracks": 13}]}]})
-    store.write("watchlist.json", {"artists": [{"name": "P", "appearances": [
+    store.write("discovery_2.json", {"people": [{"names": ["P"], "albums": [
         {"album_id": "a1", "title": "Libertad (Deluxe)", "tracks": 15}]}]})
 
     with pytest.raises(SystemExit) as caught:
@@ -1035,6 +1033,23 @@ def test_two_sources_disagreeing_about_one_album_fails_the_build_loudly(store):
     message = str(caught.value)
     assert "person_albums" in message
     assert "UNIQUE constraint failed" in message
+
+
+def test_the_derived_watchlist_is_not_a_second_source_for_an_album(store):
+    """watchlist.json's `appearances` is a copy of the discovery pass it was
+    resolved from -- 191 rows on the real corpus, all 191 already present and
+    none unique -- so it contributes no album row.
+
+    It used to, harmlessly, while the two files agreed. They stopped agreeing
+    when the alias map changed a merged person's counts and this derived file
+    still held the pre-merge ones, which turned a redundant row into a failed
+    build. One fact, one source (D25)."""
+    store.write("watchlist.json", {"artists": [{"name": "P", "appearances": [
+        {"album_id": "a1", "title": "Libertad", "tracks": 13}]}]})
+    load.load_people(store.ld)
+    assert store.count("person_albums") == 0
+    # The person still arrives -- only the album row is dropped.
+    assert store.rows("people", "name")[0] == ("P",)
 
 
 # ---- the shortlist columns ----------------------------------------------

@@ -57,9 +57,8 @@ not correct.
    Dirty Projectors, Shygirl, ANOHNI, Yves Tumor and alt-J are real, checkable
    collaborations no genre model would produce. But three identity defects that
    two Iberian seeds could never have shown now corrupt every count — see
-   **Correctness** below. Two are fixed (D23) and so is the compilation the
-   probe turned up with them (D24); **the collaborator aliases still block
-   step 3.**
+   **Correctness** below. **All three are fixed** (D23, D25), and so is the
+   compilation the probe turned up with them (D24). Nothing blocks step 3.
 
    Still to do: **6-8 more seeds from the profile's 80 `core` artists, by
    rule** — ~50 requests each, about four weeks of the Friday radar's traffic
@@ -67,10 +66,12 @@ not correct.
    number and wants an ADR; picking by hand is what produced the first four.
    Candidates by recent months, from `profile.json`: Nathy Peluso 24/24, El
    Gran Combo 23/24, Celia Cruz 22, Kali Uchis 22, Ca7riel 21, ROSALÍA 21,
-   Willie Colón 21. Not before the alias fix, or every new seed arrives with
-   its best collaborators split across spellings.
+   Willie Colón 21. Each new seed now wants its alias report read once after
+   the walk ([adr/D25](docs/adr/D25-one-person-one-key.md)) — ten minutes, and
+   the counts are right before anything ranks them.
 
-3. **Rank across seeds.** Blocked on the one identity fix left below. Rank on
+3. **Rank across seeds.** Unblocked as of 2026-10-22 — this is the next thing
+   to build. Rank on
    `seed_records + their_records` and not on `albums`, which counts every
    sleeve two artists are printed on: it put Coldplay, Burna Boy, Elyanna and
    tINI at the top of the Little Simz list on the strength of one single stored
@@ -394,9 +395,8 @@ Where the code can be wrong without anything noticing.
   all invisible until a seed outside the Iberian cluster was walked, and
   together they corrupt every co-appearance and crew count. Numbers and the
   per-seed table are in
-  [adr/D22](docs/adr/D22-co-appearance-is-the-second-pipeline.md). **Two are
-  fixed** (D23); the collaborator aliases are not, and they are the one that
-  blocks ranking.
+  [adr/D22](docs/adr/D22-co-appearance-is-the-second-pipeline.md). **All three
+  are fixed** — two by D23, the collaborator aliases by D25.
 
   A fourth was found while filtering the list on 2026-10-22 and is fixed in the
   same place: **a record nobody holds read as 20 guest spots**
@@ -422,15 +422,41 @@ Where the code can be wrong without anything noticing.
     the catalogue, which catches a Björk-sized residue and not a 5-album one.
     The real fix is an edit at MusicBrainz.
 
-  - **One person splits across names, and it hits the best collaborators.**
-    Sjón is four people (Sjon 12, Sigurjon Sigurdsson 11, Sigurjon Birgir
-    Sigurdsson 9, Sigurjón Birgir Sigurðsson 2), Arca is two (Alejandro Ghersi
-    11, Arca 7), Inflo is two (Inflo 13, Dean Josiah Cover 10). The identity
-    model is `normalise(primary name)` and `people`'s docstring already admits
-    the limit — this is the first evidence it splits REAL evidence rather than
-    merely colliding strangers, and it splits exactly the people who matter
-    most. Needs a source of aliases: a hand-edited file like
-    `favourites.json`, or a Qobuz lookup per name, which costs requests.
+  - **~~One person splits across names, and it hits the best collaborators.~~**
+    Fixed 2026-10-22 ([adr/D25](docs/adr/D25-one-person-one-key.md)). Sjón was
+    four people at ranks 4, 6, 8 and 68; he is now **30 albums at rank 1** of
+    Björk's graph. Arca is 15 at rank 4, Inflo **14 at rank 1** of Little
+    Simz's, Carles Campi Campón 22 over two seeds. 851 people across the four
+    files, down from 892.
+
+    `data/aliases.json` is hand-edited, like `favourites.json` and for the same
+    reason, and `core.aliases.person_key` is now the only way a person key is
+    minted. Both cheaper sources were measured and failed: of the top 12 people
+    across all four seeds, **1 of 48 has an MBID anywhere on disk**, so asking
+    MusicBrainz would mean a fuzzy search by name at a request each — and the
+    free signal that looked sufficient (a performing name and a legal name
+    co-credited on one track in complementary roles) holds for Arca and Inflo
+    and fails outright for Sjón, who is never co-credited with himself.
+
+    **It does not generalise, and the report is what makes that cheap.**
+    `discover.py` ends a walk by printing the pairs it did NOT merge —
+    `subset`, `spelling`, and `bare` for a single surname like "Massey" or
+    "Glennie", which is right often enough to read and wrong often enough that
+    nothing may act on it. 19 of the 48 candidates are in that class and are
+    deliberately left alone. Two are a person and the band named after them
+    ("Calequi y Las Panteras", "Javier Colina Trío") and are not reported at
+    all, because merging them would delete a billable act.
+
+    Still invisible: a split with no shared spelling. Nothing relates "NELLEE
+    HOOPER" to "N. Hills" in Björk's graph, and nothing will until somebody
+    confirms it by hand.
+
+    Two correctness fixes the merge forced, both in D25: a track's credits are
+    collapsed by person **before** anything is counted (Inflo holds Producer
+    and his legal name Composer on 37 of the same tracks, so the merge would
+    otherwise have double-counted every one of them), and `watchlist.json`
+    stopped being a second source for `person_albums`, whose primary key rested
+    on a derived file agreeing with the one it was derived from.
 
   - **~~Editions inflate every count.~~** Fixed for co-appearance 2026-10-20
     (`discover.fold_editions`, same ADR): folded on `normalise(title)`, since

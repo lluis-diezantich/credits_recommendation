@@ -26,20 +26,22 @@ from __future__ import annotations
 import argparse
 import collections
 import datetime as dt
+import difflib
+import itertools
 import json
 import sys
 import time
 import urllib.parse
 from pathlib import Path
 
-from core import favourites, musicbrainz
+from core import aliases, favourites, musicbrainz
 from core.credits import main_artists, parse_performers
 from core.names import normalise
 from core.paths import CACHE, DATA
 from core.qobuz import API, APP_ID, PAUSE, STORE, artist_releases, store_cookies
 from core.qobuz import get as _get
 from core.qobuz import message as _message
-from policy import MUSICAL_ROLES, album_provenance, classify_roles
+from policy import MUSICAL_ROLES, album_provenance, alias_candidate, classify_roles
 
 CACHE_DIR = CACHE / "credits"
 
@@ -189,6 +191,68 @@ def album_billing(tracks: list[dict], seed_keys) -> tuple[str, list[str]]:
             list(others.values()))
 
 
+def collapse_credits(performers: str, alias_map) -> dict[str, dict]:
+    """One track's credits as key -> {names, roles}, collapsed by person.
+
+    Collapsed BEFORE anything is counted, because two spellings of one person
+    can both be credited on one track -- Inflo as Producer and Dean Josiah
+    Cover as Composer on 37 of them, Arca as FeaturedArtist and Alejandro
+    Ghersi as Composer on 14. Accumulating per parsed name would count the
+    track twice for that person and each of their roles twice, so the merge
+    would inflate exactly the people it was written to fix.
+
+    `names` holds every spelling the track used, first-seen first, and
+    `roles` is an ordered set -- a dict with None values -- so the album's
+    role list does not depend on set iteration order and a rebuild on another
+    day produces the same file.
+    """
+    out: dict[str, dict] = {}
+    for name, roles in parse_performers(performers):
+        slot = out.setdefault(aliases.person_key(name, alias_map),
+                              {"names": [], "roles": {}})
+        if name not in slot["names"]:
+            slot["names"].append(name)
+        for role in roles:
+            slot["roles"].setdefault(role, None)
+    return out
+
+
+def preferred_first(names, key: str, display: dict[str, str]) -> list[str]:
+    """Every spelling seen, with the alias file's own name at the front.
+
+    `names[0]` is what every consumer prints, and a merged person sorted
+    alphabetically shows the wrong one of their names -- the legal one, which
+    is the half of the split nobody recognises.
+    """
+    ordered = sorted(names)
+    wanted = display.get(key)
+    if not wanted:
+        return ordered
+    return [wanted] + [name for name in ordered if name != wanted]
+
+
+def alias_report(keys) -> dict[str, list[tuple[str, str]]]:
+    """Pairs of person keys that might be one person, grouped by why.
+
+    The feeder for `data/aliases.json`, which is hand-edited because nothing
+    on disk can decide these -- see core/aliases.py for what was measured and
+    rejected. This only reports: `policy.alias_candidate` holds the rule, and
+    neither of them merges anything.
+
+    O(n^2) over one seed's people, which is 287 at the worst and costs
+    nothing next to the walk that produced them.
+    """
+    def ratio(a: str, b: str) -> float:
+        return difflib.SequenceMatcher(None, a, b).ratio()
+
+    found: dict[str, list[tuple[str, str]]] = {}
+    for a, b in itertools.combinations(sorted(keys), 2):
+        kind = alias_candidate(a, b, ratio)
+        if kind:
+            found.setdefault(kind, []).append((a, b))
+    return found
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Discover who made a seed artist's records.")
     parser.add_argument("--artist", type=int, default=SEED_ARTIST, help="Qobuz seed artist id")
@@ -200,6 +264,8 @@ def main() -> int:
     parser.add_argument("--out", help="output path (default: discovery_<artist_id>.json)")
     args = parser.parse_args()
 
+    alias_map = aliases.load()
+    alias_display = aliases.display_names()
     cookies = store_cookies(args.store)
     seed_name, releases = seed_releases(args.artist, args.store, cookies)
     if not releases:
@@ -223,6 +289,9 @@ def main() -> int:
     co_artists: dict[str, dict] = collections.defaultdict(
         lambda: {"names": set(), "albums": []})
     provenances: collections.Counter[str] = collections.Counter()
+    # Spellings the alias file folded into somebody else's key, so the run can
+    # say what it applied rather than leaving a silent merge in the counts.
+    merged_names: set[str] = set()
     credited_tracks = 0
     total_tracks = 0
     failed = 0
@@ -237,9 +306,10 @@ def main() -> int:
         provenance, billed_with = album_billing(tracks, seed_keys)
         provenances[provenance] += 1
         for name in billed_with:
-            if normalise(name) in seed_keys:
+            key = aliases.person_key(name, alias_map)
+            if normalise(name) in seed_keys or key in seed_keys:
                 continue              # the seed, under a name Qobuz filed
-            entry = co_artists[normalise(name)]
+            entry = co_artists[key]
             entry["names"].add(name)
             entry["albums"].append({
                 "album_id": str(release["id"]),
@@ -252,11 +322,19 @@ def main() -> int:
             if not credits:
                 continue
             credited_tracks += 1
-            for name, roles in parse_performers(credits):
-                entry = people[normalise(name)]
-                entry["names"].add(name)
+            per_track = collapse_credits(credits, alias_map)
+            for slot in per_track.values():
+                # What the FILE folded, not what the track spelled twice: two
+                # spellings that already share a normalised key were never a
+                # merge and must not be reported as one.
+                merged_names.update(
+                    name for name in slot["names"]
+                    if aliases.person_key(name, alias_map) != normalise(name))
+            for key, slot in per_track.items():
+                entry = people[key]
+                entry["names"].update(slot["names"])
                 entry["tracks"] += 1
-                for role in roles:
+                for role in slot["roles"]:
                     entry["roles"][role] += 1
                 album = entry["albums"].setdefault(str(release["id"]), {
                     "album_id": str(release["id"]),
@@ -267,7 +345,7 @@ def main() -> int:
                     "provenance": provenance,
                     "roles": [], "tracks": 0})
                 album["tracks"] += 1
-                for role in roles:
+                for role in slot["roles"]:
                     if role not in album["roles"]:
                         album["roles"].append(role)
         if index % 15 == 0:
@@ -293,7 +371,7 @@ def main() -> int:
         classes = classify_roles(entry["roles"])
         kept.append({
             "key": key,
-            "names": sorted(entry["names"]),
+            "names": preferred_first(entry["names"], key, alias_display),
             "classes": classes,
             # True when the ONLY link is having written something the seed
             # recorded -- a cover, not a collaboration.
@@ -324,7 +402,7 @@ def main() -> int:
         billing = collections.Counter(a["provenance"] for a in albums)
         together.append({
             "key": key,
-            "names": sorted(entry["names"]),
+            "names": preferred_first(entry["names"], key, alias_display),
             "albums": albums,
             # their_records: the seed was the guest. seed_records: they were.
             "stats": {"albums": len(albums),
@@ -396,6 +474,22 @@ def main() -> int:
         s = person["stats"]
         print(f"  {s['albums']:>2} alb {s['tracks']:>3} tr  "
               f"{person['names'][0][:30]:<30} {s['top_role']}")
+    if merged_names:
+        print(f"{len(merged_names)} spellings folded by {aliases.FILE}: "
+              + ", ".join(sorted(merged_names)[:6])
+              + (" ..." if len(merged_names) > 6 else ""))
+    elif not alias_map:
+        print(f"no {aliases.FILE} - one person under two names counts as two")
+    candidates = alias_report(p["key"] for p in kept)
+    if candidates:
+        display = {p["key"]: p["names"][0] for p in kept}
+        counts = {p["key"]: p["stats"]["albums"] for p in kept}
+        print("\nmight be one person, NOT merged - add to "
+              f"{aliases.FILE} if they are:")
+        for kind in ("subset", "spelling", "bare"):
+            for a, b in candidates.get(kind, []):
+                print(f"  {kind:<8} {counts[a]:>2}+{counts[b]:<2} "
+                      f"{display[a][:32]:<32} | {display[b][:32]}")
     print(f"\nwrote {out.name}")
     return 0
 

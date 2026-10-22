@@ -49,9 +49,16 @@ with evidence or not at all.
   does it for every test, because patching one of them wrote fixtures into real
   data and overwrote two months of listening.
 - **`cache/` is disposable; `data/` is ignored except where it is named.**
-  `favourites.json`, `data/ci/` and `data/listens_months/` are un-ignored, and
-  the `.gitignore` comment on each says why that file cannot be regenerated.
-  Read them before adding another.
+  `favourites.json`, `aliases.json`, `data/ci/` and `data/listens_months/` are
+  un-ignored, and the `.gitignore` comment on each says why that file cannot be
+  regenerated. Read them before adding another.
+- **A person key is `core.aliases.person_key`, not `normalise`.** `normalise`
+  folds typography; the alias map folds two names for one person (Sjón was
+  four, Arca two, Inflo two). Mint a person key the other way and a merged
+  person silently splits again — `stages/load.py` does it in five places for
+  that reason, including the derived files. D25 says why it is a hand-edited
+  file; `discover.py` prints the candidates it did not merge, so new entries
+  come from a walk rather than from memory.
 - **`ruff format` is advisory here.** `.pre-commit-config.yaml` runs it with
   `--diff` only, because the aligned columns in `policy.py` and the
   comment-per-value `SCHEMA` in `stages/load.py` are deliberate. Do not

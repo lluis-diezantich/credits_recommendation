@@ -50,7 +50,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-from core import listens
+from core import aliases, listens
 from core.credits import parse_performers
 from core.names import normalise
 from core.paths import DATA, ROOT
@@ -519,6 +519,9 @@ def load_people(ld: Loader) -> None:
     different artist ids. `sources` records which files contributed, so a row
     assembled from three files is visible as such.
     """
+    # One mint for every person key in here: a merged person must not be
+    # re-split by a file that was derived before the merge existed.
+    alias_map = aliases.load()
     people: dict[str, dict] = {}
     names, classes, roles, albums, edges = [], [], [], [], []
     person_seeds: list[tuple] = []
@@ -599,7 +602,7 @@ def load_people(ld: Loader) -> None:
     wl = load_json(DATA / "watchlist.json") if (DATA / "watchlist.json").exists() else None
     if wl:
         for artist in wl.get("artists") or []:
-            key = normalise(artist.get("name") or "")
+            key = aliases.person_key(artist.get("name") or "", alias_map)
             row = touch(key, "watchlist.json")
             stats, res = artist.get("stats") or {}, artist.get("resolved") or {}
             row.update({
@@ -621,12 +624,16 @@ def load_people(ld: Loader) -> None:
             names += [(key, n) for n in artist.get("name_variants") or []]
             classes += [(key, c) for c in artist.get("classes") or []]
             roles += role_rows(key, artist.get("roles"))
-            for alb in artist.get("appearances") or []:
-                albums.append((key, alb.get("album_id"), alb.get("provenance"),
-                               alb.get("title"), alb.get("date"), alb.get("tracks"),
-                               joined(alb.get("roles"))))
+            # `appearances` deliberately does NOT reach person_albums. It is a
+            # copy of the discovery pass this file was resolved from -- 191
+            # rows on the real corpus, 191 of them already present, none
+            # unique -- so it adds nothing and makes the table's primary key
+            # rest on two files agreeing about a title and a track count.
+            # They stopped agreeing the moment the alias map changed a merged
+            # person's counts and this derived file still held the old ones.
+            # One fact, one source: the EXACT step that produced it.
         for person in wl.get("unresolved") or []:
-            key = normalise((person.get("names") or [""])[0])
+            key = aliases.person_key((person.get("names") or [""])[0], alias_map)
             row = touch(key, "watchlist.json:unresolved")
             row.setdefault("name", (person.get("names") or [None])[0])
             row["unresolved_reason"] = person.get("reason")
@@ -643,7 +650,7 @@ def load_people(ld: Loader) -> None:
     dw = load_json(discogs_file) if discogs_file.exists() else None
     if dw:
         for person in dw.get("recovered") or []:
-            key = normalise((person.get("names") or [""])[0])
+            key = aliases.person_key((person.get("names") or [""])[0], alias_map)
             row = touch(key, "discogs_watchlist.json")
             sel = person.get("selectivity") or {}
             row.update({
@@ -660,7 +667,7 @@ def load_people(ld: Loader) -> None:
                 edges.append((key, edge.get("name"), edge.get("releases"),
                               joined(edge.get("roles")), "worked_with"))
         for person in dw.get("still_unresolved") or []:
-            key = normalise((person.get("names") or [""])[0])
+            key = aliases.person_key((person.get("names") or [""])[0], alias_map)
             row = touch(key, "discogs_watchlist.json:still_unresolved")
             row.setdefault("name", (person.get("names") or [None])[0])
             row["unresolved_reason"] = person.get("reason")
@@ -673,7 +680,8 @@ def load_people(ld: Loader) -> None:
             cands.append((cand.get("name"), cand.get("releases")))
             for via in cand.get("via") or []:
                 cand_via.append((cand.get("name"), via.get("name"),
-                                 normalise(via.get("name") or ""), via.get("discogs_id"),
+                                 aliases.person_key(via.get("name") or "", alias_map),
+                                 via.get("discogs_id"),
                                  joined(via.get("roles")), via.get("person_seed_albums"),
                                  via.get("role_weight"), via.get("selectivity"),
                                  via.get("selectivity_band")))
@@ -862,7 +870,15 @@ def load_cache(ld: Loader) -> None:
     SEED's 63 albums (265 tracks) -- it is what discover.py fetched -- while
     cache/search holds the 910 track/search rows for the writing step. Neither
     covers the 7,862-release candidate pool, whose credits were never fetched.
+
+    person_key goes through the alias map, not just `normalise`. It has to:
+    the discovery files key Inflo's 37 Composer credits under "inflo" now, and
+    a `credits` table that still keyed them under "dean josiah cover" would
+    make every join to it -- the evidence behind each co-artist sentence, and
+    signal_for's roles -- silently miss half the person. core/aliases.py says
+    why the file exists.
     """
+    alias_map = aliases.load()
     tracks, credits = [], []
 
     for path in sorted(glob.glob("cache/search/*.json")):
@@ -879,9 +895,10 @@ def load_cache(ld: Loader) -> None:
                            (track.get("performer") or {}).get("name"),
                            track.get("performers")))
             for name, roles in parse_performers(track.get("performers") or ""):
+                key = aliases.person_key(name, alias_map)
                 for role in roles:
                     credits.append(("search", store, album.get("id"), None,
-                                    track.get("title"), name, normalise(name), role,
+                                    track.get("title"), name, key, role,
                                     role_key(role), role_class(role), role_weight(role)))
 
     for path in sorted(glob.glob("cache/credits/*.json")):
@@ -892,9 +909,10 @@ def load_cache(ld: Loader) -> None:
             continue
         for track in blob:
             for name, roles in parse_performers(track.get("performers") or ""):
+                key = aliases.person_key(name, alias_map)
                 for role in roles:
                     credits.append(("credits", store, album_id, track.get("id"),
-                                    track.get("title"), name, normalise(name), role,
+                                    track.get("title"), name, key, role,
                                     role_key(role), role_class(role), role_weight(role)))
 
     ld.insert("tracks", ["store", "query", "album_id", "album_title", "track_title",

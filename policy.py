@@ -561,6 +561,63 @@ def billed_as_artist(person_key: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# WHEN TWO NAMES MIGHT BE ONE PERSON
+#
+# `core.aliases` merges what a hand-edited file says to merge. This is the
+# REPORT that feeds it: the pairs worth a human looking at, so the file is
+# filled from evidence rather than from memory. It never merges anything by
+# itself -- a wrong merge invents a collaboration that nobody can check, which
+# is worse than the split it fixes.
+#
+# Measured 2026-10-22 over the four walked corpora, no requests. 48 pairs out
+# of 892 people:
+#
+#     subset    one name's tokens inside the other's, both sides 2+ tokens
+#     spelling  a near match that is not a subset -- a typo or a diacritic
+#               "Jakobina Sigurdardotti" / "...dottir", "Guillem Roma" /
+#               "Guillem Ronma", "Alejandra Ghersi" / "Alejandro Ghersi"
+#                                                                        27
+#     bare      a subset where the short side is ONE token: "Massey",
+#               "Glennie", "Reisfeld", "Campi". Reported separately because
+#               this is the `single_token_name` collision class that is 47%
+#               of the candidate pool -- right often enough to be worth
+#               reading, wrong often enough that nothing may act on it
+#                                                                        19
+#     dropped   an ensemble suffix on one side: "Calequi" / "Calequi y Las
+#               Panteras", "JAVIER COLINA" / "Javier Colina Trio". A person
+#               and their band are BOTH billable, so this is not a split and
+#               reporting it would train the reader to skim
+#                                                                         2
+#
+# 0.92 is TITLE_SIMILARITY's value, reused rather than re-derived: both ask
+# the same question of two strings a label typed. The pairs it catches here
+# differ by one character, so the floor has as much room as it does there.
+# ---------------------------------------------------------------------------
+
+NAME_SIMILARITY = 0.92
+
+# A person and the group named after them are two billable acts, not two
+# spellings. Matched on the normalised key, so accents are already gone.
+ENSEMBLE_HINTS = (" y las ", " y los ", " y el ", " y la ", " trio", " quartet",
+                  " quintet", " sextet", " band", " group", " orchestra",
+                  " ensemble", " choir", " big band")
+
+
+def alias_candidate(a: str, b: str, ratio) -> str | None:
+    """"subset", "spelling", "bare", or None for a pair nobody should look at.
+
+    `ratio` is a function of two keys returning their similarity, passed in so
+    this stays free of difflib and of any opinion about how to measure it.
+    """
+    if any(hint in f" {a} " or hint in f" {b} " for hint in ENSEMBLE_HINTS):
+        return None
+    tokens_a, tokens_b = set(a.split()), set(b.split())
+    if tokens_a < tokens_b or tokens_b < tokens_a:
+        return "subset" if min(len(tokens_a), len(tokens_b)) >= 2 else "bare"
+    return "spelling" if ratio(a, b) >= NAME_SIMILARITY else None
+
+
+# ---------------------------------------------------------------------------
 # POOL FILTERS (the three that were measured and never written down)
 #
 # 7,860 candidate releases, in one table, in an order that promotes the junk.
