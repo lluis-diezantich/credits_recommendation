@@ -41,6 +41,7 @@ resumes a run that died partway through its fan-out.
     stages/            the pipeline, in order
       favourites.py      ListenBrainz top artists -> Qobuz ids -> favourites.json
       profile.py         listens -> who you still play, in months  [DERIVED]
+      seeds.py           profile -> which artist to walk next      [OFFLINE]
       discover.py        seed artist -> credits -> people          [EXACT]
       resolve_qobuz.py   people -> Qobuz artist ids -> pool.json   [LOSSY]
       resolve_discogs.py the ones Qobuz cannot see -> pool_discogs  [LOSSY]

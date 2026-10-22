@@ -47,7 +47,7 @@ ROLE_WEIGHTS: dict[str, float] = {
     "written-by": 0.3, "adapter": 0.3,
     # billing
     "mainartist": 0.25, "featuredartist": 0.25, "associatedperformer": 0.25,
-    "main": 0.25,
+    "main": 0.25, "artist": 0.25,
     "performer": 0.4, "performance": 0.4,
 }
 INSTRUMENT_WEIGHT = 0.8
@@ -74,9 +74,68 @@ ROLE_CLASS: dict[str, str] = {
         "author", "writer", "arranger", "instrumentarranger", "vocalarranger")},
     **{r: "billing" for r in (
         "mainartist", "main", "featuredartist", "associatedperformer",
-        "performer", "performance")},
+        "performer", "performance",
+        # "Workout Music, Artist" on a running-mix compilation: a billing line
+        # with no person behind it, not somebody who drew the sleeve.
+        "artist")},
+    # Exact entries that exist only to beat a marker below. A chorus master and
+    # a concertmaster are musicians; "master" would otherwise file them with
+    # the mastering engineers. Qobuz uses "Chorus Master" for the singers in a
+    # chorus as well as for whoever directs them -- Carla Morrison and three
+    # others hold it on one Perez Cruz track.
+    **{r: "performance" for r in ("chorusmaster", "concertmaster")},
 }
-CLASS_NAMES = {"production", "engineering", "writing", "billing", "performance"}
+CLASS_NAMES = {"production", "engineering", "writing", "billing", "performance",
+               "non-musical"}
+
+# ---------------------------------------------------------------------------
+# THE FALLBACK, AND WHY IT NEEDED RULES
+#
+# role_class() fell back to "performance" for anything the table above does not
+# name, on the reasoning that the remainder is instruments -- which is true of
+# most of it, and core.credits measured why an allowlist is not the answer: 65
+# of 124 role tokens in one corpus are in no table here and nearly all are
+# genuine (Spanish Guitar, Berimbau, Wurlitzer, Theremin).
+#
+# But the families the table DOES name arrive in spellings it does not.
+# Measured 2026-10-22 over the store's 273 distinct role tokens: 35 of them
+# were classed "performance" and weighted 0.8 while plainly belonging to a
+# named family -- "2nd Engineer", "Mix Engineer", "Assistant Mixing Engineer",
+# "SoundEngineer", "VocalEngineer", "StringEngineer", "CoMixer", "Engineer &
+# Mixer", "RemixingEngineer", "Recorder", "SoundRecordist", and the sleeve
+# credits "Art Director", "Photographer", "CoverArt", "CoverDesign",
+# "Designer", "Studio". 577 of 22,019 credits rows carried one, 2.6%.
+#
+# Because "performance" is in both NAMEABLE_CLASSES and REFERRAL_CLASSES they
+# leaked two ways, and three co-artist sentences named one: Conrad Taylor
+# (Re-Mixer), Liniers (Designer) and Alba Molina (AssistantRecordingEngineer).
+# This is the silent fallback the top of this file says it exists to end.
+#
+# So the recognisable families get a RULE rather than 35 more table entries,
+# because 35 more entries is how these 35 arrived. Everything still unmatched
+# keeps falling back to performance, which is where the instruments are.
+# docs/adr/D27 has what this was weighed against.
+# ---------------------------------------------------------------------------
+
+# Matched against role_key() output -- punctuation and case already gone -- so
+# "Engineer & Mixer", "2nd Engineer" and "SoundEngineer" all reduce to a string
+# containing "engineer".
+ENGINEERING_MARKERS = ("engineer", "mixer", "mixing", "master", "recordist",
+                       "recorder", "remix")
+
+# A sleeve is not a record. These say nothing about how it sounds and nothing
+# about who played on it, which is why they are neither nameable in an
+# explanation nor a referral worth following.
+NON_MUSICAL_MARKERS = ("artdirector", "coverart", "coverdesign", "design",
+                       "photograph", "photo", "layout", "illustrat", "sleeve")
+
+# Exact keys only: "studio" as a marker would swallow "StudioMusician", who is
+# a player, and "Studio Horns", who are a section.
+# "studiopersonnel" is deliberately absent: the table already files it under
+# engineering at 0.2, and that was a decision somebody made from --list-roles
+# output. Both classes are excluded from NAMEABLE_CLASSES and REFERRAL_CLASSES,
+# so moving it would change nothing but the label.
+NON_MUSICAL_KEYS = {"studio"}
 
 # Referral classes that are not a working relationship. A person credited ONLY
 # under these is dropped by default (--keep-weak overrides): on the Drexler pool
@@ -99,15 +158,52 @@ _WEIGHTS_BY_KEY: dict[str, float] = {role_key(k): v for k, v in ROLE_WEIGHTS.ite
 _WEIGHTS_BY_KEY.update(EXTRA_WEIGHTS)
 
 
+# What an unlisted credit in a named family is worth. Both sit at the weak end
+# of ROLE_WEIGHTS on purpose: an unlisted engineering spelling is some variety
+# of assistant ("2nd Engineer", "MixingSecondEngineer"), and a sleeve credit is
+# the weakest signal in the file -- below mastering, which already holds that
+# title among the roles that touch the sound.
+UNLISTED_ENGINEERING_WEIGHT = 0.2
+NON_MUSICAL_WEIGHT = 0.1
+
+
 def role_weight(role: str | None) -> float:
+    """What one credit in this role is worth as evidence of a relationship.
+
+    An unlisted role used to be worth INSTRUMENT_WEIGHT whatever it said, so
+    "Assistant Mixing Engineer" scored 0.8 -- four times the listed
+    "assistant engineer" at 0.2, and above "mixing engineer" at 0.5. The class
+    decides the fallback now, for the same reason role_class has rules.
+    """
     if not role:
         return INSTRUMENT_WEIGHT
-    return _WEIGHTS_BY_KEY.get(role_key(role), INSTRUMENT_WEIGHT)
+    key = role_key(role)
+    if key in _WEIGHTS_BY_KEY:
+        return _WEIGHTS_BY_KEY[key]
+    family = role_class(role)
+    if family == "non-musical":
+        return NON_MUSICAL_WEIGHT
+    if family == "engineering":
+        return UNLISTED_ENGINEERING_WEIGHT
+    return INSTRUMENT_WEIGHT
 
 
 def role_class(role: str) -> str:
-    """Anything unrecognised is an instrument or vocal credit."""
-    return ROLE_CLASS.get(role_key(role), "performance")
+    """The family a credit belongs to. Unrecognised means an instrument.
+
+    The table first, because it is exact and it carries the cases a rule would
+    get wrong. Then the two marker families, because the table's own families
+    arrive in spellings it does not list. Then instruments, which is what the
+    remainder genuinely is -- see the block above for the measurement.
+    """
+    key = role_key(role)
+    if key in ROLE_CLASS:
+        return ROLE_CLASS[key]
+    if key in NON_MUSICAL_KEYS or any(m in key for m in NON_MUSICAL_MARKERS):
+        return "non-musical"
+    if any(marker in key for marker in ENGINEERING_MARKERS):
+        return "engineering"
+    return "performance"
 
 
 def person_roles(person: dict) -> list[str]:
@@ -377,6 +473,68 @@ def burst(recent: int, recent_plays: int) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# WHICH ARTIST IS WORTH 50 REQUESTS AS A SEED
+#
+# The first four seeds were picked by hand, which is how two of them ended up
+# intersecting with nothing: Little Simz and Bjork share no co-artist with each
+# other or with the Iberian pair, so the column a cross-seed ranker needs --
+# how many of your artists made a record with this person -- is 1 for 97 of 99
+# rows. A seed costs ~50 requests and the alias report ten minutes of reading,
+# so which artist earns that is a judgement, and it belongs here.
+#
+# Two tests, because `band` alone gets the most important case wrong.
+#
+# RECENT MONTHS, at 17 of RECENT_WINDOW's 24. Months rather than plays, which
+# is D9's whole argument: a month says you came back, a play count says you
+# had it on. Measured 2026-10-22 over data/profile.json's 265 artists:
+#
+#     floor 18   selects 3 of the 4 seeds already walked
+#     floor 17   selects 4 of 4
+#
+# Silvia Perez Cruz sits at 17/24, and her walk produced the 40%
+# already-played measurement and 16 unheard names that D14 and D22 rest on.
+# A floor that excludes a seed already known to be good is one month too high.
+#
+# LIFETIME PLAYS, at 500, and only for the `emerging` band. Little Simz is
+# `emerging` on a technicality -- 21 lifetime months against DEEP_FLOOR's 24 --
+# with 20 recent months and 1,327 plays, and she is the seed that proved the
+# method generalises outside the Iberian cluster (D22). A core-only rule
+# excludes her and everyone like her. todo.md has said since the profile was
+# built that `emerging` needs a floor nobody has set; this is that floor at
+# seed scale, which is a different question from EMERGING_PLAYS -- that one
+# asks whether an artist is worth WATCHING for new releases, this one whether
+# a discography is worth 50 requests.
+#
+# Of the 24 emerging artists above the month floor, 500 keeps 7 and cuts 17.
+# The values either side are 526 (KAROL G) and 389 (Frankie Ruiz), so any floor
+# in (389, 526] selects the same seven and 500 is the round number inside it.
+# The seven are 526 to 4,356 plays; the cut seventeen are 104 to 389.
+# ---------------------------------------------------------------------------
+
+SEED_RECENT_FLOOR = 17   # of RECENT_WINDOW months, measured against the 4 walked
+SEED_PLAYS_FLOOR = 500   # lifetime plays, for a SHORT history only
+
+
+def seedable(band_name: str, recent: int, plays: int) -> bool:
+    """Is this artist worth walking as a seed?
+
+    `band_name` is `band()`'s verdict. "lapsed" never qualifies, whatever the
+    counts say -- the recent-month floor would already exclude it, and saying
+    so here keeps the two tests from looking like one.
+
+    Reads the profile's numbers and nothing about the credit graph: whether a
+    seed will INTERSECT the seeds already walked is a separate question, and
+    stages/seeds.py answers it from the store to order the walks rather than
+    to choose them.
+    """
+    if recent < SEED_RECENT_FLOOR:
+        return False
+    if band_name == "core":
+        return True
+    return band_name == "emerging" and plays >= SEED_PLAYS_FLOOR
+
+
+# ---------------------------------------------------------------------------
 # MATCH PLAUSIBILITY (the pools, on the READ side)
 #
 # sig_score is computed entirely from the REFERRER -- role weight x selectivity
@@ -535,24 +693,27 @@ MADE_TOGETHER = {"own", "guest"}
 # next seed will turn up.
 #
 # Deliberately NOT here: ensembles billed alongside the seed (Javier Colina
-# Trio, Falta y Resto, the Hamrahlid Choir) are artists with records.
+# Trio, Falta y Resto, the Hamrahlid Choir) are artists with records. Nor
+# Liniers, who draws on stage at Drexler's live shows -- `billed_as_musician`
+# below catches him by rule now, and the story of why it could not before is
+# worth keeping:
 #
-# A RULE WAS TRIED FOR THIS AND MEASURED DOWN. "Drop a co-artist whose only
-# credit beyond the billing is non-musical" would catch Liniers off his
-# `Designer` credit without a hand entry. Over the four corpora it also cuts
-# Rosie Lowe (Vocalist, BackgroundVocalist), Yuna (Vocalist), PJ Sin Suela
-# (Rap) and Tosca -- 5 real features to catch 1 illustrator -- because
-# MUSICAL_ROLES is an allowlist and those four tokens are not in it, and
-# because role_class() files an unknown role under "performance", which is
-# what it calls `Designer`. core.credits already recorded this lesson: 65 of
-# 124 role tokens in one corpus are in no table here and nearly all are
-# genuine. So these four stay a list of four names.
+#   1. The rule was tried against MUSICAL_ROLES and measured down. It cut
+#      Rosie Lowe (Vocalist), Yuna (Vocalist), PJ Sin Suela (Rap) and Tosca
+#      as well -- 5 real features for 1 illustrator -- because MUSICAL_ROLES
+#      is an allowlist holding none of those four tokens.
+#   2. So he went on this list, and the list was called the honest answer.
+#   3. Then "I still see Recording Engineer" turned up the real cause: the
+#      class fallback, which filed `Designer` under "performance" along with
+#      34 other tokens. With the classes right the rule catches 1 of 132
+#      co-artists and it is him.
+#
+# The lesson is in the ORDER of those three: the hand list was standing in for
+# a defect one layer down, and a rule only looks wrong while the data it reads
+# is wrong. docs/adr/D27.
 # ---------------------------------------------------------------------------
 
 NOT_ARTISTS = {"colors", "penelope cruz",
-               # An illustrator, billed because he draws on stage at Drexler's
-               # live shows. His only credit on the record is `Designer`.
-               "liniers",
                # Bjork's own bands, which are the seed under another name
                # rather than a collaborator. MusicBrainz states both as
                # `member of band` on the request core.musicbrainz already
@@ -570,6 +731,25 @@ def billed_as_artist(person_key: str) -> bool:
     Qobuz filed does not decide it.
     """
     return person_key not in NOT_ARTISTS
+
+
+def billed_as_musician(roles) -> bool:
+    """Did this co-artist do anything musical on the records they share?
+
+    `roles` is every role they hold on those records. Billing is ignored: it
+    is carried by every co-artist and is the reason they are in the list at
+    all, which is the same argument NAMEABLE_CLASSES makes.
+
+    No role beyond the billing is an absence of evidence and passes -- 57 of
+    132 co-artists are billing-only, and "they made a record together" is a
+    true thing to say about every one of them. What fails is holding roles and
+    having none of them be musical: measured 2026-10-22, that is 1 co-artist
+    of 132, and it is the illustrator.
+    """
+    beyond = [role for role in roles or [] if role_class(role) != "billing"]
+    if not beyond:
+        return True
+    return not all(role_class(role) == "non-musical" for role in beyond)
 
 
 # ---------------------------------------------------------------------------

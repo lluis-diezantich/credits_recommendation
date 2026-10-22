@@ -197,3 +197,50 @@ def test_nothing_left_at_all_still_explains_itself(store, run):
     said = run().out
     assert "nothing to show" in said
     assert "already play" not in said
+
+
+def test_a_billing_with_nothing_musical_behind_it_is_dropped(store, run):
+    """Liniers draws on stage at Drexler's live shows and is billed for it.
+    Caught by rule rather than by name since the role classes were fixed."""
+    store.co_artist("liniers", "Liniers",
+                    [("No Voy a Ser Yo", "own", "2025-01-01")])
+    store.credit("No Voy a Ser Yo", "liniers", "MainArtist")
+    store.credit("No Voy a Ser Yo", "liniers", "Designer")
+    store.co_artist("thom yorke", "Thom Yorke",
+                    [("Biophilia", "own", "2011-01-01")])
+    said = run()
+    assert "Liniers" not in said.out
+    assert "1 billing(s) dropped as not an artist: Liniers" in said.err
+    assert "1 artists, from 1 co-appearances" in said.out
+
+
+def test_a_guest_who_also_drew_the_sleeve_is_kept(store, run):
+    store.co_artist("rosie lowe", "Rosie Lowe",
+                    [("So Human", "guest", "2016-01-01")])
+    store.credit("So Human", "rosie lowe", "Designer")
+    store.credit("So Human", "rosie lowe", "Vocalist")
+    assert "Rosie Lowe" in run().out
+
+
+def test_a_co_artist_with_no_role_credit_at_all_is_kept(store, run):
+    """Billing-only is 57 of 132 rows, and the sentence for them is honest
+    without a role clause."""
+    store.co_artist("twice", "Twice", [("WE PRAY", "own", "2025-01-01")])
+    assert "Twice" in run().out
+
+
+def test_the_report_groups_by_seed_instead_of_interleaving(store, run):
+    """One header per seed. A purely global order printed the same seed's
+    header once per run of its rows -- five seeds interleaved gave "Björk"
+    four separate times."""
+    store.co_artist("thom yorke", "Thom Yorke",
+                    [("Biophilia", "own", "2011-01-01")])
+    store.co_artist("david arnold", "David Arnold",
+                    [("Play Dead", "own", "1993-01-01"),
+                     ("Greatest Hits", "own", "2002-01-01")])
+    said = run().out
+    # The header, not every mention: the sentences name the seed too.
+    headers = [line for line in said.splitlines() if line == SEED_NAME]
+    assert len(headers) == 1
+    # And inside the group the stronger co-appearance still comes first.
+    assert said.index("David Arnold") < said.index("Thom Yorke")

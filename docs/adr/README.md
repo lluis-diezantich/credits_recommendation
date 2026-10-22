@@ -49,3 +49,5 @@ intended way round from here.
 | [D23](D23-ask-musicbrainz-who-the-seed-is.md) | Ask MusicBrainz which names the seed is credited under, and fold editions by title | Accepted |
 | [D24](D24-a-record-nobody-holds.md) | A record no artist holds is a compilation, not a collaboration; and a hand list for billings that are not artists | Accepted |
 | [D25](D25-one-person-one-key.md) | One person, one key, from a hand-edited alias file fed by a report rather than a name lookup | Accepted |
+| [D26](D26-seeds-by-rule.md) | A seed is chosen by rule from the profile, and walked intersections-first | Accepted |
+| [D27](D27-the-class-fallback-gets-rules.md) | The role-class fallback gets marker rules, sleeve credits get their own class | Accepted |

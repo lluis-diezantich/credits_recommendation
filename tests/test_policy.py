@@ -115,13 +115,27 @@ def test_an_unrecognised_role_is_a_performance_credit():
     assert policy.role_class("Timpani") == "performance"
 
 
-def test_performance_is_the_default_and_never_an_entry():
-    """CLASS_NAMES advertises five classes but ROLE_CLASS maps to four: nothing
-    is classed `performance` by the table, only by falling off it. Worth pinning
-    because --roles accepts `performance` and it has to keep meaning something."""
-    assert "performance" in policy.CLASS_NAMES
-    assert "performance" not in set(policy.ROLE_CLASS.values())
-    assert set(policy.ROLE_CLASS.values()) | {"performance"} == policy.CLASS_NAMES
+def test_class_names_covers_everything_role_class_can_return():
+    """`--roles` accepts a class name, so a class the classifier can produce
+    and CLASS_NAMES does not list would be unaskable-for.
+
+    This used to assert the stronger thing -- that `performance` was never an
+    entry in ROLE_CLASS, only reachable by falling off it. The markers ended
+    that: `chorusmaster` has to be IN the table to beat "master", so the table
+    is now the only way to say "a musician, despite looking like an engineer".
+    """
+    produced = set(policy.ROLE_CLASS.values()) | {"performance", "engineering",
+                                                  "non-musical"}
+    assert produced == policy.CLASS_NAMES
+
+
+def test_an_exact_entry_beats_a_marker():
+    """A chorus master and a concertmaster are musicians. Carla Morrison and
+    three others hold "Chorus Master" on one Perez Cruz track, and "master"
+    would otherwise file all four with the mastering engineers."""
+    assert policy.role_class("Chorus Master") == "performance"
+    assert policy.role_class("Concertmaster") == "performance"
+    assert policy.role_weight("Chorus Master") == policy.INSTRUMENT_WEIGHT
 
 
 def test_the_weak_classes_are_the_referral_ones_not_the_quiet_ones():
@@ -768,3 +782,158 @@ def test_nothing_nameable_is_an_empty_list_not_an_error():
     assert policy.nameable_roles(["MainArtist"]) == []
     assert policy.nameable_roles([]) == []
     assert policy.nameable_roles(None) == []
+
+
+# ---- which artist is worth 50 requests ----------------------------------
+
+
+def test_the_four_seeds_already_walked_all_pass_the_rule():
+    """The validation both floors were chosen against. A rule that excludes a
+    seed already known to be good is wrong, whatever else it gets right."""
+    assert policy.seedable("core", 24, 6988)        # Drexler
+    assert policy.seedable("core", 21, 1197)        # Bjork
+    assert policy.seedable("core", 17, 1369)        # Perez Cruz, AT the floor
+    assert policy.seedable("emerging", 20, 1327)    # Little Simz
+
+
+def test_one_month_higher_would_have_excluded_perez_cruz():
+    """17 rather than 18, and that is the whole evidence for the value: her
+    walk produced the 40% already-played measurement D14 and D22 rest on."""
+    assert policy.SEED_RECENT_FLOOR == 17
+    assert policy.seedable("core", 17, 1369)
+    assert not policy.seedable("core", 16, 1369)
+
+
+def test_a_short_history_needs_the_plays_to_go_with_it():
+    """Little Simz is `emerging` on 21 lifetime months against DEEP_FLOOR's
+    24, and she is the seed that proved the method generalises. Frankie Ruiz
+    has the same band and the same recent months on 389 plays."""
+    assert policy.seedable("emerging", 21, 500)
+    assert not policy.seedable("emerging", 21, 499)
+    assert not policy.seedable("emerging", 21, 389)
+
+
+def test_a_long_history_needs_no_plays_floor():
+    """`core` already means 24+ lifetime active months, which is the evidence
+    the plays floor is standing in for on a short history."""
+    assert policy.seedable("core", 17, 0)
+
+
+def test_lapsed_never_qualifies_however_much_it_was_played():
+    assert not policy.seedable("lapsed", 3, 50000)
+
+
+def test_an_unknown_band_is_not_a_seed():
+    """A verdict this rule does not know is not a yes."""
+    assert not policy.seedable("", 24, 10000)
+    assert not policy.seedable("watched", 24, 10000)
+
+
+# ---- the fallback, once it had rules ------------------------------------
+
+
+def test_an_unlisted_spelling_of_a_named_family_joins_that_family():
+    """35 of the store's 273 role tokens were classed `performance` while
+    plainly belonging to a family the table names. 2.6% of credits rows."""
+    for role in ("2nd Engineer", "Mix Engineer", "Assistant Mixing Engineer",
+                 "SoundEngineer", "VocalEngineer", "CoMixer", "Engineer & Mixer",
+                 "RemixingEngineer", "Recorder", "SoundRecordist", "Re-Mixer"):
+        assert policy.role_class(role) == "engineering", role
+
+
+def test_a_sleeve_credit_is_its_own_class():
+    """Neither nameable in an explanation nor a referral worth following: a
+    photographer says nothing about how a record sounds OR who played on it."""
+    for role in ("Art Director", "Photographer", "CoverArt", "CoverDesign",
+                 "Designer", "Studio"):
+        assert policy.role_class(role) == "non-musical", role
+    # Not StudioPersonnel: the table files it under engineering at 0.2, which
+    # was a decision from --list-roles output, and both classes are excluded
+    # from the same two sets anyway.
+    assert policy.role_class("StudioPersonnel") == "engineering"
+
+
+def test_a_sleeve_credit_is_neither_nameable_nor_a_referral():
+    assert "non-musical" not in policy.NAMEABLE_CLASSES
+    assert "non-musical" not in policy.REFERRAL_CLASSES
+    assert policy.nameable_roles(["Designer", "Guitar"]) == ["Guitar"]
+    assert not policy.musical_referral(["Photographer"])
+
+
+def test_an_instrument_still_falls_through_to_performance():
+    """The remainder genuinely is instruments -- core.credits measured 65 of
+    124 tokens as unlisted and nearly all genuine -- so the markers must not
+    widen into them."""
+    for role in ("Berimbau", "Theremin", "Wurlitzer", "Spanish Guitar",
+                 "Timpani", "Vocalist", "Rap", "StudioMusician"):
+        assert policy.role_class(role) == "performance", role
+        assert policy.role_weight(role) == policy.INSTRUMENT_WEIGHT, role
+
+
+def test_an_unlisted_engineering_spelling_is_weighted_as_an_assistant():
+    """It used to be worth 0.8 -- four times the listed "assistant engineer"
+    at 0.2, and above "mixing engineer" at 0.5."""
+    assert policy.role_weight("Assistant Mixing Engineer") == 0.2
+    assert policy.role_weight("2nd Engineer") == 0.2
+    assert policy.role_weight("Mastering Engineer") == 0.15   # listed, unchanged
+
+
+def test_a_sleeve_credit_is_the_weakest_weight_in_the_file():
+    """Below mastering, which holds that title among the roles that touch the
+    sound at all."""
+    assert policy.role_weight("Designer") < policy.role_weight("Mastering Engineer")
+    assert policy.role_weight("Designer") < policy.MIN_ROLE_WEIGHT
+
+
+def test_a_billing_spelling_the_table_missed_is_still_billing():
+    """"Workout Music, Artist" on a running-mix compilation: a billing line
+    with no person behind it, not somebody who drew the sleeve."""
+    assert policy.role_class("Artist") == "billing"
+    assert policy.role_weight("Artist") == 0.25
+
+
+# ---- did they do anything musical ---------------------------------------
+
+
+def test_a_sleeve_credit_and_nothing_else_is_not_a_collaboration():
+    """Liniers is billed on a Drexler live record because he draws on stage
+    during the show. 1 co-artist of 132, measured 2026-10-22."""
+    assert not policy.billed_as_musician(["MainArtist", "Designer"])
+
+
+def test_billing_alone_is_an_absence_of_evidence_and_passes():
+    """57 of 132 co-artists hold nothing beyond the billing, and "they made a
+    record together" is true of every one of them."""
+    assert policy.billed_as_musician(["MainArtist", "AssociatedPerformer"])
+    assert policy.billed_as_musician([])
+    assert policy.billed_as_musician(None)
+
+
+def test_one_musical_credit_is_enough():
+    """A person can be billed, draw the sleeve AND play on it."""
+    assert policy.billed_as_musician(["MainArtist", "Designer", "Guitar"])
+
+
+def test_the_tokens_that_sank_this_rule_the_first_time_all_pass_now():
+    """It was tried against MUSICAL_ROLES, which holds none of these, and cut
+    5 real features to catch 1 illustrator. role_class holds them all."""
+    assert policy.billed_as_musician(["MainArtist", "Vocalist"])
+    assert policy.billed_as_musician(["MainArtist", "BackgroundVocalist"])
+    assert policy.billed_as_musician(["MainArtist", "Rap"])
+
+
+def test_only_a_sleeve_credit_fails_it_not_an_engineering_one():
+    """Deliberately narrow. A remixer is not nameable in an explanation -- D21
+    says engineering tells a listener nothing -- but they did touch the
+    record, and Conrad Taylor remixing a Bjork track is a real artist to go
+    and hear. Only the credits that never touched it are excluded."""
+    assert policy.billed_as_musician(["MainArtist", "Re-Mixer"])
+    assert policy.billed_as_musician(["MainArtist", "Mastering Engineer"])
+    assert not policy.billed_as_musician(["MainArtist", "Photographer"])
+
+
+def test_liniers_is_no_longer_a_hand_entry():
+    """The hand list was standing in for the class fallback one layer down."""
+    assert "liniers" not in policy.NOT_ARTISTS
+    assert sorted(policy.NOT_ARTISTS) == [
+        "colors", "k.u.k.l.", "penelope cruz", "the sugarcubes"]

@@ -60,15 +60,27 @@ not correct.
    **Correctness** below. **All three are fixed** (D23, D25), and so is the
    compilation the probe turned up with them (D24). Nothing blocks step 3.
 
-   Still to do: **6-8 more seeds from the profile's 80 `core` artists, by
-   rule** — ~50 requests each, about four weeks of the Friday radar's traffic
-   for eight. The rule (band plus a recent-months floor) is a `policy.py`
-   number and wants an ADR; picking by hand is what produced the first four.
-   Candidates by recent months, from `profile.json`: Nathy Peluso 24/24, El
-   Gran Combo 23/24, Celia Cruz 22, Kali Uchis 22, Ca7riel 21, ROSALÍA 21,
-   Willie Colón 21. Each new seed now wants its alias report read once after
-   the walk ([adr/D25](docs/adr/D25-one-person-one-key.md)) — ten minutes, and
-   the counts are right before anything ranks them.
+   **~~The rule for picking the next seeds.~~** Written 2026-10-22
+   ([adr/D26](docs/adr/D26-seeds-by-rule.md)): `policy.seedable` is 17 of 24
+   recent months, plus `core` or `emerging` with 500 lifetime plays, and
+   `stages/seeds.py` applies it. `./stages/seeds.py --next 8` prints the
+   commands.
+
+   17 rather than 18 because 18 misses Sílvia Pérez Cruz by one month, and her
+   walk is where the 40% already-played measurement comes from — the floor is
+   validated by selecting all four seeds already walked. The plays floor is
+   what lets `emerging` through at all, and it has to: **a `core`-only rule
+   does not select Little Simz**, who is `emerging` on 21 lifetime months
+   against `DEEP_FLOOR`'s 24 and is the seed that proved the method
+   generalises.
+
+   **Still to do: walk them.** 27 candidates, ~50 requests each. The first
+   five are guaranteed intersections (ROSALÍA, Natalia Lafourcade, Residente,
+   C. Tangana, Rubén Blades) and `seeds.py` orders them first on purpose, so
+   step 3 gets a column with range after two or three walks instead of after
+   eight. Each walk wants its alias report read once afterwards
+   ([adr/D25](docs/adr/D25-one-person-one-key.md)) — ten minutes, and the
+   counts are right before anything ranks them.
 
 3. **Rank across seeds.** Unblocked as of 2026-10-22 — this is the next thing
    to build. Rank on
@@ -84,8 +96,12 @@ not correct.
    `selectivity()` exists for the person who appears everywhere and a
    much-guested singer behaves exactly like Fred Kevorkian.
 
-   Not before step 2: the intersection across the current two seeds is 2 of 67
-   co-artists (Lau Noah, Salvador Sobral), so no weighting has any range.
+   **Still not before step 2, re-measured 2026-10-22 with four seeds: 97 of 99
+   co-artists connect to exactly ONE seed.** The two that do not are still Lau
+   Noah and Salvador Sobral, both on Drexler and Pérez Cruz, both already
+   played — Little Simz and Björk added no intersection at all, with each
+   other or with the Iberian pair. The ranker's main input is constant, so
+   there is nothing to weight. D26's walk order exists to fix exactly this.
 
 4. **Keep the sentence through the ranking, and make it multi-seed.**
    `core/explain.py` takes structured facts, not prose, so it grows with the
@@ -234,6 +250,10 @@ The gap between "a credits database" and "recommends music".
     returned the discography. `luis eduardo aute` has three roles at 1 each and
     `juan falu` four at 13. A rebuild on a different day can flip it, which
     means the field is not a fact about the person. Pick a tie-break.
+  - **"Sidonie feat. Dani Martín" is a role.** Same class as the fix below and
+    not caught by it: the name is joined by `feat.` rather than `&`, and it
+    heads no segment of its own, so the string holds no evidence to catch it
+    with. One row. Listed because the next one may not be.
   - **~~An artist's name in a role slot, spelled differently.~~** Fixed
     2026-10-22, found by reading the printed list rather than by a test.
     `core.credits.parse_performers` already dropped a packed co-artist name
@@ -257,19 +277,47 @@ The gap between "a credits database" and "recommends music".
     were never role-slot-only, they head segments spelled with the accents the
     role slot drops. Those tokens were scoring 0.8 as unknown instruments and
     `role_class` was filing them under `performance`.
-  - **~~"Liniers" is billed on a Drexler live record.~~** On the hand list
-    2026-10-22 — an illustrator who draws on stage, whose only credit is
-    `Designer`.
+  - **~~"Liniers" is billed on a Drexler live record.~~** Caught by rule
+    2026-10-22 ([adr/D27](docs/adr/D27-the-class-fallback-gets-rules.md)) —
+    `policy.billed_as_musician`, 1 of 132 co-artists, and he is off
+    `NOT_ARTISTS` again.
 
-    **A rule was tried for this and measured down**, and the measurement is
-    worth keeping: "drop a co-artist whose only credit beyond the billing is
-    non-musical" also cuts Rosie Lowe (Vocalist), Yuna (Vocalist), PJ Sin
-    Suela (Rap) and Tosca — 5 real features to catch 1 illustrator. Because
-    `MUSICAL_ROLES` is an allowlist missing all four tokens, and because
-    `role_class` files an unknown role under `performance`, which is what it
-    calls `Designer`. `core/credits.py` recorded the same lesson first: 65 of
-    124 role tokens in one corpus are in no table in `policy.py` and nearly
-    all are genuine. So `NOT_ARTISTS` is four names, not a predicate.
+    **Worth keeping for the order it happened in.** The rule was tried first
+    against `MUSICAL_ROLES` and measured down: it cut Rosie Lowe (Vocalist),
+    Yuna (Vocalist), PJ Sin Suela (Rap) and Tosca as well, 5 real features to
+    catch 1 illustrator. So he went on the hand list and that was called the
+    honest answer. Then "I still see Recording Engineer" turned up the actual
+    cause one layer down — the class fallback, filing `Designer` under
+    `performance` along with 34 other tokens. **The hand list was standing in
+    for a defect somewhere else, and a rule only looks wrong while the data it
+    reads is wrong.**
+  - **~~The role-class fallback was silent.~~** Fixed 2026-10-22
+    ([adr/D27](docs/adr/D27-the-class-fallback-gets-rules.md)): `role_class`
+    fell back to `performance` and `role_weight` to 0.8 for anything the table
+    does not name, so **35 of the store's 273 role tokens** — `2nd Engineer`,
+    `Mix Engineer`, `SoundEngineer`, `CoMixer`, `Art Director`, `Photographer`,
+    `Designer` — were performance credits at instrument weight. 577 of 22,019
+    rows, 2.6%. `Assistant Mixing Engineer` scored 0.8 against the listed
+    `assistant engineer`'s 0.2.
+
+    Marker rules now catch the families, a new `non-musical` class holds the
+    sleeve credits, and the instrument fallback is untouched — `Berimbau`,
+    `Theremin`, `Vocalist`, `Rap` all still class `performance` at 0.8. Two
+    exact table entries exist only to beat a marker (`chorusmaster`,
+    `concertmaster`), which ends the old invariant that `performance` was never
+    a table value.
+
+    **Still open, and it needs requests: the pool's copy is stale.**
+    `releases.via_referral_classes` is a string the resolvers wrote, so the 477
+    Qobuz-path rows classed `performance` keep whatever they were given, and
+    some pass D15's referral filter only because of this defect. Recomputing
+    means re-running `resolve_qobuz.py`. The crew pipeline is paused, so this
+    is a known stale column rather than a fixed one.
+
+    **Also still open and free: `MUSICAL_ROLES` is the same gap one layer
+    down.** `discover.py` uses it to drop non-musical people from the crew
+    graph, and it holds none of `vocalist`, `rap` or `backgroundvocalist`.
+    Fold it into `role_class`.
   - **"WE PRAY" is three album ids on three dates, and that is correct.**
     Checked 2026-10-22 rather than fixed. The single is `k3qvjdv4dc7yb`
     (2024-08-23), `dyo5uicjiqi4a` (2025-02-13) and `j5jjsjkkq0aaa`

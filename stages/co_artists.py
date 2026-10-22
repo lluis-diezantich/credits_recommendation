@@ -24,7 +24,7 @@ import sys
 
 from core.explain import co_artist_sentence
 from core.paths import DATA
-from policy import MADE_TOGETHER, billed_as_artist, nameable_roles
+from policy import MADE_TOGETHER, billed_as_artist, billed_as_musician, nameable_roles
 
 # The provenances worth counting, as a SQL list. Built from policy so the
 # filter here and the labelling in discover.py cannot drift apart.
@@ -47,8 +47,17 @@ WHERE (:seed IS NULL OR c.seed_qobuz_id = :seed)
               WHERE a.seed_qobuz_id = c.seed_qobuz_id
                 AND a.person_key = c.person_key
                 AND a.provenance IN ({TOGETHER}))
-ORDER BY together DESC, c.last_seen DESC
+ORDER BY s.name, together DESC, c.last_seen DESC
 """
+#        ^ the seed FIRST, so the report groups. The print loop writes a header
+#        whenever the seed changes, and a purely global order made the same
+#        seed's header appear once per run of its rows -- five seeds interleaved
+#        printed "Björk" four separate times. Grouping is this ORDER BY and
+#        nothing else; there is no nested loop to keep in step with it.
+#
+#        Alphabetical between seeds, which is arbitrary but stable: ranking the
+#        GROUPS wants the cross-seed score that todo.md step 3 is about, and
+#        inventing a worse one here would be in its way.
 
 # The roles a person holds on the records they share with the seed, and the
 # tracks they hold them on. Scoped by co_artist_albums so a role earned on one
@@ -72,6 +81,19 @@ SELECT title, date FROM co_artist_albums
 WHERE seed_qobuz_id = ? AND person_key = ?
   AND provenance IN ({TOGETHER})
 ORDER BY CASE provenance WHEN 'guest' THEN 0 ELSE 1 END, date DESC LIMIT 1
+"""
+
+
+# Every role each co-artist holds on the records they share with the seed, for
+# the one question the sentence cannot answer: did they do anything musical?
+# "Liniers, Designer" is billed on a Drexler live record because he draws on
+# stage during the show.
+ROLES_HELD = f"""
+SELECT a.seed_qobuz_id, a.person_key, cr.role
+FROM co_artist_albums a
+JOIN credits cr ON cr.person_key = a.person_key AND cr.album_id = a.album_id
+WHERE a.provenance IN ({TOGETHER})
+GROUP BY a.seed_qobuz_id, a.person_key, cr.role
 """
 
 
@@ -113,11 +135,20 @@ def main() -> int:
     except sqlite3.OperationalError as exc:
         raise SystemExit(f"{args.db}: {exc} - run ./stages/load.py first") from exc
 
-    # Before the counts, not after: a billing that is not an artist is not a
-    # co-appearance to report the total of either. Named on stderr so --json
-    # stays parseable and the drop is still visible to whoever ran it.
-    dropped = [r["name"] for r in rows if not billed_as_artist(r["person_key"])]
-    rows = [r for r in rows if billed_as_artist(r["person_key"])]
+    held: dict[tuple, list[str]] = {}
+    for r in con.execute(ROLES_HELD):
+        held.setdefault((r["seed_qobuz_id"], r["person_key"]), []).append(r["role"])
+
+    def keep(row: sqlite3.Row) -> bool:
+        return (billed_as_artist(row["person_key"])
+                and billed_as_musician(held.get((row["seed_qobuz_id"],
+                                                 row["person_key"]))))
+
+    # Before the counts, not after: a billing with nothing musical behind it is
+    # not a co-appearance to report the total of either. Named on stderr so
+    # --json stays parseable and the drop is still visible to whoever ran it.
+    dropped = [r["name"] for r in rows if not keep(r)]
+    rows = [r for r in rows if keep(r)]
     if dropped:
         print(f"{len(dropped)} billing(s) dropped as not an artist: "
               + ", ".join(sorted(dropped)), file=sys.stderr)
