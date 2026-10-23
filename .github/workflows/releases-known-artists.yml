@@ -55,5 +55,5 @@ jobs:
     with:
       radar: radars/qobuz.py
       title: "releases: known artists"
-      days: ${{ inputs.days || '10' }}
+      days: ${{ inputs.days || '7' }}
       extra: --store ${{ inputs.store || 'gb-en' }}
