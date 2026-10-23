@@ -38,9 +38,12 @@ from core.radar import Batch, Radar, Release, execute, parser
 # Apple artist IDs. Find one with:  ./radars/qobuz.py --find "Name"
 # This literal is now only the FALLBACK, used when data/favourites.json
 # carries no qobuz_id. Generate that file with ./stages/favourites.py.
-WATCHED_ARTISTS: dict[int, str] = favourites.ids_for("qobuz_id", {
+# watchlist() rather than ids_for(), because the run reports what it dropped:
+# the counts travel into the JSON via report_extra() below.
+WATCHLIST = favourites.watchlist("qobuz_id", {
     41620: "Jorge Drexler",
 })
+WATCHED_ARTISTS: dict[int, str] = WATCHLIST.ids
 
 # Only report releases this recent, so a first run records the back catalogue
 # silently instead of printing decades of it. 0 disables.
@@ -128,12 +131,27 @@ class QobuzRadar(Radar):
 
     def summary(self, args, run) -> str:
         plural = "s" if run.watching != 1 else ""
-        return (f"Scanned {run.scanned} releases from {run.fetched} of "
+        line = (f"Scanned {run.scanned} releases from {run.fetched} of "
                 f"{run.watching} artist{plural} in the {args.store} store "
                 f"({self.window(args)}).")
+        # The exclusions, for a local run. The issue gets the same numbers
+        # through report_extra() and radars/report.py.
+        if WATCHED_ARTISTS is WATCHLIST.ids and WATCHLIST.excluded:
+            dropped = ", ".join(f"{n} {reason}"
+                                for reason, n in WATCHLIST.counts.items()
+                                if reason != "watched" and n)
+            line += f"\nNot watched: {dropped}."
+        return line
 
     def report_extra(self, args) -> dict:
-        return {"store": args.store}
+        extra: dict = {"store": args.store}
+        # Only when the run is actually watching the list this breakdown
+        # describes. tests/conftest.py patches WATCHED_ARTISTS to a handful of
+        # fixture ids, and "15 muted" printed beside three of them would be a
+        # claim about a file the run never read. Same for the fallback list.
+        if WATCHED_ARTISTS is WATCHLIST.ids and not WATCHLIST.fallback:
+            extra["watchlist"] = WATCHLIST.report()
+        return extra
 
     def broken_run_message(self, run) -> str:
         plural = "s" if run.calls != 1 else ""

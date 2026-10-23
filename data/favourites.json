@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-18T14:51:22+00:00",
+  "generated": "2026-10-23T15:39:46+00:00",
   "note": "hand-edits are kept: set \"watch\": false to stop watching an artist (or run stages/favourites.py --mute \"Name\"), and a qobuz_id you fix by hand is never re-resolved.",
   "artists": [
     {
@@ -182,7 +182,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 1303766
+      "qobuz_id": 1303766,
+      "ended": "2025-12-10"
     },
     {
       "name": "Daniel, me estás matando",
@@ -212,7 +213,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 23546
+      "qobuz_id": 23546,
+      "ended": "2026-02-21"
     },
     {
       "name": "Nico Roig",
@@ -242,7 +244,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 43845
+      "qobuz_id": 43845,
+      "ended": "2010"
     },
     {
       "name": "Chuwi",
@@ -272,7 +275,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 38326
+      "qobuz_id": 38326,
+      "ended": "2016-01-10"
     },
     {
       "name": "El Gran Combo de Puerto Rico",
@@ -806,7 +810,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 249783
+      "qobuz_id": 249783,
+      "ended": "2015"
     },
     {
       "name": "Yussef Dayes",
@@ -1101,7 +1106,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 51356
+      "qobuz_id": 51356,
+      "ended": "1998-03-15"
     },
     {
       "name": "Reyna Tropical",
@@ -1131,7 +1137,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 118514
+      "qobuz_id": 118514,
+      "ended": "2014-11"
     },
     {
       "name": "KOKOROKO",
@@ -1171,7 +1178,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "ambiguous",
-      "qobuz_id": 46866
+      "qobuz_id": 46866,
+      "ended": "1997-05-29"
     },
     {
       "name": "Manu Chao",
@@ -1326,7 +1334,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 23740224
+      "qobuz_id": 23740224,
+      "ended": "2021-01-30"
     },
     {
       "name": "Eddie Palmieri",
@@ -1336,7 +1345,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 23545
+      "qobuz_id": 23545,
+      "ended": "2025-08-06"
     },
     {
       "name": "NAPA",
@@ -1356,7 +1366,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 23567
+      "qobuz_id": 23567,
+      "ended": "1992-02-29"
     },
     {
       "name": "Joe Arroyo",
@@ -1377,7 +1388,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 192741
+      "qobuz_id": 192741,
+      "ended": "2013-08-10"
     },
     {
       "name": "Joshua Idehen",
@@ -1429,7 +1441,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 28739
+      "qobuz_id": 28739,
+      "ended": "2005-08-06"
     },
     {
       "name": "Johnny Colón",
@@ -1510,7 +1523,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 30055
+      "qobuz_id": 30055,
+      "ended": "1970-11-06"
     },
     {
       "name": "KAYTRANADA",
@@ -1731,7 +1745,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 71534
+      "qobuz_id": 71534,
+      "ended": "1997"
     },
     {
       "name": "Niño de Elche",

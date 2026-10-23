@@ -39,6 +39,33 @@ def badges(release: dict) -> str:
     return " · ".join(bits)
 
 
+#: The exclusions worth naming, and what to call them in prose. Ordered, so
+#: two reports read the same way. `unresolved` is spelled out because "3
+#: unresolved" means nothing to someone who has not read the resolver.
+EXCLUSIONS = (("muted", "muted by hand"), ("ended", "ended or split up"),
+              ("unresolved", "with no id yet"))
+
+
+def watchlist_line(info: dict) -> str:
+    """The difference between the watchlist file and the run, in one sentence.
+
+    Zeros are left out: "0 muted, 0 ended" is noise, and this line exists
+    because a mute used to be invisible -- the issue said "146 of 146 artists"
+    and the 26 it had dropped appeared nowhere. Returns "" when there is
+    nothing to account for, which is also what a radar that reports no
+    watchlist at all gets.
+    """
+    parts = [f"{info[key]} {label}" for key, label in EXCLUSIONS if info.get(key)]
+    if info.get("collapsed"):
+        # Not an exclusion: two entries, one artist. Named so the arithmetic
+        # between `entries` and `ids` closes.
+        parts.append(f"{info['collapsed']} sharing an id")
+    if not parts:
+        return ""
+    return (f"Watching {info.get('ids', 0)} of {info.get('entries', 0)} "
+            f"on the list: {', '.join(parts)}.")
+
+
 def to_markdown(report: dict, warnings: str = "") -> str:
     releases = report.get("releases") or []
     watching = report.get("watching") or 0
@@ -52,6 +79,10 @@ def to_markdown(report: dict, warnings: str = "") -> str:
             f"({report.get('window', 'unknown window')}).")
 
     lines = [head]
+    watchlist = watchlist_line(report.get("watchlist") or {})
+    if watchlist:
+        lines += ["", watchlist]
+
     shared = report.get("shared")
     if shared:
         lines += ["", f"{shared} release{'s' if shared != 1 else ''} "
