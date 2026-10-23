@@ -1,6 +1,6 @@
 # D11: Radar state lives in `data/ci/`, committed by the workflow after the issue opens
 
-- **Status:** Accepted
+- **Status:** Accepted (the known-artist caller opts out of it; see [D32](D32-the-known-artist-radar-reports-the-whole-week.md))
 - **Date:** 2026-10-17
 - **Where it lives:** [`core/radar.py`](../../core/radar.py) (`--state PATH`),
   `.github/workflows/radar.yml`, `data/ci/<radar>_seen.json`

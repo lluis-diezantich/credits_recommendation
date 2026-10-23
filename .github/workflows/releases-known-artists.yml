@@ -10,12 +10,13 @@
 # The steps live in .github/workflows/radar.yml. This file is only the two
 # decisions that are actually about THIS radar: when to look, and with what.
 #
-# It takes radar.yml's state defaults, so this radar is now STATEFUL: the run
-# reads data/ci/qobuz_seen.json, reports only what is not in it, and commits it
-# back. Before that it passed --all and leaned on the date window, which
-# re-reported a release in two consecutive issues whenever days exceeded seven.
-# Pass stateless: true for a backfill, where recording the back catalogue as
-# seen would silence the next real run.
+# It passes stateless: true, so this radar reports the WHOLE window every week
+# and records nothing -- data/ci/qobuz_seen.json is frozen at the 7278 ids the
+# two 2026-10-23 runs left in it. A deliberate step back from D11, taken
+# because a full week in one issue is worth more right now than a
+# duplicate-free one. Two costs, both accepted: the git history of that file
+# stops being the impression log docs/roadmap.md wants, and the first stateful
+# run after this re-reports everything since the freeze. D32 has the argument.
 #
 # Needs no secrets: the watchlist (data/favourites.json) is committed and the
 # Qobuz app id is a public web-player value, not a key.
@@ -23,15 +24,26 @@ name: "releases: known artists"
 
 on:
   schedule:
-    # Fridays, 05:17 CET -- written as 04:17 UTC, because GitHub cron has no
-    # timezone and Europe/Madrid is UTC+1 in winter, UTC+2 in summer. So this
-    # is 05:17 under CET and 06:17 under CEST; an hour of drift twice a year,
-    # which for a weekly radar is nothing. Pinning true local time would need a
-    # guard step that re-checks the hour and exits.
+    # Late Friday, 20:17 UTC -- 21:17 under CET, 22:17 under CEST, because
+    # GitHub cron has no timezone and Europe/Madrid is UTC+1 in winter and
+    # UTC+2 in summer. An hour of drift twice a year, which for a weekly radar
+    # is nothing; pinning true local time would need a guard step that
+    # re-checks the hour and exits.
+    #
+    # End of the day, not the start, because Friday IS release day. The old
+    # 04:17 slot ran before the catalogue had filled: on 2026-10-23 a 06:12 run
+    # saw 7272 ids and the 09:20 run saw 6 more, three of them dated that same
+    # Friday.
+    #
+    # Not later than 20:17, deliberately. The runner's clock is UTC, and both
+    # the issue title (`date -u +%F`) and the date window (dt.date.today() in
+    # core/radar.py) flip at midnight UTC. GitHub's scheduler is best-effort
+    # and ran 5h03m late on 2026-10-23, so a 22:17 slot would have landed on
+    # Saturday's date with a Saturday window. This leaves that slack.
     #
     # :17 rather than :00 on purpose. Scheduled jobs queue, and every cron a
     # human writes lands on the hour, so an off-minute usually starts sooner.
-    - cron: "17 4 * * 5"
+    - cron: "17 20 * * 5"
   workflow_dispatch:
     inputs:
       days:
@@ -41,10 +53,11 @@ on:
         description: "Qobuz storefront"
         default: "gb-en"
 
-# contents: write, because radar.yml commits the state file back and a called
-# workflow can never hold MORE permission than its caller grants -- leaving this
-# at `read` makes the push 403 while every other step succeeds, which is the
-# quietest possible way to lose the state.
+# contents: write buys nothing while stateless: true, because nothing is
+# pushed. Kept anyway, so turning state back on stays a one-line change: a
+# called workflow can never hold MORE permission than its caller grants, and
+# leaving this at `read` makes only the state push 403 while every other step
+# succeeds -- the quietest possible way to lose the state.
 permissions:
   contents: write
   issues: write
@@ -56,4 +69,8 @@ jobs:
       radar: radars/qobuz.py
       title: "releases: known artists"
       days: ${{ inputs.days || '7' }}
+      # The whole window every week, repeats included. The cutoff is inclusive
+      # (core/radar.py's `release.date < cutoff`), so `7` spans eight days and
+      # last Friday reappears in every issue. Expected, not a bug.
+      stateless: true
       extra: --store ${{ inputs.store || 'gb-en' }}

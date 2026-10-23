@@ -55,3 +55,4 @@ intended way round from here.
 | [D29](D29-strategies-are-hypotheses-and-the-log-judges-them.md) | Ranking is several named strategies, unmeasured on purpose, with a committed log to settle them | Accepted |
 | [D30](D30-a-remix-is-not-a-collaboration.md) | A remix is not a collaboration, and two seeds on one record corroborate once | Accepted |
 | [D31](D31-the-baseline-is-the-opponent.md) | The similar-artist baseline is an opponent in the same shown-log, not a separate report | Accepted |
+| [D32](D32-the-known-artist-radar-reports-the-whole-week.md) | The known-artist radar reports the whole week, late on Friday, and records nothing | Accepted |
