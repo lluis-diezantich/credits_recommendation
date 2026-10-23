@@ -42,6 +42,24 @@ def test_older_than_the_cutoff_is_not_news():
     assert verdict(release(date="2026-01-01"), set(), set(), "2026-10-01", KEEP) == "old"
 
 
+def test_a_release_after_the_horizon_is_upcoming():
+    assert verdict(release(date="2099-01-01"), set(), set(), "", KEEP,
+                   "2026-10-23") == "upcoming"
+    assert verdict(release(date="2026-10-23"), set(), set(), "", KEEP,
+                   "2026-10-23") == "new"
+
+
+def test_no_horizon_means_a_pre_order_is_news():
+    """The default, and what radars/itunes.py and listenbrainz.py still want."""
+    assert verdict(release(date="2099-01-01"), set(), set(), "", KEEP) == "new"
+    assert Radar.keep_upcoming is True
+
+
+def test_old_wins_over_upcoming_because_nothing_can_be_both():
+    assert verdict(release(date="2026-01-01"), set(), set(), "2026-10-01", KEEP,
+                   "2026-10-23") == "old"
+
+
 def test_no_cutoff_means_no_date_filter():
     assert verdict(release(date="1974-01-01"), set(), set(), "", KEEP) == "new"
 

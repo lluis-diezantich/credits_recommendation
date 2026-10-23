@@ -116,6 +116,10 @@ class Run:
     failed: int = 0
     empty: int = 0
     shared: int = 0
+    #: Filtered for being dated after the run. Logged but not reported: the
+    #: issue is meant to be what you can play, and runs.jsonl is where a
+    #: filtered category stays countable.
+    upcoming: int = 0
     releases: list[Release] = field(default_factory=list)
     # Every id this run laid eyes on, reported or not.
     everything: set[str] = field(default_factory=set)
@@ -126,16 +130,21 @@ class Run:
 
 
 def verdict(release: Release, seen: set[str], collected: set[str],
-            cutoff: str, keep_types: set[str] | None) -> str:
-    """Why a release is or is not news: new, seen, shared, kind or old.
+            cutoff: str, keep_types: set[str] | None,
+            horizon: str = "") -> str:
+    """Why a release is or is not news: new, seen, shared, kind, old or upcoming.
 
     Pure on purpose -- this is the actual judgement in a radar run, and it is
     worth being able to test it without a network, a clock or a state file.
+    `horizon` is the run's date rather than a clock call for the same reason:
+    empty means "a pre-order is news too", which is what most sources want.
 
-    The order is load-bearing. `shared` must be checked before `kind` and
-    `old`, or a release credited to two watched artists is counted as filtered
-    the second time rather than as a duplicate, and the "listed once" note in
-    the report goes quiet.
+    The order is load-bearing. `shared` must be checked before `kind`, `old`
+    and `upcoming`, or a release credited to two watched artists is counted as
+    filtered the second time rather than as a duplicate, and the "listed once"
+    note in the report goes quiet. `old` and `upcoming` sit together because
+    they are the same decision at the two ends of the window, and no release
+    can be both.
     """
     if release.id in seen:
         return "seen"
@@ -145,6 +154,8 @@ def verdict(release: Release, seen: set[str], collected: set[str],
         return "kind"
     if cutoff and release.date < cutoff:
         return "old"
+    if horizon and release.date > horizon:
+        return "upcoming"
     return "new"
 
 
@@ -159,6 +170,10 @@ class Radar(ABC):
     name: str = "radar"
     #: Release kinds worth reporting. None keeps everything.
     keep_types: set[str] | None = {"Album", "EP", "Single"}
+    #: Whether a release dated after the run is still news. True for a source
+    #: where a pre-order announcement is the point; False where the radar is
+    #: answering "what can I play now", which is radars/qobuz.py (D33).
+    keep_upcoming: bool = True
     #: Seconds between calls. A few hundred back-to-back requests is what
     #: provokes the 5xx in the first place.
     pause: float = 0.0
@@ -294,6 +309,7 @@ def log_run(path: Path, radar: Radar, args, run: Run, reported: int) -> None:
         "scanned": run.scanned,
         "reported": reported,
         "shared": run.shared,
+        "upcoming": run.upcoming,
         "dry_run": bool(args.dry_run),
         "stateless": bool(args.all),
     }
@@ -340,11 +356,20 @@ def execute(radar: Radar, args) -> int:
         for release in batch.releases:
             if not release.id:
                 continue
-            if radar.record_scanned:
-                run.everything.add(release.id)
-            outcome = verdict(release, seen, collected, cutoff, radar.keep_types)
+            outcome = verdict(release, seen, collected, cutoff, radar.keep_types,
+                              "" if radar.keep_upcoming else today.isoformat())
             if outcome == "shared":
                 run.shared += 1
+            if outcome == "upcoming":
+                run.upcoming += 1
+            # The verdict comes FIRST, and an upcoming release is deliberately
+            # not recorded. record_scanned exists so an old release cannot
+            # resurface the week it falls out of the window; banking a
+            # pre-order would do the opposite and much worse -- the album
+            # would be marked seen today and then reported in no issue at all,
+            # not now and not on the day it comes out.
+            if radar.record_scanned and outcome != "upcoming":
+                run.everything.add(release.id)
             if outcome != "new":
                 continue
             collected.add(release.id)

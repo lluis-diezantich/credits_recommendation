@@ -124,7 +124,28 @@ def test_json_report_carries_the_run_not_just_the_rows(qobuz, album, tmp_path):
     report = json.loads(out.read_text())
     assert report["source"] == "qobuz"
     assert report["watching"] == 2 and report["fetched"] == 2 and report["failed"] == 0
-    assert [r["upcoming"] for r in report["releases"]] == [False, True]
+    # The 2099 pre-order is dropped rather than badged (D33), so every row this
+    # radar carries is playable. The key stays in the shape for the sources
+    # that do keep upcoming releases.
+    assert [r["upcoming"] for r in report["releases"]] == [False]
+
+
+def test_a_pre_order_is_neither_reported_nor_recorded(qobuz, album, tmp_path):
+    """The dangerous half is the recording.
+
+    Dropping it from the issue is the point, but banking the id would mean the
+    album is reported in NO issue -- not now, and not in the week it is
+    actually released.
+    """
+    import json
+    log = tmp_path / "runs.jsonl"
+    qobuz.discography = {1: [album(8, 1, date="2026-10-15"),
+                             album(9, 1, date="2099-01-01")]}
+    qobuz.run(["--days", "0", "--run-log", str(log)], watching={1: "One"})
+
+    assert qobuz.saved == {"8"}
+    row = json.loads(log.read_text().splitlines()[-1])
+    assert row["reported"] == 1 and row["upcoming"] == 1
 
 
 def test_a_broken_run_writes_no_report(qobuz, tmp_path):

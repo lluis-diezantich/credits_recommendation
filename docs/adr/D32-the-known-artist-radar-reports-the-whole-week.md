@@ -64,7 +64,7 @@ The 6-id delta over three hours is what puts the cron at the end of Friday. The
 21-versus-4 split is what puts `stateless: true` in the caller.
 
 The two windows differing is a separate bug, fixed in the same change: the
-caller read `days: ${{ inputs.days || '6' }}` while the `workflow_dispatch`
+caller read `days: ${{ inputs.days || '10' }}` while the `workflow_dispatch`
 input defaulted to `"7"`, so every scheduled run had silently been a 10-day
 window and only hand-triggered runs were 7.
 

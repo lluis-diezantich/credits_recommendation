@@ -90,6 +90,10 @@ class QobuzRadar(Radar):
     # inferred from track count -- see classify(). These are the inferred
     # labels to report.
     keep_types = {"Album", "EP", "Single"}
+    # Pre-orders are dropped, not badged. This radar answers "what can I play
+    # now", and a dated row you cannot hear is noise in that answer -- it
+    # reappears on its own in the week it is released. D33.
+    keep_upcoming = False
     pause = PAUSE
     default_days = RECENT_DAYS
 
