@@ -471,16 +471,6 @@
       "ended": "1998-08-09"
     },
     {
-      "name": "Frankie Ruiz y su Orquesta",
-      "mbid": "54281a78-6a60-4356-a99f-f381afef089b",
-      "plays": 384,
-      "ranks": {},
-      "rank": null,
-      "itunes_id": null,
-      "qobuz_match": "exact",
-      "qobuz_id": 4200733
-    },
-    {
       "name": "Kendrick Lamar",
       "mbid": "381086ea-f511-4aba-bdf9-71c753dc5077",
       "plays": 370,
@@ -519,16 +509,6 @@
       "itunes_id": null,
       "qobuz_match": "exact",
       "qobuz_id": 391373
-    },
-    {
-      "name": "j milo",
-      "mbid": null,
-      "plays": 346,
-      "ranks": {},
-      "rank": null,
-      "itunes_id": null,
-      "qobuz_match": "manual",
-      "qobuz_id": 11212195
     },
     {
       "name": "Silvio Rodríguez",
@@ -709,7 +689,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "manual",
-      "qobuz_id": 2309330
+      "qobuz_id": 2309330,
+      "watch": false
     },
     {
       "name": "Paloma Morphy",
@@ -1250,7 +1231,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 3224933
+      "qobuz_id": 3224933,
+      "watch": false
     },
     {
       "name": "Marvin Gaye",
