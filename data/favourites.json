@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-23T15:39:46+00:00",
+  "generated": "2026-10-23T16:09:23+00:00",
   "note": "hand-edits are kept: set \"watch\": false to stop watching an artist (or run stages/favourites.py --mute \"Name\"), and a qobuz_id you fix by hand is never re-resolved.",
   "artists": [
     {
@@ -141,7 +141,7 @@
       "ranks": {},
       "rank": null,
       "itunes_id": null,
-      "qobuz_match": "ambiguous",
+      "qobuz_match": "manual",
       "qobuz_id": 384538
     },
     {
@@ -375,7 +375,7 @@
       "ranks": {},
       "rank": null,
       "itunes_id": null,
-      "qobuz_match": "ambiguous",
+      "qobuz_match": "manual",
       "qobuz_id": 581822
     },
     {
@@ -497,7 +497,7 @@
       "ranks": {},
       "rank": null,
       "itunes_id": null,
-      "qobuz_match": "ambiguous",
+      "qobuz_match": "manual",
       "qobuz_id": 3789
     },
     {
@@ -678,7 +678,7 @@
       "ranks": {},
       "rank": null,
       "itunes_id": null,
-      "qobuz_match": "ambiguous",
+      "qobuz_match": "manual",
       "qobuz_id": 595654
     },
     {
@@ -698,8 +698,8 @@
       "ranks": {},
       "rank": null,
       "itunes_id": null,
-      "qobuz_match": "no_exact_match",
-      "qobuz_id": null
+      "qobuz_match": "manual",
+      "qobuz_id": 16380019
     },
     {
       "name": "Juanito Makandé",
@@ -708,7 +708,7 @@
       "ranks": {},
       "rank": null,
       "itunes_id": null,
-      "qobuz_match": "ambiguous",
+      "qobuz_match": "manual",
       "qobuz_id": 2309330
     },
     {
@@ -893,8 +893,8 @@
       "ranks": {},
       "rank": null,
       "itunes_id": null,
-      "qobuz_match": "ambiguous",
-      "qobuz_id": 62584
+      "qobuz_match": "manual",
+      "qobuz_id": 31249576
     },
     {
       "name": "Majur",
