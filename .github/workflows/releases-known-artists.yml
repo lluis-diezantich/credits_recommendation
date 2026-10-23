@@ -68,7 +68,7 @@ jobs:
     with:
       radar: radars/qobuz.py
       title: "releases: known artists"
-      days: ${{ inputs.days || '7' }}
+      days: ${{ inputs.days || '6' }}
       # The whole window every week, repeats included. The cutoff is inclusive
       # (core/radar.py's `release.date < cutoff`), so `7` spans eight days and
       # last Friday reappears in every issue. Expected, not a bug.
