@@ -172,10 +172,24 @@ not correct.
    scores strategies, not seeds. A per-seed version is the same file with a
    different group-by, once there is anything in it.
 
-6. **Then delivery.** A weekly co-artist issue is mostly static — it changes
-   only when seeds or credits do. The live form is the **people radar**: new
-   releases BY the artists on this list, costed at 68 `artist/get` per run,
-   cheaper than the Friday job already running.
+6. **Delivery, half done.** `./stages/rank.py --markdown` is the issue body —
+   the sentence leads, the score goes in a `<sub>` line, and the posting
+   command prints on stderr so the body stays a body. Pair it with `--log`:
+   posting IS the showing, so that is the run worth recording.
+
+   **It cannot be a workflow, and that is a fact about the data rather than a
+   gap.** The Friday radar posts from CI because its input
+   (`data/favourites.json`) is committed and its source is a live API. This
+   list is built from `data/discovery_*.json` and `data/music.db`, both
+   gitignored, out of an 85 MB `cache/` that is also not committed — so a
+   runner has nothing to read. Making it schedulable means committing ~3 MB of
+   discovery files, which is a decision about what `data/` is for and not a
+   side effect of wanting a cron. Local until then.
+
+   **The people radar is still deliberately not built**: new releases BY the
+   artists on this list, 68 `artist/get` per run, cheaper than the Friday job.
+   It would turn 162 names chosen by an unscored ranker into a watchlist, so
+   it waits for `--score` to separate the strategies.
 
 **~~A similar-artist baseline.~~** Built 2026-10-22
 ([adr/D31](docs/adr/D31-the-baseline-is-the-opponent.md)) and it answers

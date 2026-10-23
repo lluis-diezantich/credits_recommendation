@@ -19,6 +19,7 @@ import pytest
 
 import stages.load as load
 import stages.rank as mod
+from core import shown
 
 TODAY = dt.date(2026, 10, 22)
 
@@ -304,3 +305,54 @@ def test_distinct_records_across_seeds_corroborate_twice(store):
     store.co_artist(2, "p", "P", own=1)
     row, = store.rows()
     assert (row["seeds"], row["albums"], row["corroboration"]) == (2, 2, 2)
+
+
+# ---- delivery -----------------------------------------------------------
+
+
+def test_the_markdown_body_leads_with_the_sentence_not_the_score(store, capsys):
+    """The sentence is the product (D21). A table wide enough to hold one is
+    unreadable, so the score goes in a sub line and the name leads."""
+    store.co_artist(1, "p", "P", own=2, last="2024-01-01")
+    store.credit("p-1-0", "p", "Guitar")
+    store.run("--markdown", "--top", "1")
+    said = capsys.readouterr().out
+    assert said.startswith("# Credits radar - ")
+    assert "1. **P** - P is billed on 2 of Jorge Drexler's records" in said
+    assert "<sub>via Jorge Drexler - score" in said
+
+
+def test_the_body_names_the_strategy_and_the_candidate_count(store, capsys):
+    """Provenance, so a reader of the issue can reproduce the list."""
+    store.co_artist(1, "p", "P", own=1)
+    store.run("--markdown", "--strategy", "taste", "--top", "1")
+    said = capsys.readouterr().out
+    assert "ranked by **taste**" in said
+    assert "stages/rank.py --strategy taste" in said
+
+
+def test_markdown_prints_the_posting_command_on_stderr(store, capsys):
+    """So the body stays a body: a shell comment inside it would render."""
+    store.co_artist(1, "p", "P", own=1)
+    store.run("--markdown", "--top", "1")
+    said = capsys.readouterr()
+    assert "gh issue create" in said.err
+    assert "gh issue create" not in said.out
+
+
+def test_markdown_and_log_together_record_what_was_posted(store):
+    """Posting IS the showing, so the run that produces the body is the run
+    worth logging."""
+    store.co_artist(1, "p", "P", own=1)
+    store.run("--markdown", "--log", "--top", "1")
+    runs = shown.load(store.dir)
+    assert len(runs) == 1 and runs[0]["top"][0]["name"] == "P"
+
+
+def test_json_carries_the_sentence_so_a_consumer_need_not_rebuild_it(store,
+                                                                      capsys):
+    store.co_artist(1, "p", "P", own=1)
+    store.run("--json", "--top", "1")
+    rows = json.loads(capsys.readouterr().out)
+    assert rows[0]["why"].startswith("P is billed on one of Jorge Drexler")
+    assert "example" not in rows[0]

@@ -11,6 +11,7 @@ of everyone your artists have made records with, who is worth hearing first.
     ./stages/rank.py --list                  # the strategies and their claims
     ./stages/rank.py --log                   # record what this run showed
     ./stages/rank.py --score                 # did the logged names get played?
+    ./stages/rank.py --markdown --log        # an issue body, and record it
 
 Reads data/music.db and nothing else -- no network. The strategies are in
 `policy.py` (D1) and the ordering is `core.rank` (D2); what lives here is the
@@ -166,6 +167,38 @@ def score_text(row: dict) -> str:
     return " | ".join(f"{part:.3g}" for part in row["sort_key"])
 
 
+def markdown(rows: list[dict], limit: int, source: str, total: int,
+             today: dt.date) -> str:
+    """The list as an issue body: the sentence is the content, not the score.
+
+    A list rather than a table, because the sentence is the product (D21) and
+    a table wide enough to hold one is unreadable on a phone. The score is in
+    the provenance line at the bottom, where somebody checking the ordering
+    will look for it and nobody else has to.
+
+    NOT a workflow. The Friday radar posts from CI because its inputs are
+    committed (data/favourites.json) and its source is a live API. This list
+    is built from data/discovery_*.json and data/music.db, both gitignored,
+    out of an 85 MB cache that is also not committed -- so there is nothing
+    for a runner to read. Delivery is local until that changes, and the
+    printed `gh` line is the whole of it.
+    """
+    out = [f"# Credits radar - {today.isoformat()}", "",
+           f"{total} unheard artists your music has in common, "
+           f"ranked by **{source}**. Every clause below is a stored row "
+           "somebody can go and check.", ""]
+    for position, row in enumerate(rows[:limit], 1):
+        seeds = (row["seed_names"] or "").replace(",", ", ")
+        out.append(f"{position}. **{row['name']}** - {sentence(row)}")
+        out.append(f"   <sub>via {seeds} - score {score_text(row)}</sub>")
+        out.append("")
+    out += ["---", "",
+            f"<sub>`stages/rank.py --strategy {source}`, "
+            f"{total} candidates, top {min(limit, len(rows))} shown. "
+            "Logged to `data/shown.json`; `--score` reads it back.</sub>"]
+    return "\n".join(out)
+
+
 def show(rows: list[dict], limit: int) -> None:
     for position, row in enumerate(rows[:limit], 1):
         seeds = (row["seed_names"] or "").replace(",", ", ")
@@ -230,6 +263,8 @@ def main() -> int:
                         help=f"append what this run showed to data/{LOG}")
     parser.add_argument("--score", action="store_true",
                         help="per strategy, how many shown names were played since")
+    parser.add_argument("--markdown", action="store_true",
+                        help="the list as an issue body, for gh issue create")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
@@ -281,8 +316,16 @@ def report(con: sqlite3.Connection, args) -> int:
     name = args.strategy or policy.DEFAULT_STRATEGY
     ordered = rank.ranked(rows, policy.strategy(name))
 
-    if args.json:
-        print(json.dumps([{k: v for k, v in r.items() if k != "example"}
+    if args.markdown:
+        print(markdown(ordered, args.top, name, len(ordered), today))
+        print("\n# post it with:\n#   ./stages/rank.py --markdown --log "
+              f"> body.md && gh issue create --title 'Credits radar "
+              f"{today.isoformat()}' --body-file body.md", file=sys.stderr)
+    elif args.json:
+        # The sentence travels with the facts: it is the product, and a
+        # consumer that had to rebuild it would need `example` too.
+        print(json.dumps([{**{k: v for k, v in r.items() if k != "example"},
+                           "why": sentence(r)}
                           for r in ordered[:args.top]],
                          indent=2, ensure_ascii=False, default=str))
     else:
