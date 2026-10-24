@@ -74,6 +74,11 @@ written beside each, the same stance `data/favourites.json` takes where nothing
 can be derived. It is kept to names seen in a walked corpus so it stays
 checkable, rather than being a guess at what the next seed will turn up.
 
+> Superseded in part by [D35](D35-the-seeds-own-band-is-its-own-reason.md):
+> the four keys are now two lists, because two of them are the seed under
+> another name rather than billings that are not artists, and the drop line
+> said the wrong thing about them. The compilation rule above is unaffected.
+
 Both apply **on read**, in `stages/co_artists.py`, which is
 [D15](D15-filters-before-ranking.md)'s stance: the rows stay in the store with
 their provenance, so a label that turns out to be wrong costs a different

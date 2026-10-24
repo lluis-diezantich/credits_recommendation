@@ -47,7 +47,7 @@ intended way round from here.
 | [D21](D21-explanations-name-what-the-person-did.md) | An explanation names what the person did, and every clause is a row | Accepted |
 | [D22](D22-co-appearance-is-the-second-pipeline.md) | Co-appearance becomes the second pipeline, and more seeds is now the point | Accepted |
 | [D23](D23-ask-musicbrainz-who-the-seed-is.md) | Ask MusicBrainz which names the seed is credited under, and fold editions by title | Accepted |
-| [D24](D24-a-record-nobody-holds.md) | A record no artist holds is a compilation, not a collaboration; and a hand list for billings that are not artists | Accepted |
+| [D24](D24-a-record-nobody-holds.md) | A record no artist holds is a compilation, not a collaboration; and a hand list for billings that are not artists | Superseded by D35 (the hand list only) |
 | [D25](D25-one-person-one-key.md) | One person, one key, from a hand-edited alias file fed by a report rather than a name lookup | Accepted |
 | [D26](D26-seeds-by-rule.md) | A seed is chosen by rule from the profile, and walked intersections-first | Accepted |
 | [D27](D27-the-class-fallback-gets-rules.md) | The role-class fallback gets marker rules, sleeve credits get their own class | Accepted |
@@ -58,3 +58,4 @@ intended way round from here.
 | [D32](D32-the-known-artist-radar-reports-the-whole-week.md) | The known-artist radar reports the whole week, late on Friday, and records nothing | Accepted |
 | [D33](D33-a-pre-order-is-not-news.md) | The Qobuz radar drops releases dated after the run, and does not record them | Accepted |
 | [D34](D34-a-confident-match-can-still-be-wrong.md) | A catalogue that predates the artist is flagged, and an exact match is not exempt | Accepted |
+| [D35](D35-the-seeds-own-band-is-its-own-reason.md) | The seed's own band is dropped for its own stated reason, not as "not an artist" | Accepted |

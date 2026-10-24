@@ -290,9 +290,11 @@ Björk's 35 co-artists came off one remix album
 `co_artist_albums.provenance` says which is which, so the filter is this `WHERE`
 clause rather than a rewalk.
 
-`stages/co_artists.py` applies one more cut that no query can: `policy.NOT_ARTISTS`,
-a hand list of billings that are not an artist at all — the *A COLORS SHOW*
-channel, an actor reading on a track, Björk's own former bands.
+`stages/co_artists.py` applies one more cut that no query can: two hand lists.
+`policy.NOT_ARTISTS` holds billings that are not an artist at all — the *A
+COLORS SHOW* channel, an actor reading on a track. `policy.SEED_OWN_BANDS`
+holds Björk's own former bands, dropped because they are the seed under
+another name, and reported in those words rather than as the first reason.
 
 **The shortlist** — the credits thesis, as something a person can actually read.
 Filtered first, then ordered: `policy.shortlisted`'s three cuts, then

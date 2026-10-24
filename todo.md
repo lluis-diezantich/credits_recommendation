@@ -1032,6 +1032,18 @@ both still under an hour.
   Comparing Qobuz titles against MusicBrainz release-groups is what would
   catch them, at the cost of refetching all 154 cached artists with
   `inc=release-groups` — D34 option 1, deliberately not taken yet.
+- **A seed's own former band is a hand entry, not a rule.**
+  `policy.SEED_OWN_BANDS` holds `k.u.k.l.` and `the sugarcubes`
+  ([adr/D35](docs/adr/D35-the-seeds-own-band-is-its-own-reason.md)), so seed 11
+  arrives with its own renamed band and nothing notices. MusicBrainz states the
+  relationship as `member of band` on the artist document
+  `core/musicbrainz.py` already fetches, so the derivation costs no request —
+  it is blocked on one thing: `normalise()` keeps the periods in `"K.U.K.L."`
+  and MusicBrainz files it as `"KUKL"`, so the keys never meet. **A name key
+  that strips punctuation is the measurement to do**, over the 380 candidates
+  and the alias file, because it folds other names too and D25 is the warning
+  about folding two people into one by accident. Worth it at a third seed with
+  a renamed band, not before.
 - **~~`README.md` says `65 cases`.~~** It says 551, which is what it is. Worth
   a glance whenever a batch of tests lands — it has been wrong twice now.
 

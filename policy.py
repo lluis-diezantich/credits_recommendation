@@ -713,24 +713,30 @@ MADE_TOGETHER = {"own", "guest"}
 # is wrong. docs/adr/D27.
 # ---------------------------------------------------------------------------
 
-NOT_ARTISTS = {"colors", "penelope cruz",
-               # Bjork's own bands, which are the seed under another name
-               # rather than a collaborator. MusicBrainz states both as
-               # `member of band` on the request core.musicbrainz already
-               # makes, but normalise() keeps the periods in "K.U.K.L." and
-               # MusicBrainz files it as "KUKL", so the keys do not meet.
-               # Listed here until a name key that strips punctuation is
-               # worth its own measurement.
-               "k.u.k.l.", "the sugarcubes"}
+NOT_ARTISTS = {"colors", "penelope cruz"}
+
+# Bjork's own bands, which are the seed under another name rather than a
+# collaborator. MusicBrainz states both as `member of band` on the request
+# core.musicbrainz already makes, but normalise() keeps the periods in
+# "K.U.K.L." and MusicBrainz files it as "KUKL", so the keys do not meet.
+# Listed here until a name key that strips punctuation is worth its own
+# measurement.
+#
+# Kept APART from NOT_ARTISTS because the drop is right for a different
+# reason and the report said the wrong one: "The Sugarcubes is not an artist"
+# is false, and it was printed beside a YouTube channel and an actor. Same
+# lesson as `why_not_a_co_artist`'s own docstring, one list later.
+SEED_OWN_BANDS = {"k.u.k.l.", "the sugarcubes"}
 
 
 def billed_as_artist(person_key: str) -> bool:
     """Is this billing somebody with records of their own?
 
     Reads the normalised key rather than the display name, so the spelling
-    Qobuz filed does not decide it.
+    Qobuz filed does not decide it. Both lists, because both are billings with
+    no discography to recommend -- `why_not_a_co_artist` is where they part.
     """
-    return person_key not in NOT_ARTISTS
+    return person_key not in NOT_ARTISTS and person_key not in SEED_OWN_BANDS
 
 
 # ---------------------------------------------------------------------------
@@ -768,9 +774,12 @@ REMIX_MARKER = "remix"
 def why_not_a_co_artist(person_key: str, roles) -> str | None:
     """Which read-side filter this row fails, in words, or None if it passes.
 
-    One place, so the three reasons cannot be reported as each other: calling
-    them all "not an artist" said that about Gesaffelstein, who is one.
+    One place, so the four reasons cannot be reported as each other: calling
+    them all "not an artist" said that about Gesaffelstein, who is one, and
+    about the Sugarcubes, who are Bjork's first band.
     """
+    if person_key in SEED_OWN_BANDS:
+        return "the seed under another name"
     if not billed_as_artist(person_key):
         return "not an artist"
     if not billed_as_musician(roles):

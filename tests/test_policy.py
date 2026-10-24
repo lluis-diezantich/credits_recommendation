@@ -590,6 +590,15 @@ def test_the_seeds_own_bands_are_not_collaborators():
     assert not policy.billed_as_artist("the sugarcubes")
 
 
+def test_the_seeds_own_band_is_not_reported_as_not_an_artist():
+    """The drop was always right and the reason printed was not: the report
+    put the Sugarcubes beside a YouTube channel and an actor."""
+    for key in ("k.u.k.l.", "the sugarcubes"):
+        assert (policy.why_not_a_co_artist(key, ["MainArtist"])
+                == "the seed under another name")
+    assert policy.why_not_a_co_artist("colors", ["MainArtist"]) == "not an artist"
+
+
 def test_an_ensemble_billed_alongside_the_seed_is_an_artist():
     """Deliberately NOT on the list: a trio, a murga and a choir all have
     records of their own."""
@@ -935,5 +944,6 @@ def test_only_a_sleeve_credit_fails_it_not_an_engineering_one():
 def test_liniers_is_no_longer_a_hand_entry():
     """The hand list was standing in for the class fallback one layer down."""
     assert "liniers" not in policy.NOT_ARTISTS
-    assert sorted(policy.NOT_ARTISTS) == [
-        "colors", "k.u.k.l.", "penelope cruz", "the sugarcubes"]
+    assert "liniers" not in policy.SEED_OWN_BANDS
+    assert sorted(policy.NOT_ARTISTS) == ["colors", "penelope cruz"]
+    assert sorted(policy.SEED_OWN_BANDS) == ["k.u.k.l.", "the sugarcubes"]
