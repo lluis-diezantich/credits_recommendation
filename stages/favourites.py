@@ -28,6 +28,7 @@ so two spellings of one artist can both appear -- mute one with "watch": false.
     ./stages/favourites.py --user X --count 20            # per window, not total
     ./stages/favourites.py --user X --refresh             # re-ask about ids we have
     ./stages/favourites.py --review                       # fix the doubtful ones
+    ./stages/favourites.py --check-matches                # whose id looks wrong
     ./stages/favourites.py --mute "Bobby Cruz"            # stop watching someone
     ./stages/favourites.py --unmute "Bobby Cruz"          # watch them again
 
@@ -45,6 +46,7 @@ import sys
 import time
 from pathlib import Path
 
+import policy
 from core import favourites, musicbrainz
 from core.http import get as _http_get
 from core.names import normalise
@@ -52,7 +54,15 @@ from core.paths import DATA
 
 # pick() refuses fuzzy matches on purpose, which is why unresolved names are
 # reported for hand-filling instead of being guessed at.
-from core.qobuz import PAUSE, STORE, artist_name, pick, search_artists, store_cookies
+from core.qobuz import (
+    PAUSE,
+    STORE,
+    artist_name,
+    artist_releases,
+    pick,
+    search_artists,
+    store_cookies,
+)
 
 STATS_URL = "https://api.listenbrainz.org/1/stats/user/{user}/artists"
 
@@ -201,6 +211,99 @@ def check_active(refresh: bool, dry_run: bool) -> int:
     return 0
 
 
+def check_matches(store: str, dry_run: bool) -> int:
+    """Flag watched artists whose Qobuz catalogue predates the artist.
+
+    The gap --review cannot reach. An `exact` match is never re-asked, so a
+    confidently wrong id reports someone else's releases every Friday until a
+    human notices -- which is how "ZOO" spent a week returning English singles
+    for a band that sings in Valencian.
+
+    One Qobuz request per artist, the same cost as a radar run, and NO new
+    MusicBrainz request: the begin year is already in the cache --check-active
+    filled. Artists MusicBrainz has no begin date for are reported as
+    unknowable rather than counted as clean, because an unanswerable check
+    must not read as a pass.
+
+    It flags, and never reclassifies (D5). `qobuz_match` stays whatever the
+    resolver decided -- the resolver was not wrong about what it did -- and the
+    doubt lands in a separate `suspect` field, which --review then picks up.
+    The two facts are kept apart for the same reason `ended` and `watch` are.
+    """
+    entries = favourites.load()
+    if not entries:
+        sys.exit(f"no {favourites.FILE.name} yet - run the resolve first")
+
+    watched = [e for e in entries
+               if e.get("watch", True) and not e.get("ended") and e.get("qobuz_id")]
+    askable = [e for e in watched if e.get("mbid")]
+    print(f"{len(askable)} of {len(watched)} watched artists have an MBID "
+          f"({len(askable)} Qobuz requests at {PAUSE}s)", file=sys.stderr)
+
+    cookies = store_cookies(store)
+    flagged = clean = unknowable = failed = changed = 0
+    for n, entry in enumerate(askable):
+        if n:
+            time.sleep(PAUSE)
+        began = musicbrainz.began_year(musicbrainz.artist(entry["mbid"]))
+        name, albums, ok = artist_releases(entry["qobuz_id"], store, cookies)
+        if not ok:
+            failed += 1
+            print(f"  no answer   {entry['name']}", file=sys.stderr)
+            continue
+        if began is None:
+            unknowable += 1
+            print(f"  no begin    {entry['name']}", file=sys.stderr)
+            continue
+
+        early = sorted(
+            ((album.get("release_date_original") or "")[:10], album.get("title") or "")
+            for album in albums
+            if musicbrainz.predates(album.get("release_date_original") or "", began,
+                                    policy.MATCH_SPAN_SLACK_YEARS)
+        )
+        was = entry.get("suspect")
+        if not early:
+            clean += 1
+            if was:
+                # The id was fixed, or Qobuz tidied the page. Drop the flag the
+                # same way --check-active drops a stale `ended`.
+                entry.pop("suspect", None)
+                changed += 1
+                print(f"  cleared     {entry['name']}")
+            continue
+
+        flagged += 1
+        note = (f"catalogue starts {early[0][0]}, but MusicBrainz says "
+                f"{entry['name']} began {began}")
+        print(f"  SUSPECT     {entry['name']} ({entry['qobuz_id']}, "
+              f"{len(albums)} albums, {entry.get('qobuz_match')})")
+        print(f"              {note}")
+        for date, title in early[:3]:
+            print(f"              {date}  {title}")
+        if len(early) > 3:
+            print(f"              ... and {len(early) - 3} more")
+        if was != note:
+            entry["suspect"] = note
+            changed += 1
+
+    noidea = [e["name"] for e in watched if not e.get("mbid")]
+    print(f"\n{flagged} suspect, {clean} consistent, {unknowable} with no begin "
+          f"date, {failed} unanswered.")
+    if noidea:
+        print(f"{len(noidea)} watched with no MBID, so unchecked: "
+              f"{', '.join(noidea)}")
+    if not changed:
+        print("nothing changed.")
+        return 0
+    if dry_run:
+        print("--dry-run: nothing written.")
+        return 0
+    favourites.save(entries, dt.datetime.now(dt.UTC).isoformat(timespec="seconds"))
+    print(f"wrote {favourites.FILE} ({changed} changed)")
+    return 0
+
+
 def set_watch(names: list[str], watching: bool, dry_run: bool) -> int:
     """Mute or unmute artists by name, so the file need not be hand-edited.
 
@@ -263,9 +366,14 @@ def review(store: str, dry_run: bool) -> int:
     if not entries:
         sys.exit(f"no {favourites.FILE.name} yet - run without --review first")
 
+    # `suspect` overrides the exact/manual skip: --check-matches only ever
+    # flags a row BECAUSE the confident answer looks wrong, so skipping it for
+    # being confident is the bug, not the feature.
     pending = [
         entry for entry in entries
-        if entry.get("watch", True) and entry.get("qobuz_match") not in ("exact", "manual")
+        if entry.get("watch", True)
+        and (entry.get("suspect")
+             or entry.get("qobuz_match") not in ("exact", "manual"))
     ]
     if not pending:
         print(f"nothing to review: every artist in {favourites.FILE.name} is "
@@ -391,6 +499,9 @@ def main() -> int:
     parser.add_argument("--refresh-active", action="store_true",
                         help="with --check-active, re-ask MusicBrainz instead of "
                              "reading the cache")
+    parser.add_argument("--check-matches", action="store_true",
+                        help="flag watched artists whose Qobuz catalogue "
+                             "starts before the artist did")
     parser.add_argument("--review", action="store_true",
                         help="walk the entries that did not resolve cleanly and pick by hand")
     parser.add_argument("--mute", nargs="+", metavar="NAME",
@@ -408,10 +519,13 @@ def main() -> int:
         return set_watch(args.mute or args.unmute, bool(args.unmute), args.dry_run)
     if args.check_active:
         return check_active(args.refresh_active, args.dry_run)
+    if args.check_matches:
+        return check_matches(args.store, args.dry_run)
     if args.review:
         return review(args.store, args.dry_run)
     if not args.user and not args.from_profile:
-        parser.error("--user is required (or use --review, or --from-profile)")
+        parser.error("--user is required (or use --review, --check-matches, "
+                     "or --from-profile)")
 
     if args.from_profile:
         merged = candidates_from_profile(Path(args.from_profile))

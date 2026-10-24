@@ -104,6 +104,39 @@ def why(entity: dict | None) -> str:
     return "died" if entity and entity.get("type") == "Person" else "split"
 
 
+def began_year(entity: dict | None) -> int | None:
+    """The year the artist started, or None when MusicBrainz does not say.
+
+    `life-span.begin` is "2014", "2008-05" or "1996-07-04" depending on what
+    anyone bothered to enter, so only the year is trusted. None rather than 0:
+    18 of 154 cached artists have no begin date, and "no idea" must not read
+    as "year zero" and flag their whole catalogue.
+    """
+    begin = ((entity or {}).get("life-span") or {}).get("begin") or ""
+    head = str(begin)[:4]
+    return int(head) if head.isdigit() else None
+
+
+def predates(earliest: str, began: int | None, slack_years: int = 0) -> bool:
+    """Does a catalogue start before the artist it is attributed to existed?
+
+    Pure, and the actual judgement behind --check-matches, so it is testable
+    without a network or a cache. True means the two facts contradict each
+    other -- which is evidence the Qobuz id is wrong or holds more than one
+    artist, never proof of either.
+
+    Unknowable is not suspicious: no begin year, or an undated catalogue,
+    returns False. The slack is policy's (MATCH_SPAN_SLACK_YEARS), because how
+    much disagreement is tolerable is contestable and this module is plumbing.
+    """
+    if began is None:
+        return False
+    head = str(earliest)[:4]
+    if not head.isdigit():
+        return False
+    return int(head) < began - slack_years
+
+
 def names(entity: dict | None) -> list[str]:
     """Every name MusicBrainz knows this artist by, primary name first.
 

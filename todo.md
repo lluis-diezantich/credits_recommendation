@@ -1012,8 +1012,26 @@ both still under an hour.
   non-mill recordings. One song has 19 performers and one has 16; the long tail
   has one each. Worth building as a lookup, not as a feature anyone would
   notice. Measured 2026-10-17.
-- **`--review` cannot re-ask about a row that resolved `exact`.** A wrong id
-  that looked confident can only be fixed by editing the JSON.
+- **~~`--review` cannot re-ask about a row that resolved `exact`.~~** Fixed
+  2026-10-23 ([adr/D34](docs/adr/D34-a-confident-match-can-still-be-wrong.md)):
+  `./stages/favourites.py --check-matches` flags an id whose catalogue starts
+  before MusicBrainz says the artist did, and a `suspect` field overrides the
+  exact/manual skip so `--review` asks about it.
+- **A flag is not a fix when Qobuz has MERGED two artists under one id.** Both
+  rows D34 found are the right artist with a stowaway: `Y La Bamba` (737125)
+  carries three Colombian cumbia records from 1996-98 under a Portland band
+  formed in 2008, and `Chuwi` (4244764) carries one Russian single. There is
+  no other id to pick, so the only real fix is filtering releases *within* an
+  id — a per-entry exclusion list, or a date floor per artist. Unbuilt on
+  purpose: two artists is not yet enough to know which shape earns its
+  complexity, and the radar only reports the recent window anyway, so an
+  old stowaway is mostly harmless. It stops being harmless the first time a
+  merged artist releases something NEW.
+- **Same-era name collisions are invisible to `--check-matches`.** Two artists
+  called the same thing who both started in 2015 produce no contradiction.
+  Comparing Qobuz titles against MusicBrainz release-groups is what would
+  catch them, at the cost of refetching all 154 cached artists with
+  `inc=release-groups` — D34 option 1, deliberately not taken yet.
 - **~~`README.md` says `65 cases`.~~** It says 551, which is what it is. Worth
   a glance whenever a batch of tests lands — it has been wrong twice now.
 

@@ -57,3 +57,4 @@ intended way round from here.
 | [D31](D31-the-baseline-is-the-opponent.md) | The similar-artist baseline is an opponent in the same shown-log, not a separate report | Accepted |
 | [D32](D32-the-known-artist-radar-reports-the-whole-week.md) | The known-artist radar reports the whole week, late on Friday, and records nothing | Accepted |
 | [D33](D33-a-pre-order-is-not-news.md) | The Qobuz radar drops releases dated after the run, and does not record them | Accepted |
+| [D34](D34-a-confident-match-can-still-be-wrong.md) | A catalogue that predates the artist is flagged, and an exact match is not exempt | Accepted |

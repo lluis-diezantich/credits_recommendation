@@ -1183,3 +1183,31 @@ def strategy(name: str | None):
         known = ", ".join(sorted(RANKING_STRATEGIES))
         raise KeyError(f"unknown ranking strategy {chosen!r} - known: {known}")
     return RANKING_STRATEGIES[chosen]
+
+
+# ---------------------------------------------------------------------------
+# Match plausibility: does this Qobuz catalogue belong to this artist?
+# ---------------------------------------------------------------------------
+#
+# A name match can be confidently wrong. "ZOO" resolved `exact` to a Qobuz id
+# holding 174 albums by several unrelated acts, and the Friday radar reported
+# English singles for a band that sings in Valencian for a week before anyone
+# noticed. An `exact` match is never re-asked by --review, so nothing catches
+# this except reading the issue and being suspicious.
+#
+# The check that does catch it needs no new request: MusicBrainz already states
+# when the artist began, and a catalogue that starts before they existed is a
+# contradiction rather than a matter of taste.
+#
+# ZERO slack, and that is measured rather than assumed. Over the 111 watched
+# artists with both a MusicBrainz begin year and a dated Qobuz catalogue
+# (2026-10-23), 109 showed no contradiction at all and the only two that did
+# were both genuine:
+#
+#   CHUWI       began 2020, earliest 2019-08-14 -- a Russian CHUWI merged in
+#   Y La Bamba  began 2008, earliest 1996-07-04 -- Colombian cumbia merged in
+#
+# So one year of slack would already have hidden CHUWI, and there is no noise
+# to buy off. Compared year to year, because `life-span.begin` is often a bare
+# year and month precision would flag a debut released in the founding year.
+MATCH_SPAN_SLACK_YEARS = 0
