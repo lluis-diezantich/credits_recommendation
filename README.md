@@ -1,24 +1,15 @@
 # music_recommendation
 
-New releases from the artists you already listen to, as a GitHub issue every
-Friday. One watchlist, four sources, no ranking.
+Personal project for recommending music.
 
-## What runs on a schedule
+## Features
 
-| | | |
-|---|---|---|
-| new releases from artists you already know | `radars/qobuz.py` over `data/favourites.json` | Fridays, as a GitHub issue |
-| the test suite | `pytest` | every push and pull request |
+- New releases for known artists
 
 ## Install
 
     python3 -m venv .venv && ./.venv/bin/pip install -e ".[dev]"
-    ./.venv/bin/pre-commit install          # ruff before the commit, not after
-
-CI installs from `requirements.lock` (runtime) and `requirements-dev.lock`
-(plus the tooling) with `--require-hashes`, so a release somebody else ships
-cannot turn the Friday radar red. Both are generated — regenerate with the
-`uv pip compile` line in their headers after changing `pyproject.toml`.
+    ./.venv/bin/pre-commit install
 
 ## Running it
 
@@ -29,9 +20,7 @@ cannot turn the Friday radar red. Both are generated — regenerate with the
     ./radars/remezcla.py                   # a blog, not an id namespace
     pytest -q                              # the suite, offline
 
-`python -m radars.qobuz` works as well as `./radars/qobuz.py`. Each radar
-writes JSON, `radars/report.py` turns that into the markdown the issue carries,
-and `docs/radars.md` is what you need to write another one.
+Each radar writes JSON, `radars/report.py` turns that into markdown.
 
 ## Layout
 
@@ -50,9 +39,12 @@ and `docs/radars.md` is what you need to write another one.
                        tests.yml: ruff, ty, pytest --cov on 3.11/3.12/3.13
     requirements*.lock hashed pins for CI - generated, see their headers
 
-Deleting `cache/` costs a refetch and, for anything Qobuz has edited since, the
-ability to reproduce an old output exactly. It is 85 MB and is not backed up
-anywhere; `docs/adr/D7-cache-is-the-corpus.md` is the decision.
+`radars/remezcla.py` is the only thing here that reads `cache/`, and
+`cache/remezcla` is 84 MB of issues it treats as cached forever — a published
+issue never changes, so deleting them costs a refetch of every issue the blog
+still serves. The other subdirectories are the archived pipeline's corpus, not
+this radar's. None of it is backed up anywhere;
+`docs/adr/D7-cache-is-the-corpus.md` is the decision.
 
 ## Docs
 
