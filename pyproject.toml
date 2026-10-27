@@ -8,7 +8,7 @@
 # The cost is real: `./radars/qobuz.py` now needs the venv on PATH.
 #     python3 -m venv .venv && ./.venv/bin/pip install -e ".[dev]"
 [project]
-name = "credits-recommendation"
+name = "music-recommendation"
 version = "0.1.0"
 description = "Credits-based music discovery: who made the records you like, and what else they made."
 requires-python = ">=3.11"        # uses `X | None` at runtime and Self-less generics

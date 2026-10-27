@@ -1,4 +1,4 @@
-# credits_recommendation
+# music_recommendation
 
 Credits-based music discovery. Start from one artist, read who actually made
 their records — producers, engineers, players — then find what else those people
