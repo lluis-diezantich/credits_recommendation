@@ -8,9 +8,12 @@
 # The cost is real: `./radars/qobuz.py` now needs the venv on PATH.
 #     python3 -m venv .venv && ./.venv/bin/pip install -e ".[dev]"
 [project]
-name = "credits-recommendation"
+name = "music-recommendation"
 version = "0.1.0"
-description = "Credits-based music discovery: who made the records you like, and what else they made."
+description = "New releases from the artists you already listen to, as a weekly issue."
+# Was "Credits-based music discovery: who made the records you like, and what
+# else they made." That is still the description on the `ranking` branch, where
+# the code it describes lives. D41.
 requires-python = ">=3.11"        # uses `X | None` at runtime and Self-less generics
 dependencies = [
     "requests>=2.32",             # core/http.py: pooling, and urllib3's Retry

@@ -1,4 +1,4 @@
-# credits_recommendation
+# music_recommendation
 
 New releases from the artists you already listen to, as a GitHub issue every
 Friday. One watchlist, four sources, no ranking.
