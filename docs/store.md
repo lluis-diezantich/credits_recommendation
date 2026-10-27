@@ -296,6 +296,32 @@ COLORS SHOW* channel, an actor reading on a track. `policy.SEED_OWN_BANDS`
 holds Björk's own former bands, dropped because they are the seed under
 another name, and reported in those words rather than as the first reason.
 
+`ubiquity` is how many releases Discogs holds for each candidate — the input
+`policy.selectivity()` never had ([adr/D36](adr/D36-ubiquity-is-a-rival-strategy-not-a-penalty.md)).
+One row per person, because how prolific somebody is does not vary by which
+seed found them. **Read it through `policy.trusted_ubiquity()` and never raw:**
+`match` is load-bearing, not provenance. Only `exact` is believed, because a
+wrong same-name pick returns a small catalogue (Discogs reports 1 release for
+Travis Scott under an ambiguous match) and small reads as scarce — so an
+untrusted row would be promoted by the feature meant to demote it. 376 of 580
+counts are believed; the table keeps all 580 so the discarded ones stay
+countable.
+
+Which seeds are one **scene** is derived from three tables, not stored:
+`co_artists` for shared collaborators, `listens` for sessions you played two
+seeds in, and `artist_genres` (joined through `seeds.mbid`) as a veto on the
+second. `./stages/rank.py --by-scene` draws one ranked list per group
+([adr/D37](adr/D37-one-list-per-scene.md),
+[adr/D38](adr/D38-scenes-from-credits-listening-and-a-genre-veto.md)). Changing
+a floor costs a rerun and no requests.
+
+Two traps. **A genre is a veto and never a link** — linking on a shared tag
+put 18 of 20 seeds in one scene through "pop" and "jazz". And **the grouping
+needs the listens export**: built with `--no-listens`, every lift is 0 and it
+silently falls back to credits alone. Worth knowing before writing a
+cross-seed query: **2 of 380 candidates connect to more than one scene**, so a
+seed count is almost always a count within one.
+
 **The shortlist** — the credits thesis, as something a person can actually read.
 Filtered first, then ordered: `policy.shortlisted`'s three cuts, then
 `policy.ranked_score`'s penalty on a shaky name match, then unheard and recent.

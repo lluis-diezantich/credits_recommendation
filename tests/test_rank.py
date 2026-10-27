@@ -26,7 +26,10 @@ def feat(**over) -> dict:
            "albums": None, "seed_names": "Jorge Drexler", "on_seeds": 0,
            "on_theirs": 0, "records": 0, "roles": [], "role_weight": 0.0,
            "first_seen": None, "last_seen": None, "recency": 0.0, "span": 0.0,
-           "seed_plays": 0, "plays": 0}
+           "seed_plays": 0, "plays": 0,
+           # Unpenalised unless a test says otherwise, which is what a missing
+           # count means: `selective` then scores exactly like `breadth`.
+           "total_releases": None, "ubiquity": 1.0}
     row.update(over)
     row["records"] = row["on_seeds"] + row["on_theirs"]
     # Default: as many distinct records as there are seeds, which is the case

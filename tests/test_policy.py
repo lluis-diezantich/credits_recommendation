@@ -180,6 +180,67 @@ def test_selectivity_never_rises_with_the_release_count():
     assert scores == sorted(scores, reverse=True)
 
 
+# ---- ubiquity: which counts are believed, and what missing means ---------
+
+
+@pytest.mark.parametrize("match,total,expected", [
+    ("exact", 859, 859),
+    ("exact", 1, 1),
+    ("ambiguous", 1, None),     # Travis Scott, Sech, The Marias all read 1
+    ("ambiguous", 5000, None),  # the VALUE is not the question, the kind is
+    (None, 100, None),
+    ("exact", 0, None),         # a page with no releases is not a measurement
+    ("exact", None, None),
+])
+def test_only_an_exact_match_is_a_trusted_count(match, total, expected):
+    assert policy.trusted_ubiquity(match, total) == expected
+
+
+def test_a_missing_count_is_neither_penalised_nor_rewarded():
+    """The decision, not a default. `selectivity()` scores an unknown 0.5,
+    which is a half-penalty on 204 of 580 people for a lookup WE failed; here
+    the person ranks as if the feature did not exist."""
+    assert policy.ubiquity_factor(None) == 1.0
+    assert policy.ubiquity_factor(0) == 1.0
+
+
+def test_a_wrong_match_cannot_earn_the_scarcity_bonus():
+    """The whole reason the match kind decides. An ambiguous pick returns a
+    SMALL catalogue -- 1 release for Travis Scott -- and small reads as scarce,
+    so trusting it would PROMOTE the rows it should demote."""
+    wrong = policy.trusted_ubiquity("ambiguous", 1)
+    assert policy.ubiquity_factor(wrong) == 1.0
+    assert policy.ubiquity_factor(policy.trusted_ubiquity("exact", 1)) == 1.0
+    # ... and a believed small count is worth no more than an unknown one, so
+    # there is no bonus to win by failing the lookup.
+    assert policy.ubiquity_factor(1) == policy.ubiquity_factor(None)
+
+
+def test_the_ubiquity_factor_falls_as_the_catalogue_grows():
+    counts = [54, 300, 859, 9796]       # median, Ozuna, p90, Snoop Dogg
+    factors = [policy.ubiquity_factor(n) for n in counts]
+    assert factors == sorted(factors, reverse=True)
+    assert factors[0] == 1.0            # the median candidate is unpenalised
+
+
+def test_selective_is_breadth_until_the_catalogues_differ():
+    """Corroboration still leads, which is why this is a strategy and not a
+    correction to `breadth`: a prolific person with more seeds still wins."""
+    def row(corroboration, ubiquity):
+        return {"corroboration": corroboration, "on_theirs": 1, "on_seeds": 0,
+                "recency": 0.0, "ubiquity": ubiquity}
+    assert (policy.rank_selective(row(2, 0.1))
+            > policy.rank_selective(row(1, 1.0)))
+    assert (policy.rank_selective(row(2, 1.0))
+            > policy.rank_selective(row(2, 0.1)))
+
+
+def test_every_strategy_is_registered_and_named():
+    """A strategy the registry does not hold cannot be logged or compared."""
+    assert policy.RANKING_STRATEGIES["selective"] is policy.rank_selective
+    assert policy.DEFAULT_STRATEGY == "breadth"
+
+
 # ---- person_role_weight: what gates before a request is spent ------------
 
 

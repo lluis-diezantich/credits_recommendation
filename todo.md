@@ -101,12 +101,28 @@ not correct.
    seed, and no honest constant exists because the record count has no ceiling.
    Strategies are functions rather than weight vectors for exactly that reason.
 
-   **Still open and it needs requests: the ubiquity penalty has no input.**
-   `selectivity()` wants `discogs_total_releases`; 8 people in the store have
-   it and **none is a co-artist** (0 of 307). Our corpus only sees a person's
-   appearances with our own seeds, so graph degree collapses into the seed
-   count. A much-guested singer still behaves like Fred Kevorkian. 307 requests
-   would fix it, and it is the strongest case for spending them.
+   **~~The ubiquity penalty has no input.~~** Filled 2026-10-24
+   ([adr/D36](docs/adr/D36-ubiquity-is-a-rival-strategy-not-a-penalty.md)):
+   `./stages/ubiquity.py` asked Discogs about all 580 candidates, 1,160
+   requests, cached. 376 counts believed, 134 discarded as ambiguous, 70 never
+   found — `exact` matches only, because a wrong same-name pick returns a SMALL
+   catalogue and small reads as scarce, so trusting one would promote the row
+   it should demote.
+
+   **It is not the fix it was asked for, and the measurement is what says so.**
+   The six reggaeton features that led `breadth` are ordinary — Ozuna 300,
+   Tainy 276, Arcangel 272 — against Yomo Toro 337 and Papo Lucca 304. Every
+   candidate over 600 releases already sits at corroboration 1, which is where
+   `breadth` puts them. So it landed as a RIVAL strategy, `selective`, not as a
+   penalty on the default: `--compare breadth selective` moves 365 of 380, all
+   in the tail.
+
+   **The open cost: it cannot tell a long career from a session ubiquity.**
+   Pellín Rodríguez (51st → 300th), La Sonora Ponceña (50th → 298th) and Hugo
+   Fattoruso (139th → 353rd) have deep catalogues because they recorded for
+   decades, and deep-catalogue Latin artists are what this corpus finds best.
+   If `--score` says `selective` loses, D36's stance is to delete it rather
+   than retune bands that were never fitted to this data.
 
    **The first thing it ranked top was wrong, twice over**, and both are fixed
    in [adr/D30](docs/adr/D30-a-remix-is-not-a-collaboration.md). Conrad Taylor
@@ -134,8 +150,56 @@ not correct.
    `selectivity()` exists for the person who appears everywhere and a
    much-guested singer behaves exactly like Fred Kevorkian.
 
-   **Still not before step 2, re-measured 2026-10-22 with four seeds: 97 of 99
-   co-artists connect to exactly ONE seed.** The two that do not are still Lau
+   **The seed count is not independent evidence, and that is now measured
+   rather than assumed.** 2026-10-24, 20 seeds and 380 candidates: the seeds
+   form two scenes plus ten isolates, and **2 candidates connect to more than
+   one scene** ([adr/D37](docs/adr/D37-one-list-per-scene.md)). So `breadth`'s
+   count is almost always a count WITHIN one scene, and the scenes hand out
+   co-signs at rates that differ by 13x. `./stages/rank.py --by-scene` is the
+   answer taken: one list per scene, no arithmetic changed. The salsa list —
+   Yomo Toro, Papo Lucca, Johnny Pacheco — had three rows in the global top 25
+   and is 77 candidates.
+
+   **The grouping needed two more signals, 2026-10-24
+   ([adr/D38](docs/adr/D38-scenes-from-credits-listening-and-a-genre-veto.md)).**
+   Credits alone left 10 of 20 seeds in a scene of one, and no threshold fixes
+   that: the salsa seeds share no co-artists with anybody. Co-listening does —
+   Héctor Lavoe and Sonora Ponceña share a session 7.4x more than chance and
+   zero co-artists — and MusicBrainz genre vetoes the links that are only
+   shuffle adjacency. Two coherent scenes now cover 12 seeds, and the salsa
+   list went from 77 candidates to 85.
+
+   **Still open: Jorge Drexler cannot be grouped, and it is structural.** He
+   is in 917 of 3,177 seed sessions, so nothing co-occurs with him more than
+   chance predicts and lift is blind to him. The most-played seed gets no
+   scene. A within-scene measure would have to be conditioned on him rather
+   than on the whole history, which is a different statistic and not a tuning
+   change.
+
+   **~~8 seeds stand alone and the seed rule does not know it.~~** Done
+   2026-10-24
+   ([adr/D39](docs/adr/D39-seeds-are-picked-to-deepen-a-scene.md)):
+   `./stages/seeds.py` orders on the scene a candidate would JOIN, predicted
+   before the walk from co-listening and the genre veto — the two signals that
+   need no credits. 3 of 11 candidates join one, led by Calle 13 at 32.9x
+   chance with Residente, which is a check on the method rather than a
+   recommendation because **Calle 13 is Residente's band** and nothing told it
+   so. `policy.seedable` is untouched, per D26: the rule says who is worth 50
+   requests, the order says which 50 to spend first.
+
+   **Still open: the prediction is unverified.** Whether Calle 13 actually
+   lands in the urbano scene by CREDITS once walked is the first real test of
+   the whole scene method, and it costs one walk.
+
+   **Still open inside a scene:** Bad Bunny and Karol G share 21 co-artists, so
+   two urbano votes are still partly one vote. Weighting a seed by `1/co-signs`
+   was measured and is wrong (it leaves 7 of the top 25 and lets one co-sign
+   from El Gran Combo outrank four seeds); the log-scale version leaves 17 and
+   lifts Papo Lucca 8th to 2nd, which is worth building as a rival strategy
+   once there is anything to judge it with.
+
+   **Superseded measurement, kept for the shape of the mistake. 2026-10-22
+   with four seeds: 97 of 99** The two that do not are still Lau
    Noah and Salvador Sobral, both on Drexler and Pérez Cruz, both already
    played — Little Simz and Björk added no intersection at all, with each
    other or with the Iberian pair. The ranker's main input is constant, so
@@ -1032,6 +1096,60 @@ both still under an hour.
   Comparing Qobuz titles against MusicBrainz release-groups is what would
   catch them, at the cost of refetching all 154 cached artists with
   `inc=release-groups` — D34 option 1, deliberately not taken yet.
+- **~~`core.names.normalise` drops a typographic apostrophe and keeps a
+  straight one.~~** Fixed 2026-10-24
+  ([adr/D40](docs/adr/D40-the-person-key-ignores-quotes.md)): the key now
+  removes every quote, typographic and ASCII. Four artists got their play
+  history back (Óscar D'León 238 listens, Mother's Cake 205, Adolescent's
+  Orquesta 188, Guns N' Roses 146) and 8 pairs the corpus held under two
+  spellings merged without a hand entry. `load.py` now re-mints every person
+  key from the name rather than trusting the one a discovery file stored,
+  because otherwise the change would have split each of those people in half.
+  Four tables merge on their primary key as a result.
+
+  Residue: the stored `key` in `data/discovery_*.json` is now written and
+  never read. Worth deleting when `discover.py` is next touched, so nobody
+  trusts it again. And `"K.U.K.L."` vs MusicBrainz's `"KUKL"` is still open —
+  periods are not quotes — but `normalise` now has the shape to copy, which is
+  what D35 asked for.
+- **`rank.py --by-scene` depends on the listens export being loaded, and fails
+  quietly without it.** `./stages/load.py --no-listens` leaves `listens`
+  empty, so every lift is 0 and the grouping falls back to credits alone — 12
+  scenes with 10 singletons, no warning. Worth a check that says so.
+- **Two seeds have no MusicBrainz genre at all** (Nathy Peluso, CHUWI), so the
+  veto can never confirm a co-listening link of theirs and they can only be
+  grouped by credits. Genres are user-voted, so this is not fixable by asking
+  again; it is a reason not to lean harder on the veto.
+- **A seed comes back as its own candidate under a variant name.** "La
+  Sonora Poncena" ranks 2nd in Sonora Ponceña's own scene and "El Gran Combo"
+  appears in El Gran Combo De Puerto Rico's, both of which are the seed
+  recommending itself. This is
+  [adr/D35](docs/adr/D35-the-seeds-own-band-is-its-own-reason.md)'s hand list
+  failing to generalise, now with two cases beyond K.U.K.L. and the
+  Sugarcubes — **four is the third case D35 said would make the rule worth
+  writing.** The rule to write is not a punctuation key after all: these are a
+  seed's own name under a different spelling, so `core.aliases.person_key`
+  against the seed list catches them, and the choice is whether a seed-matching
+  row is dropped or flagged (D5 says flagged).
+- **The Discogs matcher's tie-break was wrong, and the pool was built with
+  it.** `find_discogs_artist` broke a same-name tie on the lowest id, which is
+  wrong whenever the candidates differ by an accent or a numeric suffix:
+  `normalise()` folds "Mana", "Maná", "Mana (4)" onto one key, so it took id
+  6859 (21 releases) over id 570007 (505). Fixed 2026-10-24 — the spelling as
+  written wins, then the lowest id — but `resolve_discogs.py` shares the
+  matcher and ran before the fix, so `pool_discogs.json` may hold wrong
+  Discogs ids. **There a wrong id injects a whole collaborator network, not
+  one number**, which is what that function's own docstring warns about. The
+  pool is not trusted anyway, so this is not urgent; rerunning it is ~154
+  searches and they are now cached.
+- **Ubiquity coverage is 65%, and more requests will not raise it.** 134 of 510
+  matches are ambiguous and discarded (D36). The fix is a better matcher rather
+  than a bigger spend: MusicBrainz states an artist's Discogs URL as a
+  relation, on a document `core/musicbrainz.py` already fetches for 154
+  artists, which would replace a name search with a lookup and settle the
+  ambiguous rows outright. **Measure that before trusting `selective`'s
+  ordering**, because the 134 discarded rows are not random — they are the
+  people with common names.
 - **A seed's own former band is a hand entry, not a rule.**
   `policy.SEED_OWN_BANDS` holds `k.u.k.l.` and `the sugarcubes`
   ([adr/D35](docs/adr/D35-the-seeds-own-band-is-its-own-reason.md)), so seed 11

@@ -195,7 +195,12 @@ CREATE TABLE releases (
 -- discography is really the seed's own work, how many people it credits, how
 -- many artists they are billed alongside. Lived only in discovery_*.json, so
 -- "what did discovery actually produce" could not be asked of the store.
-CREATE TABLE seeds (seed_qobuz_id INTEGER PRIMARY KEY, name TEXT, store TEXT,
+CREATE TABLE seeds (seed_qobuz_id INTEGER PRIMARY KEY, name TEXT, mbid TEXT,
+--  ^ from data/favourites.json, matched on `core.aliases.person_key` and not
+--    on the spelling: 5 of 20 seeds are written differently in the two files
+--    ("Ruben Blades" / "Rubén Blades"), and an exact-name join silently found
+--    15. It is here so artist_genres can be joined without reading a file.
+                    store TEXT,
                     releases INTEGER, albums_own INTEGER, albums_guest INTEGER,
                     albums_compilation INTEGER,
 --  ^ various-artists records in the seed's discography, which are neither the
@@ -213,6 +218,21 @@ CREATE TABLE co_artists (seed_qobuz_id INTEGER, person_key TEXT, name TEXT,
                          albums INTEGER, their_records INTEGER,
                          seed_records INTEGER, first_seen TEXT, last_seen TEXT,
                          PRIMARY KEY (seed_qobuz_id, person_key));
+CREATE TABLE artist_genres (mbid TEXT, genre TEXT, votes INTEGER,
+                            PRIMARY KEY (mbid, genre));
+--  ^ MusicBrainz genres, from cache/musicbrainz_genres/. User-voted, so
+--    `votes` is the only quality signal there is and a 1 is one person's
+--    opinion. Used as a VETO on a scene link, never as one: linking two seeds
+--    on a shared tag put 18 of 20 in a single scene through "pop" and "jazz"
+--    (D38). Keyed by mbid because that is what the cache filename is.
+CREATE TABLE ubiquity (person_key TEXT PRIMARY KEY, name TEXT,
+                       discogs_id INTEGER, discogs_name TEXT, match TEXT,
+                       total_releases INTEGER);
+--  ^ How many releases Discogs holds for this person: the input
+--    policy.selectivity() never had. `match` is load-bearing, not
+--    provenance -- only 'exact' is trusted, because a wrong same-name pick
+--    returns a SMALL catalogue and small reads as scarce. Read it through
+--    policy.trusted_ubiquity(), never raw.
 CREATE TABLE co_artist_albums (seed_qobuz_id INTEGER, person_key TEXT,
                                album_id TEXT, title TEXT, date TEXT,
                                provenance TEXT,
@@ -531,10 +551,38 @@ def load_people(ld: Loader) -> None:
     # One mint for every person key in here: a merged person must not be
     # re-split by a file that was derived before the merge existed.
     alias_map = aliases.load()
+    # Seed mbids live only in favourites.json. Keyed through the alias map for
+    # the reason above the `seeds` schema: the two files disagree on spelling.
+    favourite_mbid: dict[str, str] = {}
+    blob = load_json(DATA / "favourites.json") or {}
+    for entry in (blob.get("artists") if isinstance(blob, dict) else blob) or []:
+        if entry.get("name") and entry.get("mbid"):
+            favourite_mbid[aliases.person_key(entry["name"], alias_map)] = entry["mbid"]
     people: dict[str, dict] = {}
-    names, classes, roles, albums, edges = [], [], [], [], []
-    person_seeds: list[tuple] = []
-    seeds, co_artists, co_artist_albums = [], [], []
+    names, classes, roles, edges = [], [], [], []
+    # Same merge as person_seeds, one grain down: two spellings of one person
+    # credited on the SAME album are one row, with the tracks summed and the
+    # roles unioned.
+    album_rows: dict[tuple, dict] = {}
+    # MERGED on their primary key, not appended. Since normalise() began
+    # stripping quotes, two spellings in ONE file can mint one key -- Hector
+    # "El Father" and Hector El Father are one person -- and two rows with the
+    # same key and different numbers is a row the schema forbids. Summing is
+    # what `people` already did across seeds; these do it within one.
+    person_seeds: dict[tuple, dict] = {}
+    co_artist_rows: dict[tuple, dict] = {}
+    seeds: list[tuple] = []
+    co_artist_albums: dict[tuple, tuple] = {}
+
+    def merge(into: dict, key: tuple, name: str | None, counts: dict,
+              first: str | None, last: str | None) -> dict:
+        row = into.setdefault(key, {"name": name, "first": first, "last": last})
+        for field, value in counts.items():
+            row[field] = (row.get(field) or 0) + (value or 0)
+        for field, value, pick in (("first", first, min), ("last", last, max)):
+            known = [x for x in (row.get(field), value) if x]
+            row[field] = pick(known) if known else None
+        return row
 
     def touch(key: str, source: str) -> dict:
         row = people.setdefault(key, {"person_key": key, "sources": set()})
@@ -549,34 +597,54 @@ def load_people(ld: Loader) -> None:
         seed = blob.get("seed") or {}
         seed_id = seed.get("qobuz_id")
         seeds.append((
-            seed_id, seed.get("name"), seed.get("store"), seed.get("releases"),
+            seed_id, seed.get("name"),
+            favourite_mbid.get(aliases.person_key(seed.get("name") or "",
+                                                  alias_map)),
+            seed.get("store"), seed.get("releases"),
             seed.get("albums_own"), seed.get("albums_guest"),
             seed.get("albums_compilation"),
             seed.get("albums_unbilled"), seed.get("tracks"),
             seed.get("credited_tracks"), len(blob.get("people") or []),
             len(blob.get("co_artists") or []), path.name, blob.get("generated")))
         for artist in blob.get("co_artists") or []:
-            key = artist.get("key") or normalise((artist.get("names") or [""])[0])
+            # Re-minted from the name, NOT the stored `key`. The file's key
+            # was minted by whichever normalise() was current when discover.py
+            # wrote it, and `credits` below mints fresh -- so trusting the
+            # stored one made the two disagree for every name holding a quote
+            # and silently split the person. D25 is the general case.
+            key = aliases.person_key((artist.get("names") or [""])[0], alias_map)
             stats = artist.get("stats") or {}
-            co_artists.append((
-                seed_id, key, (artist.get("names") or [None])[0],
-                stats.get("albums"), stats.get("their_records"),
-                stats.get("seed_records"), stats.get("first"), stats.get("last")))
-            co_artist_albums += [
-                (seed_id, key, alb.get("album_id"), alb.get("title"),
-                 alb.get("date"), alb.get("provenance"))
-                for alb in artist.get("albums") or []]
+            merge(co_artist_rows, (seed_id, key),
+                  (artist.get("names") or [None])[0],
+                  {"albums": stats.get("albums"),
+                   "their_records": stats.get("their_records"),
+                   "seed_records": stats.get("seed_records")},
+                  stats.get("first"), stats.get("last"))
+            # Keyed, not appended: one album under two spellings of the same
+            # co-artist is one row.
+            for alb in artist.get("albums") or []:
+                co_artist_albums[(seed_id, key, alb.get("album_id"))] = (
+                    alb.get("title"), alb.get("date"), alb.get("provenance"))
             # A co-artist is a person too: the names table is how a reader gets
             # from a spelling to a key, and these keys appear nowhere else.
             names += [(key, n) for n in artist.get("names") or []]
         for person in blob.get("people") or []:
-            key = person.get("key") or normalise((person.get("names") or [""])[0])
+            key = aliases.person_key((person.get("names") or [""])[0], alias_map)
             row = touch(key, path.name)
             stats = person.get("stats") or {}
-            person_seeds.append((
-                key, seed.get("qobuz_id"), seed.get("name"), path.name,
-                stats.get("albums"), stats.get("own_albums"), stats.get("tracks"),
-                stats.get("top_role"), stats.get("first"), stats.get("last")))
+            seed_row = merge(person_seeds, (key, seed.get("qobuz_id")),
+                             seed.get("name"),
+                             {"albums": stats.get("albums"),
+                              "own_albums": stats.get("own_albums"),
+                              "tracks": stats.get("tracks")},
+                             stats.get("first"), stats.get("last"))
+            seed_row["source"] = path.name
+            # The role from whichever spelling did the most, same rule as
+            # `people.top_role` one block down.
+            if (seed_row.get("top_role") is None
+                    or (stats.get("albums") or 0) >= (seed_row.get("_top") or 0)):
+                seed_row["top_role"] = stats.get("top_role")
+                seed_row["_top"] = stats.get("albums") or 0
             # SUMMED over the seeds this person appears in, never overwritten:
             # "albums of any seed's that they worked on". For "how embedded in
             # ONE seed's catalogue" -- which is what the scoring means -- read
@@ -600,10 +668,13 @@ def load_people(ld: Loader) -> None:
             classes += [(key, c) for c in person.get("classes") or []]
             roles += role_rows(key, person.get("roles"))
             for alb in person.get("albums") or []:
-                albums.append((seed_id, key, alb.get("album_id"),
-                               alb.get("provenance"), alb.get("title"),
-                               alb.get("date"), alb.get("tracks"),
-                               joined(alb.get("roles"))))
+                album_key = (seed_id, key, alb.get("album_id"))
+                held = album_rows.setdefault(album_key, {
+                    "provenance": alb.get("provenance"),
+                    "title": alb.get("title"), "date": alb.get("date"),
+                    "tracks": 0, "roles": set()})
+                held["tracks"] = (held["tracks"] or 0) + (alb.get("tracks") or 0)
+                held["roles"].update(alb.get("roles") or [])
         ld.note("people", path.name, len(blob.get("people") or []), blob.get("generated"))
         ld.note("co_artists", path.name, len(blob.get("co_artists") or []),
                 blob.get("generated"))
@@ -715,7 +786,10 @@ def load_people(ld: Loader) -> None:
     ld.insert("person_seeds",
               ["person_key", "seed_qobuz_id", "seed_name", "source", "albums",
                "own_albums", "tracks", "top_role", "first_seen", "last_seen"],
-              deduped(person_seeds))
+              [(key, seed_id, row["name"], row.get("source"), row.get("albums"),
+                row.get("own_albums"), row.get("tracks"), row.get("top_role"),
+                row.get("first"), row.get("last"))
+               for (key, seed_id), row in person_seeds.items()])
     ld.insert("person_names", ["person_key", "name"], deduped(names))
     # A junction rather than a column, because multi-seed intersection is a
     # FILTER: "keep people who appear in 3+ discovery graphs" (README:122) is a
@@ -730,18 +804,26 @@ def load_people(ld: Loader) -> None:
     ld.insert("person_albums",
               ["seed_qobuz_id", "person_key", "album_id", "provenance", "title",
                "date", "tracks", "roles"],
-              deduped(albums))
+              [(seed_id, key, album_id, row["provenance"], row["title"],
+                row["date"], row["tracks"], joined(sorted(row["roles"])))
+               for (seed_id, key, album_id), row in album_rows.items()])
     ld.insert("seeds",
-              ["seed_qobuz_id", "name", "store", "releases", "albums_own",
+              ["seed_qobuz_id", "name", "mbid", "store", "releases", "albums_own",
                "albums_guest", "albums_compilation", "albums_unbilled",
                "tracks", "credited_tracks", "people", "co_artists",
                "source", "generated"], deduped(seeds))
     ld.insert("co_artists",
               ["seed_qobuz_id", "person_key", "name", "albums", "their_records",
-               "seed_records", "first_seen", "last_seen"], deduped(co_artists))
+               "seed_records", "first_seen", "last_seen"],
+              [(seed_id, key, row["name"], row.get("albums"),
+                row.get("their_records"), row.get("seed_records"),
+                row.get("first"), row.get("last"))
+               for (seed_id, key), row in co_artist_rows.items()])
     ld.insert("co_artist_albums",
               ["seed_qobuz_id", "person_key", "album_id", "title", "date",
-               "provenance"], deduped(co_artist_albums))
+               "provenance"],
+              [(seed_id, key, album_id, *rest)
+               for (seed_id, key, album_id), rest in co_artist_albums.items()])
     ld.insert("person_edges",
               ["person_key", "other_name", "releases", "roles", "kind"],
               deduped(edges))
@@ -826,6 +908,51 @@ def load_releases(ld: Loader) -> None:
 
 
 # ---- songs ---------------------------------------------------------------
+
+
+def load_artist_genres(ld: Loader) -> None:
+    """cache/musicbrainz_genres/<mbid>.json -> one row per (mbid, genre).
+
+    Its own cache directory, not the artist documents: widening their `inc`
+    would turn all 154 of them into refetches at 1.2s each, which is the cost
+    D34 declined. Absent directory is not an error -- the grouping treats a
+    seed with no genres as un-vetoable rather than unlinkable.
+    """
+    rows = []
+    for path in sorted(glob.glob("cache/musicbrainz_genres/*.json")):
+        blob = load_json(Path(path))
+        if not blob:
+            continue
+        mbid = Path(path).stem
+        rows += [(mbid, g.get("name"), g.get("count") or 0)
+                 for g in blob if g.get("name")]
+    if not rows:
+        return
+    ld.insert("artist_genres", ["mbid", "genre", "votes"], deduped(rows))
+    ld.note("artist_genres", "cache/musicbrainz_genres", len(rows), None)
+
+
+def load_ubiquity(ld: Loader) -> None:
+    """data/ubiquity.json -> one row per person. Absent file is not an error.
+
+    Optional on purpose: `ubiquity.py` costs 1,160 Discogs requests at 25/min,
+    so a fresh clone must build a store without it. Every consumer reads the
+    count through policy.ubiquity_factor(), which is neutral on None, and a
+    store with no `ubiquity` rows ranks exactly as it did before the table
+    existed.
+    """
+    path = DATA / "ubiquity.json"
+    if not path.exists():
+        return
+    blob = load_json(path)
+    if not blob:
+        return
+    rows = [(p.get("person_key"), p.get("name"), p.get("discogs_id"),
+             p.get("discogs_name"), p.get("match"), p.get("total_releases"))
+            for p in blob.get("people") or [] if p.get("person_key")]
+    ld.insert("ubiquity", ["person_key", "name", "discogs_id", "discogs_name",
+                           "match", "total_releases"], deduped(rows))
+    ld.note("ubiquity", path.name, len(rows), blob.get("generated"))
 
 
 def load_songs(ld: Loader) -> None:
@@ -1043,6 +1170,8 @@ def main() -> int:
     os.chdir(ROOT)               # cache/* globs are repo-relative
     load_people(ld)
     load_releases(ld)
+    load_ubiquity(ld)
+    load_artist_genres(ld)
     load_songs(ld)
     load_cache(ld)
 

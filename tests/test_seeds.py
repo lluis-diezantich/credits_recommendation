@@ -131,6 +131,30 @@ def test_intersecting_is_not_part_of_the_rule_only_the_order():
     assert [r["name"] for r in kept_without if not r["walked"]][0] == "Nathy Peluso"
 
 
+def test_a_seed_that_deepens_a_scene_is_walked_before_an_intersection():
+    """Eight of twenty seeds group with nobody (D38), so another isolated seed
+    buys a list of its own where a scene member buys range in a list that
+    already exists. Ranked above `intersects`, which is the weaker claim: a
+    co-artist of a walked seed is one row, a scene is a whole list."""
+    def scene(row):
+        if row["name"] == "Nathy Peluso":
+            return "Celia Cruz", "played together 20.0x chance (salsa)"
+        return None, ""
+
+    kept, _ = seeds.candidates(PROFILE, IDS, WALKED, CO, scene)
+    fresh = [r["name"] for r in kept if not r["walked"]]
+    assert fresh[0] == "Nathy Peluso"          # joins a scene
+    assert fresh[1] == "ROSALÍA"               # only intersects
+
+
+def test_without_a_store_no_scene_is_claimed():
+    """`scene` is None when there is nothing to read, and the order degrades
+    to what it was rather than inventing a grouping."""
+    kept, _ = seeds.candidates(PROFILE, IDS, WALKED, CO)
+    assert {r["scene"] for r in kept} == {None}
+    assert [r["name"] for r in kept if not r["walked"]][0] == "ROSALÍA"
+
+
 def test_most_recent_months_first_then_most_plays():
     kept, _ = pick(co_artists=set(), walked=set())
     order = [(-r["recent"], -r["plays"]) for r in kept]

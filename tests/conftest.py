@@ -38,6 +38,21 @@ def no_real_month_store(monkeypatch, tmp_path):
     monkeypatch.setattr(listens, "MONTHS", tmp_path / "_seeded")
 
 
+@pytest.fixture(autouse=True)
+def no_real_discogs_cache(monkeypatch, tmp_path):
+    """Nothing may write the real cache/discogs/, patched or not.
+
+    Same trap as `no_real_month_store` one fixture up: `core.discogs` resolves
+    its directory from a module global, so a test that stubs the HTTP seam but
+    not the cache would still write a file -- and a stubbed response written
+    into the real corpus is worse than a failing test, because every later run
+    reads it as something Discogs said.
+    """
+    import core.discogs as discogs
+
+    monkeypatch.setattr(discogs, "CACHE_DIR", tmp_path / "_discogs")
+
+
 @pytest.fixture
 def album():
     """A Qobuz album row, in the shape artist/get returns.

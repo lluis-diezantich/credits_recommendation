@@ -1120,6 +1120,199 @@ SPAN_PULL = 0.5          # per year a collaboration ran
 PLAYS_PER_POINT = 500    # listens that count as one point of seed weight
 
 
+# ---------------------------------------------------------------------------
+# SCENES: WHICH SEEDS ARE NOT INDEPENDENT EVIDENCE
+#
+# `breadth` reads the seed count as independent corroboration. It is not.
+# Measured 2026-10-24 over 380 unheard candidates: the seeds fall into a few
+# scenes and only **2 candidates connect to more than one** -- Papo Lucca
+# (Sonora Ponceña + Celia Cruz) and Reykon (Willie Colón + Karol G). So
+# "4 of your artists chose this person" is, 378 times out of 380, four artists
+# from ONE scene who record together constantly.
+#
+# A scene also decides how cheap its co-signs are: Bad Bunny has 116
+# co-artists, Bjork 15, El Gran Combo 9. Ozuna's 4 seeds and Yomo Toro's 2 are
+# counts on different scales, and ranking them against each other is what made
+# the list read badly whatever was weighted on top of it. Hence one list per
+# scene -- the fix is the SHAPE of the output, not another weight. D37.
+#
+# THE FLOOR, measured by what each value does to the grouping. Linkage is
+# transitive, so this number decides whether a chain swallows everything:
+#
+#   2 | one scene of 11 seeds. Bjork lands in Bad Bunny's via ROSALIA, on one
+#     | remix. Useless -- the thing it is supposed to separate is merged.
+#   3 | Jorge Drexler + Natalia Lafourcade become a scene, and Nathy Peluso
+#     | joins the urbano one. Both defensible, and the salsa scene is whole.
+#   4 | urbano (Bad Bunny, C. Tangana, Kali Uchis, Karol G, ROSALIA,
+#     | Residente) and salsa (Celia Cruz, Hector Lavoe, Ruben Blades, Willie
+#     | Colón) are each whole, with no chain and 10 isolated seeds.
+#   5 | salsa breaks up -- Celia Cruz and Ruben Blades fall out of it, which
+#     | is wrong about four artists who recorded together for decades.
+#
+# 4, because it is the widest floor at which both real scenes survive intact
+# and the narrowest at which nothing chains. 3 is the live alternative and
+# changes two seeds; it is one number away and the scenes are derived, so
+# trying it costs a rerun and no requests.
+# ---------------------------------------------------------------------------
+
+SCENE_SHARED_FLOOR = 4   # co-artists two seeds must share to be one scene
+
+# CREDITS ALONE LEAVE TEN OF TWENTY SEEDS ALONE, which was the complaint that
+# led here. The credit graph can only group seeds that WORK with the same
+# people, and the salsa seeds do not: El Gran Combo and Sonora Ponceña share
+# nobody with anybody. Measured 2026-10-24 -- only 2 of 190 seed pairs clear
+# the floor above, and almost every other pair shares exactly one person,
+# which is noise. There is no cut in that distribution to find.
+#
+# So a second signal, from the listening this project already has: two seeds
+# you PLAY TOGETHER are close whether or not they ever recorded together.
+# Héctor Lavoe and Sonora Ponceña turn up in the same session 7.4x more often
+# than their play counts predict, and share no co-artists at all.
+#
+# Lift, not raw co-occurrence: Bad Bunny is in 551 of 3,177 seed sessions, so
+# the raw count made him close to everything. `core.scenes.lift` divides by
+# what the two play counts predict.
+# THE DENOMINATOR IS EVERY SESSION, not the ones holding a seed, and that is
+# the reason this floor looks large. Counting only seed-bearing sessions made
+# the number depend on WHICH artists were being asked about: adding 11 seed
+# candidates to the question took the count from 3,177 to 14,109, multiplied
+# every lift by 4.4, and silently moved which seeds were one scene. A grouping
+# that changes because of who is being tested against it is not a grouping.
+#
+# 14.0, measured 2026-10-24 over 14,109 sessions. The gap it sits in:
+#
+#   32.9 .. 15.1 | all 14 salsa pairs, every one confirmed by "salsa"
+#        13.2    | Little Simz / Residente -- a real rap link, another scene
+#   11.5 ..  2.4 | the tail, where Celia Cruz / Lafourcade would fold a
+#                | singer-songwriter into salsa on one "latin pop" tag
+#
+# It also preserves the grouping D38 measured rather than changing it: under
+# the broken denominator the floor was 3.0, and 3.0 x 4.44 = 13.3 is the same
+# cut. Nothing about which seeds are one scene moved when this was fixed.
+SCENE_SESSION_GAP = 30 * 60   # seconds of silence that ends a listening session
+SCENE_LIFT_FLOOR = 14.0       # how much more than chance counts as together
+SCENE_MIN_SESSIONS = 10       # shared sessions before a lift is believed at all
+
+# GENRE IS A VETO AND NEVER A LINK, which is measured rather than cautious.
+# Linking two seeds on a shared MusicBrainz genre put 18 of the 20 in ONE
+# scene: the tags are user-voted and mostly broad, so Björk reached Willie
+# Colón through "jazz" and "pop" and transitivity did the rest. As a veto it
+# can only remove a co-listening link, so it cannot chain -- and it removed
+# exactly the three that were a listening habit rather than a scene: Little
+# Simz (UK rap), Bomba Estéreo (cumbia) and CHUWI, all pulled into Latin
+# urbano by shuffle adjacency.
+#
+# A CREDIT link is never vetoed. Two artists who worked with the same five
+# people are connected whatever a tag says, and the tags are too thin to
+# overrule that -- most of these artists carry one or two votes per genre.
+# 1/2 rather than 1/3, because the distribution has a gap and the threshold
+# belongs in the middle of it rather than at an edge. Measured 2026-10-24 over
+# 20 seeds: "latin" is held by 13 (0.65), the next tag is "salsa" at 6 (0.30),
+# and nothing sits between. Both 1/3 and 1/2 therefore exclude exactly
+# "latin" today -- but at 1/3 the ceiling is 6.7, so ONE more salsa seed would
+# make "salsa" broad and dissolve the salsa scene, whose links are confirmed
+# by that tag. At 1/2 it would take eleven.
+SCENE_BROAD_GENRE_SHARE = 1 / 2   # held by more of the seeds than this = broad
+
+
+def broad_genres(by_seed: dict[str, set[str]]) -> set[str]:
+    """Genres too widely held to discriminate, computed rather than listed.
+
+    A rule and not a hand list, because the right answer depends on the seed
+    set and will move as seeds are added. Measured 2026-10-24 over 20 seeds it
+    excludes exactly one tag, "latin", held by 13 of them -- and "latin" is
+    the tag that would otherwise have made every Latin seed one scene.
+    """
+    if not by_seed:
+        return set()
+    held: dict[str, int] = {}
+    for genres in by_seed.values():
+        for genre in genres:
+            held[genre] = held.get(genre, 0) + 1
+    ceiling = len(by_seed) * SCENE_BROAD_GENRE_SHARE
+    return {genre for genre, n in held.items() if n > ceiling}
+
+
+def scene_link(shared_co_artists: int, shared_sessions: int, session_lift: float,
+               shared_genres: set[str]) -> str | None:
+    """Why these two seeds are one scene, in words, or None if they are not.
+
+    One function, so the reason a scene exists can be printed: a grouping
+    nobody can explain is one nobody can correct, and two of the three signals
+    here were wrong on their first attempt.
+    """
+    if shared_co_artists >= SCENE_SHARED_FLOOR:
+        return f"{shared_co_artists} co-artists"
+    if (shared_sessions >= SCENE_MIN_SESSIONS
+            and session_lift >= SCENE_LIFT_FLOOR
+            and shared_genres):
+        return (f"played together {session_lift:.1f}x chance"
+                f" ({'/'.join(sorted(shared_genres))})")
+    return None
+
+
+# ---------------------------------------------------------------------------
+# UBIQUITY: WHOSE CREDIT IS SCARCE
+#
+# `selectivity()` above has existed since the pool was built and had no input
+# for the ranked list: 0 of 580 candidates carried a release count, because the
+# only stage that fetched one runs on people Qobuz cannot see. `ubiquity.py`
+# fills it -- 580 people, 1,160 Discogs requests, 2026-10-24.
+#
+# WHICH NUMBERS ARE TRUSTED. Only an `exact` name match. Discogs often holds
+# several artists under one name, and when the right one is spelled differently
+# the search picks a wrong entry whose catalogue is SMALL: it reported 1 release
+# for Travis Scott, Sech and The Marias. The direction is what makes this a
+# trust rule rather than a tolerance -- a wrong number is a low number, a low
+# number reads as scarce, and scarce earns a bonus, so an untrusted row would be
+# promoted by the very feature meant to demote it.
+#
+#   580 asked | 376 exact | 134 ambiguous | 70 no number at all
+#
+# 20% of ambiguous rows are under 10 releases and so are 19% of exact ones, so
+# the count cannot separate a real small catalogue from a wrong match. Hence the
+# match KIND decides, not the value. Coverage is 65% rather than 88%.
+#
+# WHAT A MISSING NUMBER MEANS: no penalty and no bonus. A factor of 1.0, not
+# `selectivity`'s 0.5 "unknown" -- 0.5 is a half-penalty, which would punish 204
+# people for what we failed to look up. The pool path keeps 0.5 because there
+# the score is a referral's strength and an unknown referrer IS weaker evidence;
+# here the feature is a fact about a person and we either have it or do not.
+#
+# The bands are `selectivity()`'s, reused rather than re-chosen: the median
+# candidate has 54 releases and lands in "selective" at 1.0, which keeps a
+# missing number and a typical one worth the same.
+# ---------------------------------------------------------------------------
+
+# An `ambiguous` match is a real Discogs artist with the right name and possibly
+# the wrong catalogue. Named as a set because `find_discogs_artist` may grow a
+# third verdict, and a new one must be opted IN rather than trusted by default.
+UBIQUITY_TRUSTED_MATCHES = {"exact"}
+
+
+def trusted_ubiquity(match: str | None, total: int | None) -> int | None:
+    """The release count if it can be believed, else None.
+
+    One place, so a query that forgets the match kind cannot quietly use an
+    ambiguous number: every caller gets None where the evidence is weak.
+    """
+    if match not in UBIQUITY_TRUSTED_MATCHES:
+        return None
+    return total if total and total > 0 else None
+
+
+def ubiquity_factor(total: int | None) -> float:
+    """What one credit from this person is worth, 0.1 to 1.0.
+
+    1.0 for an unknown, which is the decision above and not a default: the
+    person with no number ranks as if the feature did not exist.
+    """
+    if total is None or total <= 0:
+        return 1.0
+    score, _ = selectivity(total)
+    return score
+
+
 def _direction(row) -> float:
     """Records each way, weighted by who chose whom."""
     return (row["on_theirs"] * GUEST_ON_THEIRS
@@ -1168,11 +1361,37 @@ def rank_taste(row) -> float:
 
 # float for a weighted sum, tuple for a lexicographic rule. core.rank.ranked
 # takes both, and a strategy's shape is part of the claim it makes.
+def rank_selective(row) -> tuple[float, float]:
+    """`breadth`, with a credit from somebody who appears everywhere worth less.
+
+    A SEPARATE strategy rather than a penalty folded into `breadth`, for two
+    reasons that both come from D29.
+
+    The log. `data/shown.json` records runs by strategy name, and five
+    `breadth` runs are already in it. Changing what `breadth` scores would
+    make those five runs a record of a strategy that no longer exists, and
+    `--score` would compare them with something else under the same label.
+    The same stance the baseline took when its ordering changed.
+
+    The claim. Measured 2026-10-24: every candidate over 600 releases --
+    Snoop Dogg at 9,796, Busta Rhymes at 7,290, Christina Aguilera at 5,038 --
+    sits at corroboration 1, so `breadth` already ranks them in the tail and a
+    penalty moves them very little. Where ubiquity bites is the strategies
+    that do NOT gate on corroboration: `taste` ranked Jennifer Lopez 87th of
+    380 on 5,143 releases. So "ubiquity matters" is a claim that competes with
+    breadth rather than a correction to it, and `--compare breadth selective`
+    is how it gets judged.
+    """
+    return (float(row["corroboration"]),
+            (_direction(row) + RECENCY_PULL * row["recency"]) * row["ubiquity"])
+
+
 RANKING_STRATEGIES = {
     "breadth": rank_breadth,
     "direction": rank_direction,
     "depth": rank_depth,
     "taste": rank_taste,
+    "selective": rank_selective,
 }
 
 # `breadth` is the default because it is the project's own claim (D22), which

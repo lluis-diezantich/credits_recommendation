@@ -356,3 +356,62 @@ def test_json_carries_the_sentence_so_a_consumer_need_not_rebuild_it(store,
     rows = json.loads(capsys.readouterr().out)
     assert rows[0]["why"].startswith("P is billed on one of Jorge Drexler")
     assert "example" not in rows[0]
+
+
+# ---- scenes -------------------------------------------------------------
+
+
+def test_two_seeds_sharing_enough_co_artists_are_one_scene(store, monkeypatch):
+    """The floor is read from policy, so a test sets it rather than relying on
+    the measured 4 and a fixture big enough to reach it."""
+    monkeypatch.setattr(mod.policy, "SCENE_SHARED_FLOOR", 2)
+    for key in ("x", "y"):
+        store.co_artist(1, key, key.upper(), own=1)
+        store.co_artist(2, key, key.upper(), own=1)
+    store.rows()                 # commits; a read-only connection sees nothing otherwise
+    with closing(sqlite3.connect(f"file:{store.path}?mode=ro", uri=True)) as read:
+        read.row_factory = sqlite3.Row
+        labels = mod.scene_labels(read)
+    assert len(set(labels.values())) == 1
+
+
+def test_seeds_below_the_floor_are_separate_scenes(store, monkeypatch):
+    monkeypatch.setattr(mod.policy, "SCENE_SHARED_FLOOR", 3)
+    for key in ("x", "y"):
+        store.co_artist(1, key, key.upper(), own=1)
+        store.co_artist(2, key, key.upper(), own=1)
+    store.rows()                 # commits; see the test above
+    with closing(sqlite3.connect(f"file:{store.path}?mode=ro", uri=True)) as read:
+        read.row_factory = sqlite3.Row
+        labels = mod.scene_labels(read)
+    assert len(set(labels.values())) == 2
+
+
+def test_by_scene_prints_a_list_per_scene_and_names_the_crossings(
+        store, monkeypatch, capsys):
+    """The output is per scene BECAUSE the seed counts are not comparable
+    across them, and a candidate reaching two is the thesis's own evidence."""
+    monkeypatch.setattr(mod.policy, "SCENE_SHARED_FLOOR", 9)   # nothing links
+    store.co_artist(1, "only-drexler", "Only Drexler", own=1)
+    store.credit("only-drexler-1-0", "only-drexler", "Guitar")
+    store.co_artist(1, "both", "Both", own=1)
+    store.co_artist(2, "both", "Both", guest=1)
+    store.credit("both-1-0", "both", "Guitar")
+    store.run("--by-scene")
+
+    out = capsys.readouterr().out
+    # "(alone)" is part of the heading: a seed that groups with nobody is a
+    # fact worth seeing, and ten of twenty do.
+    assert "--- Jorge Drexler (alone) (2 candidates) ---" in out
+    assert "--- Sílvia Pérez Cruz (alone) (1 candidates) ---" in out
+    assert "2 scenes. 1 candidate(s) reach more than one" in out
+    assert "Both - Jorge Drexler, Sílvia Pérez Cruz" in out
+
+
+def test_a_seed_name_with_no_comma_is_what_seed_names_relies_on(store):
+    """`seed_names` is GROUP_CONCAT on a comma, so a seed whose name contained
+    one would split into two and silently invent a scene."""
+    store.co_artist(1, "p", "P", own=1)
+    store.credit("p-1-0", "p", "Guitar")
+    row, = store.rows()
+    assert mod.seed_names(row) == ["Jorge Drexler"]

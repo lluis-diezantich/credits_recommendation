@@ -15,16 +15,26 @@ window, and the long sleep is what actually reopens it.
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import sys
 import time
 import urllib.parse
 from collections.abc import Callable
+from pathlib import Path
 
 from core.http import get as http_get
 from core.names import normalise, strip_discogs_suffix
+from core.paths import CACHE
 
 DISCOGS = "https://api.discogs.com"
+
+# Discogs was the one source with no cache on disk, which made it the one
+# source whose answers could not be reread. D7's stance is that cache/ is what
+# an API said, and a rate limit of 25/min is precisely the reason to keep it:
+# a rerun of 592 people costs 47 minutes of waiting or nothing at all.
+CACHE_DIR = CACHE / "discogs"
 # Discogs requires a descriptive User-Agent and blocks generic ones.
 DISCOGS_UA = "fresh-releases-radar/1.0 +https://github.com/local/fresh-releases"
 
@@ -66,13 +76,55 @@ class Throttle:
                 self.remaining = None
 
 
+def cache_path(kind: str, key: str, directory: Path | None = None) -> Path:
+    """One file per (kind, key) -- `search_wampi.json`, `releases_1234.json`.
+
+    Readable rather than hashed, so the corpus can be read by a person, with a
+    short digest appended only when the key would not survive a filename.
+    Unlike core/similar.py there is no algorithm in the name: Discogs returns
+    a release count, not a model's opinion, so two runs are comparable.
+    """
+    slug = re.sub(r"[^a-z0-9]+", "-", normalise(key)).strip("-")[:48]
+    if slug != re.sub(r"[^a-z0-9]+", "-", normalise(key)).strip("-"):
+        slug += "-" + hashlib.sha256(key.encode()).hexdigest()[:8]
+    return (directory or CACHE_DIR) / f"{kind}_{slug or 'empty'}.json"
+
+
+def cached_read(kind: str, key: str, directory: Path | None = None) -> dict | None:
+    path = cache_path(kind, key, directory)
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None         # a corrupt entry is refetched, not fatal
+
+
+def cached_write(kind: str, key: str, body: dict,
+                 directory: Path | None = None) -> None:
+    path = cache_path(kind, key, directory)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(body, ensure_ascii=False) + "\n")
+
+
 def discogs_get(path: str, throttle: Throttle, token: str | None,
-                attempt: int = 0) -> dict | None:
+                attempt: int = 0, cache: tuple[str, str] | None = None,
+                refresh: bool = False,
+                directory: Path | None = None) -> dict | None:
     """One Discogs GET, or None. Never raises -- a caller is mid-loop.
 
     The rate-limit header is read on every outcome, not just the happy one:
     a 429 is precisely when its value matters.
+
+    With `cache=(kind, key)` the answer is read from and written to
+    `cache/discogs/`. Only a 200 is stored: a 429 or an unreachable host is a
+    fact about the minute, not about the artist, and caching it would make a
+    throttled run look like an artist with no releases forever.
     """
+    if cache is not None and not refresh:
+        hit = cached_read(cache[0], cache[1], directory)
+        if hit is not None:
+            return hit
     throttle.wait()
     headers = {"Authorization": f"Discogs token={token}"} if token else {}
     status, body, response_headers = http_get(
@@ -86,18 +138,24 @@ def discogs_get(path: str, throttle: Throttle, token: str | None,
         back = 20 * (attempt + 1)
         print(f"  [throttle] HTTP 429, backing off {back}s", file=sys.stderr)
         time.sleep(back)
-        return discogs_get(path, throttle, token, attempt + 1)
+        return discogs_get(path, throttle, token, attempt + 1,
+                           cache=cache, refresh=refresh, directory=directory)
     if status != 200:
         print(f"warning: discogs {path} HTTP {status}", file=sys.stderr)
         return None
     try:
-        return json.loads(body)
+        parsed = json.loads(body)
     except json.JSONDecodeError:
         return None
+    if cache is not None and isinstance(parsed, dict):
+        cached_write(cache[0], cache[1], parsed, directory)
+    return parsed
 
 
 def find_discogs_artist(names: list[str], throttle: Throttle,
-                        token: str | None) -> tuple[dict | None, str]:
+                        token: str | None, refresh: bool = False,
+                        directory: Path | None = None,
+                        ) -> tuple[dict | None, str]:
     """Exact-match only, on any spelling the Qobuz credits used.
 
     Same discipline as qobuz_resolve.pick(): a wrong artist here injects a whole
@@ -106,18 +164,55 @@ def find_discogs_artist(names: list[str], throttle: Throttle,
     wanted = {normalise(n) for n in names}
     for name in names:
         query = urllib.parse.urlencode({"q": name, "type": "artist"})
-        data = discogs_get(f"/database/search?{query}", throttle, token)
+        data = discogs_get(f"/database/search?{query}", throttle, token,
+                           cache=("search", name), refresh=refresh,
+                           directory=directory)
         results = (data or {}).get("results") or []
         if not results:
             continue
         exact = [r for r in results
                  if normalise(strip_discogs_suffix(r.get("title") or "")) in wanted]
         if exact:
-            # Prefer the lowest id: Discogs numbers the canonical entry first and
-            # suffixes later duplicates.
-            exact.sort(key=lambda r: r.get("id") or 0)
+            # The SPELLING first, then the lowest id. "Lowest id is canonical"
+            # was the only rule here and it is wrong whenever the candidates
+            # differ by an accent or a numeric suffix: normalise() folds
+            # "Mana", "Mana (4)" and "Mana (44)" onto one key, so the sort saw
+            # four equal entries and took id 6859 "Mana" -- 21 releases --
+            # over id 570007 "Mana" with 505. A wrong id here reads as a SMALL
+            # catalogue, which is why it matters: a ubiquity penalty would
+            # then rank one of Latin America's biggest bands as selective.
+            # Measured over the 2026-10-24 sample: 8 of 38 matches were
+            # ambiguous and this reorders two of them, both to the right entry.
+            literal = set(names)
+            exact.sort(key=lambda r: (
+                strip_discogs_suffix(r.get("title") or "") not in literal,
+                r.get("id") or 0))
             return exact[0], "exact" if len(exact) == 1 else "ambiguous"
     return None, "no_exact_match"
+
+
+def total_releases(artist_id: int, throttle: Throttle, token: str | None,
+                   refresh: bool = False, directory: Path | None = None,
+                   ) -> int | None:
+    """How many releases Discogs holds for this artist, from page 1 alone.
+
+    The ubiquity number, and all of it is in `pagination.items` -- the same
+    value `discogs_credits`' gate reads on its first page. Nobody needs the
+    rows, so this does not page: one request per artist rather than up to
+    max_pages, which is what makes asking it of 592 people affordable.
+
+    None, not 0, when the request failed. A person Discogs has never heard of
+    and a minute we were throttled in must not read the same, because 0 is the
+    most selective number there is and would rank a failure to the top.
+    """
+    query = urllib.parse.urlencode({"per_page": 1, "page": 1})
+    data = discogs_get(f"/artists/{artist_id}/releases?{query}", throttle, token,
+                       cache=("releases", str(artist_id)), refresh=refresh,
+                       directory=directory)
+    if not data:
+        return None
+    items = (data.get("pagination") or {}).get("items")
+    return items if isinstance(items, int) else None
 
 
 def discogs_credits(artist_id: int, throttle: Throttle, token: str | None,

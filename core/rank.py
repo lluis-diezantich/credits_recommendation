@@ -108,6 +108,14 @@ def features(row, today: dt.date) -> dict:
         "span": span_years(row["first_seen"], row["last_seen"], today),
         "seed_plays": row["seed_plays"] or 0,
         "plays": row["plays"] or 0,
+        # The raw count for the log and the explanation, and the factor a
+        # strategy multiplies by. Both, because "0.3" in a logged run is not
+        # readable a month later and "859 releases" is.
+        #
+        # Injected by the caller, like `role_weight` beside it: the bands are a
+        # judgement and `core/` does not import `policy`.
+        "total_releases": row["total_releases"],
+        "ubiquity": row["ubiquity"],
     }
 
 

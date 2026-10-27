@@ -266,10 +266,39 @@ def test_candidates_that_match_nothing_are_not_guessed_at(discogs):
 
 
 def test_several_exact_matches_prefer_the_lowest_id_and_say_ambiguous(discogs):
-    """Discogs numbers the canonical entry first and suffixes later duplicates."""
+    """With nothing to choose on, Discogs numbers the canonical entry first.
+
+    Only a fallback since the spelling rule below: all three titles here are
+    the name as written, so the id is all that is left to sort on.
+    """
     discogs.queue = [(200, results(("Mauro", 900), ("Mauro", 12), ("Mauro", 55)))]
     hit, how = dg.find_discogs_artist(["Mauro"], discogs.throttle(), None)
     assert (hit["id"], how) == (12, "ambiguous")
+
+
+def test_the_spelling_as_written_beats_a_lower_id(discogs):
+    """The accent is the discriminator, and normalise() has already folded it.
+
+    Measured 2026-10-24: "Mana" matched Discogs id 6859 (21 releases) over id
+    570007 "Mana" (505), because the fold made four candidates equal and the
+    lowest id won. The direction is what makes it serious -- a wrong id reads
+    as a SMALL catalogue, so a ubiquity penalty built on it would rank one of
+    Latin America's biggest bands as highly selective.
+    """
+    discogs.queue = [(200, results(("Mana", 6859), ("Man\u00e1", 570007),
+                                   ("Mana (4)", 407925)))]
+    hit, how = dg.find_discogs_artist(["Man\u00e1"], discogs.throttle(), None)
+    assert (hit["id"], how) == (570007, "ambiguous")
+
+
+def test_the_spelling_rule_reads_every_spelling_the_credits_used(discogs):
+    """`names` is a list because one person arrives under several spellings;
+    a literal match against any of them beats a lower id."""
+    discogs.queue = [(200, results(("C\u00e1rles Campon", 11),
+                                   ("Carles Campon", 99)))]
+    hit, _ = dg.find_discogs_artist(["Carles Campi Campon", "Carles Campon"],
+                                    discogs.throttle(), None)
+    assert hit["id"] == 99
 
 
 def test_the_next_spelling_is_tried_when_the_first_finds_nothing(discogs):

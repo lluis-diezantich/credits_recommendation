@@ -59,3 +59,8 @@ intended way round from here.
 | [D33](D33-a-pre-order-is-not-news.md) | The Qobuz radar drops releases dated after the run, and does not record them | Accepted |
 | [D34](D34-a-confident-match-can-still-be-wrong.md) | A catalogue that predates the artist is flagged, and an exact match is not exempt | Accepted |
 | [D35](D35-the-seeds-own-band-is-its-own-reason.md) | The seed's own band is dropped for its own stated reason, not as "not an artist" | Accepted |
+| [D36](D36-ubiquity-is-a-rival-strategy-not-a-penalty.md) | Ubiquity is a rival strategy rather than a penalty on `breadth`, and only an exact Discogs match is believed | Accepted |
+| [D37](D37-one-list-per-scene.md) | The seeds are not independent evidence, so the ranked list is drawn per scene | Accepted |
+| [D38](D38-scenes-from-credits-listening-and-a-genre-veto.md) | A scene is credits or co-listening, with genre as a veto and never a link | Accepted |
+| [D39](D39-seeds-are-picked-to-deepen-a-scene.md) | A seed is ordered by the scene it would join, predicted before the walk | Accepted |
+| [D40](D40-the-person-key-ignores-quotes.md) | The person key removes every quote, and `load.py` re-mints rather than trusting a stored key | Accepted |

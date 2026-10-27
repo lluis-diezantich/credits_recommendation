@@ -34,7 +34,7 @@ import sys
 from contextlib import closing
 
 import policy
-from core import rank, shown
+from core import rank, scenes, shown
 from core.explain import cross_seed_sentence
 from core.names import normalise
 from core.paths import DATA
@@ -59,8 +59,11 @@ SELECT c.person_key,
        SUM(c.their_records) AS on_theirs,
        MIN(c.first_seen) AS first_seen,
        MAX(c.last_seen) AS last_seen,
-       (SELECT COUNT(*) FROM listens l WHERE l.artist_key = c.person_key) AS plays
+       (SELECT COUNT(*) FROM listens l WHERE l.artist_key = c.person_key) AS plays,
+       MIN(u.match) AS ubiquity_match,
+       MIN(u.total_releases) AS ubiquity_total
 FROM co_artists c JOIN seeds s USING (seed_qobuz_id)
+LEFT JOIN ubiquity u ON u.person_key = c.person_key
 WHERE c.seed_records + c.their_records > 0
 GROUP BY c.person_key
 """
@@ -79,6 +82,31 @@ FROM co_artist_albums a
 JOIN credits cr ON cr.person_key = a.person_key AND cr.album_id = a.album_id
 WHERE a.provenance IN ({TOGETHER})
 GROUP BY a.person_key, cr.role
+"""
+
+# Who each seed made records with, which is what decides whether two seeds are
+# one scene. The seed NAME, not the id, because `seed_names` on a candidate row
+# is a name list and the two have to meet.
+SEED_CO_ARTISTS = """
+SELECT s.name AS seed, co.person_key
+FROM co_artists co JOIN seeds s USING (seed_qobuz_id)
+WHERE co.seed_records + co.their_records > 0
+"""
+
+# The genres a seed carries, for the veto on a co-listening link. LEFT JOIN
+# rather than inner: a seed with no genre at all (Nathy Peluso, CHUWI) must
+# still appear, as a seed nothing can confirm rather than a missing row.
+SEED_GENRES = """
+SELECT s.name AS seed, g.genre
+FROM seeds s LEFT JOIN artist_genres g ON g.mbid = s.mbid
+"""
+
+# Every listen, in time order, for the session split. artist_key is already
+# normalise(name); the seed names are joined to it in Python for the reason
+# the comment on `plays_by_seed` gives.
+LISTENS_IN_ORDER = """
+SELECT listened_at, artist_key FROM listens
+WHERE listened_at IS NOT NULL ORDER BY listened_at
 """
 
 # The record to name, per person: the strongest direction, then the most
@@ -125,8 +153,11 @@ def candidates(con: sqlite3.Connection, today: dt.date) -> list[dict]:
             dropped.setdefault(reason, set()).add(row["name"])
             continue
         named = nameable_roles([role for role, _ in held])
+        total = policy.trusted_ubiquity(row["ubiquity_match"], row["ubiquity_total"])
         features = rank.features(
             {**dict(row), "roles": named,
+             "total_releases": total,
+             "ubiquity": policy.ubiquity_factor(total),
              "role_weight": max((policy.role_weight(r) for r in named),
                                 default=0.0),
              "seed_plays": sum(plays_by_seed.get(n, 0)
@@ -188,7 +219,7 @@ def markdown(rows: list[dict], limit: int, source: str, total: int,
            f"ranked by **{source}**. Every clause below is a stored row "
            "somebody can go and check.", ""]
     for position, row in enumerate(rows[:limit], 1):
-        seeds = (row["seed_names"] or "").replace(",", ", ")
+        seeds = ", ".join(seed_names(row))
         out.append(f"{position}. **{row['name']}** - {sentence(row)}")
         out.append(f"   <sub>via {seeds} - score {score_text(row)}</sub>")
         out.append("")
@@ -201,10 +232,110 @@ def markdown(rows: list[dict], limit: int, source: str, total: int,
 
 def show(rows: list[dict], limit: int) -> None:
     for position, row in enumerate(rows[:limit], 1):
-        seeds = (row["seed_names"] or "").replace(",", ", ")
+        seeds = ", ".join(seed_names(row))
         print(f"{position:>3}. {row['name']}   [{score_text(row)}]")
         print(f"     via {seeds}")
         print(f"     {sentence(row)}")
+
+
+def seed_names(row) -> list[str]:
+    """The seeds on a candidate row, as a list.
+
+    GROUP_CONCAT joins on a comma and no seed name contains one, which is
+    true of all 20 and checked by a test rather than assumed.
+    """
+    return [n for n in (row["seed_names"] or "").split(",") if n]
+
+
+def scene_links(con: sqlite3.Connection) -> tuple[dict[str, str], dict]:
+    """(seed -> scene label, why each link exists). Offline, from the store.
+
+    Three signals, because one was not enough and two were not either:
+    co-artists in common, sessions you played both in, and genre as a veto on
+    the second. `policy.scene_link` holds the rule and the measurements behind
+    each number.
+    """
+    by_seed: dict[str, set[str]] = {}
+    for row in con.execute(SEED_CO_ARTISTS):
+        by_seed.setdefault(row["seed"], set()).add(row["person_key"])
+
+    genres: dict[str, set[str]] = {}
+    for row in con.execute(SEED_GENRES):
+        genres.setdefault(row["seed"], set())
+        if row["genre"]:
+            genres[row["seed"]].add(row["genre"])
+    broad = policy.broad_genres(genres)
+
+    seeds = sorted(genres or by_seed)
+    wanted = {normalise(name): name for name in seeds}
+    totals, together, counted = scenes.sessions(
+        ((row["listened_at"], row["artist_key"])
+         for row in con.execute(LISTENS_IN_ORDER)),
+        policy.SCENE_SESSION_GAP, set(wanted))
+
+    def reason_for(a: str, b: str) -> str | None:
+        ka, kb = normalise(a), normalise(b)
+        pair = (min(ka, kb), max(ka, kb))
+        shared_sessions = together.get(pair, 0)
+        return policy.scene_link(
+            len(by_seed.get(a, set()) & by_seed.get(b, set())),
+            shared_sessions,
+            scenes.lift(shared_sessions, totals.get(ka, 0),
+                        totals.get(kb, 0), counted),
+            (genres.get(a, set()) & genres.get(b, set())) - broad)
+
+    found = scenes.linked_pairs(seeds, reason_for)
+    sizes = {name: len(by_seed.get(name, set())) for name in seeds}
+    labels = scenes.group_links(sizes, [(a, b) for a, b, _ in found])
+    return labels, {(a, b): why for a, b, why in found}
+
+
+def scene_labels(con: sqlite3.Connection) -> dict[str, str]:
+    """Just the labels, for a caller that does not print the reasons."""
+    return scene_links(con)[0]
+
+
+def show_by_scene(rows: list[dict], labels: dict[str, str], strategy,
+                  limit: int, why: dict | None = None) -> None:
+    """One ranked list per scene, biggest scene first.
+
+    Separate lists rather than one with a column, because the point is that
+    the numbers are NOT comparable across scenes: Bad Bunny hands out 116
+    co-signs and El Gran Combo 9, so a candidate's seed count means something
+    different in each. A single list with a scene column would invite exactly
+    the comparison this is built to stop (D37).
+    """
+    grouped = scenes.split(rows, labels, seed_names)
+    members: dict[str, list[str]] = {}
+    for seed, label in sorted(labels.items()):
+        members.setdefault(label, []).append(seed)
+
+    # Real scenes first, then the seeds that group with nobody. Ten of twenty
+    # seeds stand alone even with three signals, and leading with them buries
+    # the two lists worth reading.
+    def alone(label: str) -> bool:
+        return len(members.get(label, [])) < 2
+
+    for label, candidates_here in sorted(
+            grouped.items(), key=lambda kv: (alone(kv[0]), -len(kv[1]))):
+        others = [m for m in members.get(label, []) if m != label]
+        heading = label + (f" + {', '.join(others)}" if others else " (alone)")
+        print(f"\n--- {heading} "
+              f"({len(candidates_here)} candidates) ---\n")
+        show(rank.ranked(candidates_here, strategy), limit)
+
+    if why:
+        print("\nwhy each scene holds together:")
+        for (a, b), reason in sorted(why.items()):
+            print(f"  {a} / {b}: {reason}")
+
+    crossing = [r for r in rows
+                if len(scenes.of_candidate(seed_names(r), labels)) > 1]
+    print(f"\n{len(grouped)} scenes. {len(crossing)} candidate(s) reach more "
+          "than one, which is what D22's thesis is about:")
+    for row in crossing:
+        print(f"  {row['name']} - "
+              f"{', '.join(scenes.of_candidate(seed_names(row), labels))}")
 
 
 def write_log(directory, source: str, rows: list[dict], limit: int,
@@ -257,6 +388,9 @@ def main() -> int:
     parser.add_argument("--list", action="store_true",
                         help="the strategies and the claim each one makes")
     parser.add_argument("--top", type=int, default=25)
+    parser.add_argument("--by-scene", action="store_true",
+                        help="one ranked list per scene of seeds, because a "
+                             "seed count means a different thing in each")
     parser.add_argument("--all", action="store_true",
                         help="include artists you already play")
     parser.add_argument("--log", action="store_true",
@@ -314,6 +448,14 @@ def report(con: sqlite3.Connection, args) -> int:
         return 0
 
     name = args.strategy or policy.DEFAULT_STRATEGY
+
+    if args.by_scene:
+        print(f"{len(rows)} candidates by {name}, "
+              f"{'all' if args.all else 'unheard only'}, split by scene")
+        labels, why = scene_links(con)
+        show_by_scene(rows, labels, policy.strategy(name), args.top, why)
+        return 0
+
     ordered = rank.ranked(rows, policy.strategy(name))
 
     if args.markdown:

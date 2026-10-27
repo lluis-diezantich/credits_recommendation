@@ -33,6 +33,12 @@ from core.http import get
 from core.paths import CACHE
 
 CACHE_DIR = CACHE / "musicbrainz"
+# A SECOND directory, not a wider `inc` on the one above. Adding `genres` to
+# ARTIST_URL would change the shape of all 154 cached documents and make every
+# one of them a refetch at 1.2s -- the cost D34 explicitly declined to pay.
+# A genre lookup is wanted for 20 seeds, not for 154 people, so it gets its own
+# cache and leaves the artist documents alone.
+GENRE_CACHE_DIR = CACHE / "musicbrainz_genres"
 # `inc=aliases` rather than a second endpoint: the aliases arrive on the
 # request this module already makes, so the names an artist is credited under
 # cost nothing beyond what --check-active already spends. Cached entries
@@ -40,6 +46,8 @@ CACHE_DIR = CACHE / "musicbrainz"
 # which is in both shapes.
 ARTIST_URL = ("https://musicbrainz.org/ws/2/artist/{mbid}"
               "?inc=aliases+artist-rels&fmt=json")
+
+GENRE_URL = "https://musicbrainz.org/ws/2/artist/{mbid}?inc=genres&fmt=json"
 
 # Named application plus a contact URL, as MusicBrainz asks. Not decoration:
 # "dormancy-check/1.0 (personal use)" was refused with a 503.
@@ -81,6 +89,48 @@ def artist(mbid: str, refresh: bool = False,
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, ensure_ascii=False) + "\n")
     return data
+
+
+def genre_cache_path(mbid: str, directory: Path | None = None) -> Path:
+    return (directory or GENRE_CACHE_DIR) / f"{mbid}.json"
+
+
+def genres(mbid: str, refresh: bool = False,
+           directory: Path | None = None) -> list[tuple[str, int]] | None:
+    """[(genre, votes)] for one artist, most-voted first. None if unreadable.
+
+    None rather than [], same discipline as `artist()`: "MusicBrainz has no
+    genre for this artist" is a real answer a grouping must be able to act on,
+    and "the request failed" is not. Both are common here -- genres are
+    user-voted, so an artist can simply have none.
+
+    The vote count comes back because it is the only quality signal available:
+    a genre with one vote is one person's opinion, and the floor for believing
+    it is a judgement that lives in `policy`.
+    """
+    path = genre_cache_path(mbid, directory)
+    if path.exists() and not refresh:
+        try:
+            return [(g["name"], g["count"]) for g in json.loads(path.read_text())]
+        except (json.JSONDecodeError, OSError, KeyError, TypeError):
+            pass            # a corrupt cache entry is refetched, not fatal
+    status, body, _ = get(GENRE_URL.format(mbid=mbid), user_agent=USER_AGENT,
+                          service="MusicBrainz", fatal=False)
+    time.sleep(PAUSE)
+    if status != 200:
+        return None
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError:
+        return None
+    found: list[tuple[str, int]] = [
+        (str(g["name"]), int(g.get("count") or 0))
+        for g in data.get("genres") or [] if g.get("name")]
+    found.sort(key=lambda g: (-g[1], g[0]))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(
+        [{"name": n, "count": v} for n, v in found], ensure_ascii=False) + "\n")
+    return found
 
 
 def ended(entity: dict | None) -> tuple[bool, str | None]:

@@ -239,11 +239,29 @@ def test_a_person_is_keyed_on_the_normalised_primary_name(store):
     assert store.rows("people", "person_key, name") == [("jorge drexler", "Jorge Drexler")]
 
 
-def test_an_explicit_key_in_the_file_wins_over_deriving_one(store):
+def test_the_name_mints_the_key_and_a_stored_one_does_not_win(store):
+    """Reversed deliberately. A discovery file's `key` was minted by whichever
+    normalise() was current when discover.py wrote it, while `credits` mints
+    fresh on every load -- so trusting the stored one made the two disagree
+    for every name holding a quote and split the person in half. D25 is the
+    general case, and the quote change is what made it bite.
+    """
     store.write("discovery_1.json", {"people": [
-        {"key": "chosen key", "names": ["Ignored Name"]}]})
+        {"key": "stale key", "names": ["Mark \u201cSpike\u201d Stent"]}]})
     load.load_people(store.ld)
-    assert store.one("SELECT person_key FROM people") == ("chosen key",)
+    assert store.one("SELECT person_key FROM people") == ("mark spike stent",)
+
+
+def test_both_quote_spellings_of_one_person_load_as_one_row(store):
+    """The defect this fixes: the corpus holds the same person with a straight
+    apostrophe and a typographic one, and they keyed differently."""
+    store.write("discovery_1.json", {"people": [
+        {"names": ["Oscar D\u2019Le\u00f3n"], "stats": {"albums": 2}}]})
+    store.write("discovery_2.json", {"people": [
+        {"names": ["Oscar D'Le\u00f3n"], "stats": {"albums": 3}}]})
+    load.load_people(store.ld)
+    assert store.count("people") == 1
+    assert store.one("SELECT person_key FROM people") == ("oscar dleon",)
 
 
 def test_one_person_in_three_files_is_one_row_that_says_so(store):
@@ -265,6 +283,31 @@ def test_one_person_in_three_files_is_one_row_that_says_so(store):
                     "FROM people")
     assert row == (77, 12, 4, "selective",
                    "discogs_watchlist.json | discovery_1.json | watchlist.json")
+
+
+def test_ubiquity_rows_carry_the_match_kind(store):
+    """`match` is in the table because only 'exact' is trusted: a query that
+    read total_releases alone would believe 1 release for Travis Scott."""
+    store.write("ubiquity.json", {"generated": "2026-10-24", "people": [
+        {"person_key": "snoop dogg", "name": "Snoop Dogg", "discogs_id": 1,
+         "discogs_name": "Snoop Dogg", "match": "exact", "total_releases": 9796},
+        {"person_key": "travis scott", "name": "Travis Scott", "discogs_id": 2,
+         "discogs_name": "Travis Scott", "match": "ambiguous",
+         "total_releases": 1}]})
+    load.load_ubiquity(store.ld)
+
+    assert store.count("ubiquity") == 2
+    rows = dict(store.con.execute(
+        "SELECT person_key, match FROM ubiquity").fetchall())
+    assert rows == {"snoop dogg": "exact", "travis scott": "ambiguous"}
+
+
+def test_a_store_with_no_ubiquity_file_still_builds(store):
+    """The file costs 1,160 Discogs requests at 25/min, so a fresh clone must
+    not need it. Every reader goes through policy.ubiquity_factor(), which is
+    neutral on a missing count."""
+    load.load_ubiquity(store.ld)
+    assert store.count("ubiquity") == 0
 
 
 def test_a_later_file_does_not_overwrite_what_an_earlier_one_knew(store):
@@ -673,13 +716,15 @@ def test_summarise_prints_a_row_per_loaded_table(store, capsys):
 
 
 def test_a_full_build_from_nothing_produces_an_empty_but_valid_store(store, monkeypatch):
-    """main() end to end with no inputs at all: the tables, the 53 indexes and
+    """main() end to end with no inputs at all: the tables, the 56 indexes and
     the views all exist, and nothing raised. This is the contract -- the build
     runs over whatever happens to be on disk.
 
-    53, not 35: 18 of the primary keys are themselves unique indexes. 19
+    56, not 36: 20 of the primary keys are themselves unique indexes. 21
     tables carry a key, but `seeds` keys on INTEGER PRIMARY KEY, which aliases
-    the rowid and creates no index at all."""
+    the rowid and creates no index at all. Counted, not quoted -- the numbers
+    moved when `ubiquity` and `artist_genres` landed, and a stale one here
+    reads as a regression."""
     db = store.tmp / "out.db"
     monkeypatch.setattr(load, "LISTENS_GLOB", str(store.tmp / "no_such_*.zip"))
     monkeypatch.setattr("sys.argv", ["load.py", "--db", str(db)])
@@ -688,7 +733,7 @@ def test_a_full_build_from_nothing_produces_an_empty_but_valid_store(store, monk
     con = sqlite3.connect(db)
     kinds = con.execute("SELECT type, COUNT(*) FROM sqlite_master GROUP BY type"
                         ).fetchall()
-    assert dict(kinds)["index"] == 54
+    assert dict(kinds)["index"] == 56
     assert dict(kinds)["view"] == 4
 
 
@@ -892,7 +937,13 @@ def test_the_tables_whose_key_is_real_have_one(store):
     assert keyed["seeds"] == ["seed_qobuz_id"]
     assert keyed["co_artists"] == ["seed_qobuz_id", "person_key"]
     assert keyed["co_artist_albums"] == ["seed_qobuz_id", "person_key", "album_id"]
-    assert len(keyed) == 19
+    # One row per person, not per (person, seed): how prolific somebody is on
+    # Discogs is a fact about them and does not vary by which seed found them.
+    assert keyed["ubiquity"] == ["person_key"]
+    # Keyed on (mbid, genre): MusicBrainz returns a genre once per artist, and
+    # a duplicate would mean the cache file was written twice.
+    assert keyed["artist_genres"] == ["mbid", "genre"]
+    assert len(keyed) == 21
 
 
 def test_the_five_without_a_key_are_the_five_with_a_reason(store):
