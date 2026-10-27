@@ -42,7 +42,7 @@ from core.radar import Batch, Radar, Release, execute, parser
 # To find an MBID: search the artist on musicbrainz.org and take the UUID out
 # of the /artist/<uuid> URL.
 # This literal is now only the FALLBACK, used when data/favourites.json
-# carries no mbid. Generate that file with ./stages/favourites.py.
+# carries no mbid. That file is hand-edited on main (D41).
 WATCHED_ARTISTS: dict[str, str] = favourites.ids_for("mbid", {
     "abb91078-f7db-41f2-8f07-7f37bb739143": "Jorge Drexler",
 })

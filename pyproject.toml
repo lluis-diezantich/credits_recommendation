@@ -28,16 +28,13 @@ dev = [
 
 # This is a collection of scripts, not a distributable package, but naming the
 # real packages is what lets `pip install -e .` work at all: left to guess,
-# setuptools finds data/, cache/ and notebooks/ too and refuses. The install
-# exists to pull requests in, not to ship anything.
+# setuptools finds data/ and cache/ too and refuses. The install exists to pull
+# requests in, not to ship anything.
+#
+# `stages` and the root `policy` module were here until D41 archived them onto
+# the `ranking` branch. Both names have to come back if that branch does.
 [tool.setuptools]
-packages = ["core", "stages", "radars"]
-# policy.py is a single module at the root, not a package, and naming it here is
-# what lets `./stages/discover.py` import it. Running a file directly puts
-# stages/ on sys.path, never the root -- which the scripts used to paper over
-# with a sys.path.insert line each. The install replaces those ten lines, so it
-# has to cover everything they reached, policy.py included.
-py-modules = ["policy"]
+packages = ["core", "radars"]
 
 [tool.pytest.ini_options]
 # So `import core.qobuz` works without a sys.path line in every test file.
@@ -51,24 +48,17 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
-[tool.ruff.lint.per-file-ignores]
-# A showcase notebook is exploratory, and the conventions differ on purpose:
-# `ax.set_yticks(y); ax.set_yticklabels(labels)` on one line is how plotting
-# cells read. Linting it as a script would mean rewriting cells to satisfy
-# rules that do not apply to them.
-"notebooks/*" = ["ALL"]
-
 # Coverage is measured to answer one question: which files does the suite not
 # reach at all? policy.py sat at zero for the life of the project without that
 # being obvious from "76 tests pass", which is the failure mode worth closing.
 #
 # No `fail_under`. A number here would be a target, and the useful signal is
-# per-file: stages/load.py is 699 lines of bulk insert that a test suite with
-# no fixtures for a 190k-row export cannot reach, and a global percentage
-# averages that together with policy.py until neither means anything.
+# per-file. What main holds now is small enough that the per-file table is
+# readable in one screen, which is the whole point of putting it in the job
+# summary rather than sending it to a service.
 [tool.coverage.run]
-source = ["core", "stages", "radars", "policy"]
-omit = ["notebooks/*", "tests/*"]
+source = ["core", "radars"]
+omit = ["tests/*"]
 
 [tool.coverage.report]
 show_missing = true
@@ -85,16 +75,9 @@ exclude_also = [
 [tool.ty.src]
 exclude = [
     ".venv",
-    "notebooks",                  # exploratory cells, same reason as ruff
     "cache",
     "data",
 ]
-
-[tool.ty.rules]
-# duckdb is an optional query-layer dependency, imported inside a try/except
-# ImportError that exists precisely to report its absence (stages/load.py:105).
-# An unresolved import there is the design, not a defect.
-unresolved-import = "ignore"
 
 [[tool.ty.overrides]]
 include = ["tests/**"]

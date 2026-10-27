@@ -43,7 +43,7 @@ from core.radar import Batch, Radar, Release, execute, parser
 #     | python3 -m json.tool
 # and take `artistId`.
 # This literal is now only the FALLBACK, used when data/favourites.json
-# carries no itunes_id. Generate that file with ./stages/favourites.py.
+# carries no itunes_id. That file is hand-edited on main (D41).
 WATCHED_ARTISTS: dict[int, str] = favourites.ids_for("itunes_id", {
     16421943: "Jorge Drexler",
 })

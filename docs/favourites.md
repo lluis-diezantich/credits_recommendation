@@ -3,69 +3,53 @@
 `data/favourites.json` — the artists you actually play, with one id per source.
 The radars read it instead of each hardcoding their own list.
 
-    ./stages/favourites.py --from-profile                # who is worth watching
-    ./stages/favourites.py --check-active                # who has stopped releasing
-    ./stages/favourites.py --user <listenbrainz-user>    # the older, ranked source
-    ./radars/qobuz.py --days 90                          # what came out
+    ./radars/qobuz.py --days 90        # what came out
+    ./radars/qobuz.py --find "Name"    # the Qobuz id for a name, to paste in
+
+## The list is hand-edited now
+
+This file used to have two halves on two cadences: `stages/favourites.py`
+turned names into ids monthly, and `radars/qobuz.py` turned ids into releases
+weekly. [D41](adr/D41-main-is-the-radar-the-rest-is-a-branch.md) archived the
+first half onto the **`ranking`** branch along with the profile it read, so on
+main the watchlist is a committed file you edit by hand and the radar is the
+only thing that reads it.
+
+What that means in practice:
+
+- **Adding an artist** is `./radars/qobuz.py --find "Name"` to get the id, then
+  a new entry in `data/favourites.json` with `"qobuz_match": "manual"`.
+- **Dropping one** is `"watch": false` on their entry, never a deletion — see
+  [Two conventions](#two-conventions) for why.
+- **An artist who will not release again** gets `"ended": "<date>"`. Nothing
+  checks MusicBrainz for this any more; it was `--check-active` on the archived
+  stage.
+- **The list no longer grows by itself.** It is frozen at whatever the last run
+  of the stage left, which is the accepted cost in D41 rather than an oversight.
+
+The split was the whole design and the reason for it still holds: a name can
+match nothing, the wrong person, or four plausible candidates — Qobuz has two
+distinct artists called "Javier Colina". Paying for that ambiguity once rather
+than every week is why resolution was ever separate, and a wrong match nobody
+looked at would poison the radar quietly. Hand-editing keeps that property; it
+just does the resolving with your eyes instead of a stage.
+
+Everything the stage knew about doing this well — the review loop, the merge
+rules, the measurement that put the bar at active months rather than play
+counts — is on the branch, in this file's own history:
+
+    git show ranking:docs/favourites.md
+    git show ranking:docs/profile.md
 
 Not to be confused with `data/watchlist.json`, which is the **collaborator**
-list the credits pipeline builds by reading who made records. This is the other
-direction: who you listen to.
+list the credits pipeline built by reading who made records. That is also on
+`ranking`. This is the other direction: who you listen to.
 
-## Two halves, two cadences
-
-The split is the whole design, so keep it.
-
-| | | when | cost |
-|---|---|---|---|
-| `stages/favourites.py` | names → ids. Lossy, needs your eyes once. | monthly, or when you notice a gap | 1 ListenBrainz request per window, 1 Qobuz search per **new** name |
-| `radars/qobuz.py` | ids → new releases. Cheap, idempotent, schedulable. | weekly | 1+ Qobuz request per watched artist |
-
-Resolving is separated because a name can match nothing, the wrong person, or
-four plausible candidates — Qobuz has two distinct artists called "Javier
-Colina". You pay for that ambiguity once instead of every week, and a wrong
-match nobody looked at would otherwise poison the radar quietly.
-
-## Running it
-
-    # 1. build or refresh the list (keeps every id you fixed by hand)
-    ./stages/profile.py --json                 # measure, then
-    ./stages/favourites.py --from-profile      # resolve what it named
-
-    # 2. fix whatever did not resolve cleanly
-    ./stages/favourites.py --review
-
-    # 3. drop the ones who will never release again, and mute by hand
-    ./stages/favourites.py --check-active
-    ./stages/favourites.py --mute "Bobby Cruz" "Feli Colina"
-
-    # 4. the actual point
-    ./radars/qobuz.py --days 90
-
-Step 1 costs **one Qobuz search per name it has never seen**, and nothing for a
-name already carrying an id — so the second run is nearly free. `--from-profile`
-takes the `core` and `emerging` rows out of `data/profile.json`, which on the
-2026-05 export is 152 names of which 88 already had ids.
-
-The older source is still there: `--user <name>` reads the ListenBrainz top-artist
-windows, defaulting to `all_time`, with `--range week,month` to union several or
-`--range all` for all nine, and `--count` is **per window, not in total**. It
-admits an artist on play count, which is why it missed 140 artists with 24+
-active months — prefer `--from-profile` and keep this for a cross-check.
-
-Note that `--dry-run` means "do not write the file". It does **not** skip the
-Qobuz searches, so a dry run of step 1 still spends them.
-
-Step 2 needs no `--user` and makes no ListenBrainz call. For each open row it
-prints Qobuz's candidates with album counts, marking the id the entry already
-holds, and reads one answer: a number picks, `#41620` enters an id by hand and
-confirms it against Qobuz before writing, `/text` searches a different
-spelling, `s` skips, `m` mutes, `q` saves and quits. Ctrl-C aborts without
-writing.
-
-Step 4 records **everything it scanned**, not just what it printed, so the
+The radar records **everything it scanned**, not just what it printed, so a
 first run absorbs the back catalogue past `--days` silently and never reports
-it. That is deliberate and one-way.
+it. That is deliberate and one-way — though the scheduled known-artist run
+passes `--all` and records nothing at all, which is
+[D32](adr/D32-the-known-artist-radar-reports-the-whole-week.md).
 
 ## What is in the file
 
@@ -118,17 +102,20 @@ unanswerable lookup must not read as a yes.
 **`"watch": false` mutes without deleting.** Delete an entry and it is just a
 name nobody recognises, so the next run adds it straight back from the top
 lists. The entry has to stay for the exclusion to stick. Absent means watched,
-so the field only ever appears on the exceptions — `stages/resolve_qobuz.py`
-uses the same convention for people.
+so the field only ever appears on the exceptions. The archived resolver used
+the same convention for people.
 
-**`"qobuz_match": "manual"` is never re-resolved**, including by `--refresh`.
-That flag exists to re-ask autosuggest, not to overrule you. `--review` skips
-these rows too.
+**`"qobuz_match": "manual"` means you chose this id**, and nothing was allowed
+to re-resolve it — not `--refresh`, which existed to re-ask autosuggest rather
+than to overrule you, and not the review loop. It is the flag to set on any id
+you paste in by hand. On main nothing re-resolves anything, so it is a note to
+your future self rather than a guard.
 
-Everything else is merged, not overwritten: a run updates stats and adds new
-names, and artists who drop out of every window keep their entry with
+The archived stage merged rather than overwrote: a run updated stats and added
+new names, and artists who dropped out of every window kept their entry with
 `rank: null` — falling off a top-100 this quarter is not a reason to stop
-watching someone.
+watching someone. The `rank` and stats fields still in the file are from the
+last such run.
 
 ## Decided on purpose
 
@@ -137,17 +124,18 @@ watching someone.
 the exception: the manual ids and the mutes exist nowhere else, so regenerating
 it loses work rather than time. Under 100 KB, slow-moving, worth a diff.
 
-**It reads the live stats API, not the listen export.** The export is a
+**It read the live stats API, not the listen export.** The export is a
 point-in-time ZIP and reading it needs pandas, which would end this project's
-no-dependencies property. What that loses is `aliases.yml` name merging, so two
-spellings of one artist can both appear — mute one.
+no-dependencies property. What that lost is name merging, so two spellings of
+one artist can both appear — mute one.
 
-**There IS a relevance filter now, and it lives in `profile.py`.** The condition
-this section set — *"any replacement has to measure breadth from something
-live"* — is met: one stats request a month, appended to a durable store, and the
-verdict is active months rather than a play count. `--from-profile` reads it.
-[profile.md](profile.md) has the measurements. What follows is why the first
-attempt failed, which is still the reason the bar was set there.
+**The relevance filter lived in `profile.py`**, which is on `ranking`. The
+condition this section originally set — *"any replacement has to measure
+breadth from something live"* — was met there: one stats request a month,
+appended to a durable store, with the verdict being active months rather than a
+play count. `git show ranking:docs/profile.md` has the measurements. What
+follows is why the first attempt failed, which is still the reason the bar was
+set where it was.
 
 **The first relevance filter was tried and removed.**
 Counting distinct tracks per artist out of `music.db` does separate one song on

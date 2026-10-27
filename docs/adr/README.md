@@ -3,12 +3,24 @@
 One file per decision that shapes what this project recommends or how the repo
 is laid out. IDs `D1`, `D2`, … are stable, and the code refers to them.
 
-Why these exist alongside the other docs: `README.md` says what the layout IS,
-`docs/architecture.md` argues for it, `CLAUDE.md` lists the traps, and
-`todo.md` tracks what is left. None of them is a record of *what was decided,
+Why these exist alongside the other docs: `README.md` says what the layout IS
+and `CLAUDE.md` lists the traps. Neither is a record of *what was decided,
 when, against which alternative*. D1-D13 are backfilled from the code and the
 history on 2026-10-20; D14 was written as the change was made, which is the
 intended way round from here.
+
+## Where the other thirty-one are
+
+[D41](D41-main-is-the-radar-the-rest-is-a-branch.md) archived the credits
+pipeline onto the **`ranking`** branch on 2026-10-27, and the ADRs that govern
+files it took went with it. The full D1-D40 index is there:
+
+    git show ranking:docs/adr/README.md
+
+The IDs are not reused and not renumbered. What is listed below is the subset
+that governs code `main` still holds, which is why the numbering has gaps. Some
+of these files link to docs that now live only on `ranking` — those links
+dangle here and resolve there, and they are left alone on purpose by rule 3.
 
 ## How to add or change one
 
@@ -16,51 +28,20 @@ intended way round from here.
 2. Add a row to the index below.
 3. Never rewrite an accepted decision. Write a new one, and mark the old one
    `Superseded by DN` — the reason it was decided the other way is the point of
-   keeping it.
-4. A number in an ADR is a measurement with a date on it, the same rule
-   `policy.py` follows. If it was not measured, the Evidence section says so.
+   keeping it. This holds for a decision whose file is on the other branch too.
+4. A number in an ADR is a measurement with a date on it. If it was not
+   measured, the Evidence section says so.
 
 ## Index
 
 | ID | Decision | Status |
 | --- | --- | --- |
-| [D1](D1-policy-at-the-root.md) | Every contestable number lives in `policy.py`, at the root | Accepted |
 | [D2](D2-pure-core-dirty-edges.md) | `core/` is pure and offline; `stages/` and `radars/` do the network and the printing | Accepted |
 | [D3](D3-offline-tests.md) | Tests stub the network at the seam, and never call a real API | Accepted |
-| [D4](D4-measured-against-real-listening.md) | A threshold arrives with evidence from the full export, or not at all | Accepted |
-| [D5](D5-flag-rather-than-reclassify.md) | When two signals disagree about one artist, flag it rather than reclassify | Accepted |
-| [D6](D6-store-is-derived.md) | `data/music.db` is derived, disposable and rebuilt from JSON | Accepted |
 | [D7](D7-cache-is-the-corpus.md) | `cache/` is the source of truth for what an API said, and is not backed up | Accepted |
-| [D8](D8-one-pipeline-for-now.md) | The Friday known-artist radar is the whole product for now | Superseded by D22 (seeds only) |
-| [D9](D9-taste-in-active-months.md) | Taste is measured in active months, not play counts | Accepted |
-| [D10](D10-ask-musicbrainz-who-stopped.md) | Ask MusicBrainz who has stopped, rather than guessing from release dates | Accepted |
+| [D8](D8-one-pipeline-for-now.md) | The Friday known-artist radar is the whole product for now | Superseded by D22 (seeds only), and true again under D41 |
 | [D11](D11-radar-state-in-ci.md) | Radar state lives in `data/ci/`, committed by the workflow after the issue opens | Accepted |
 | [D12](D12-hashed-locks-advisory-format.md) | CI installs from hashed lockfiles; `ruff format` is advisory | Accepted |
-| [D13](D13-match-plausibility-on-read.md) | A shaky name match is penalised on read, not dropped | Accepted |
-| [D14](D14-co-appearance-is-its-own-output.md) | An album in the seed's discography is labelled own or guest, and co-appearance is its own output | Accepted |
-| [D15](D15-filters-before-ranking.md) | The pool is filtered on read by three stored facts, before anything ranks it | Accepted |
-| [D16](D16-cap-the-list-per-referrer.md) | The shortlist keeps at most two rows per referrer | Accepted |
-| [D17](D17-fold-plausibility-into-the-score.md) | The resolvers fold match plausibility and own-album counts into the stored score | Accepted |
-| [D18](D18-drop-score-zero-referrals.md) | A referral scoring zero is dropped, and the resolver stops fetching one | Accepted |
-| [D19](D19-person-seed-is-the-grain.md) | Albums and tracks are per (person, seed), and `people` sums them | Accepted |
-| [D20](D20-the-funnel-is-queryable.md) | Everything the funnel is made of reaches the store, keyed by seed | Accepted |
-| [D21](D21-explanations-name-what-the-person-did.md) | An explanation names what the person did, and every clause is a row | Accepted |
-| [D22](D22-co-appearance-is-the-second-pipeline.md) | Co-appearance becomes the second pipeline, and more seeds is now the point | Accepted |
-| [D23](D23-ask-musicbrainz-who-the-seed-is.md) | Ask MusicBrainz which names the seed is credited under, and fold editions by title | Accepted |
-| [D24](D24-a-record-nobody-holds.md) | A record no artist holds is a compilation, not a collaboration; and a hand list for billings that are not artists | Superseded by D35 (the hand list only) |
-| [D25](D25-one-person-one-key.md) | One person, one key, from a hand-edited alias file fed by a report rather than a name lookup | Accepted |
-| [D26](D26-seeds-by-rule.md) | A seed is chosen by rule from the profile, and walked intersections-first | Accepted |
-| [D27](D27-the-class-fallback-gets-rules.md) | The role-class fallback gets marker rules, sleeve credits get their own class | Accepted |
-| [D28](D28-an-album-is-per-person-seed.md) | An album is a fact about a (person, seed) pair, not a person | Accepted |
-| [D29](D29-strategies-are-hypotheses-and-the-log-judges-them.md) | Ranking is several named strategies, unmeasured on purpose, with a committed log to settle them | Accepted |
-| [D30](D30-a-remix-is-not-a-collaboration.md) | A remix is not a collaboration, and two seeds on one record corroborate once | Accepted |
-| [D31](D31-the-baseline-is-the-opponent.md) | The similar-artist baseline is an opponent in the same shown-log, not a separate report | Accepted |
 | [D32](D32-the-known-artist-radar-reports-the-whole-week.md) | The known-artist radar reports the whole week, late on Friday, and records nothing | Accepted |
 | [D33](D33-a-pre-order-is-not-news.md) | The Qobuz radar drops releases dated after the run, and does not record them | Accepted |
-| [D34](D34-a-confident-match-can-still-be-wrong.md) | A catalogue that predates the artist is flagged, and an exact match is not exempt | Accepted |
-| [D35](D35-the-seeds-own-band-is-its-own-reason.md) | The seed's own band is dropped for its own stated reason, not as "not an artist" | Accepted |
-| [D36](D36-ubiquity-is-a-rival-strategy-not-a-penalty.md) | Ubiquity is a rival strategy rather than a penalty on `breadth`, and only an exact Discogs match is believed | Accepted |
-| [D37](D37-one-list-per-scene.md) | The seeds are not independent evidence, so the ranked list is drawn per scene | Accepted |
-| [D38](D38-scenes-from-credits-listening-and-a-genre-veto.md) | A scene is credits or co-listening, with genre as a veto and never a link | Accepted |
-| [D39](D39-seeds-are-picked-to-deepen-a-scene.md) | A seed is ordered by the scene it would join, predicted before the walk | Accepted |
-| [D40](D40-the-person-key-ignores-quotes.md) | The person key removes every quote, and `load.py` re-mints rather than trusting a stored key | Accepted |
+| [D41](D41-main-is-the-radar-the-rest-is-a-branch.md) | Main is the known-artist radar alone; the credits pipeline is archived on the `ranking` branch | Accepted |

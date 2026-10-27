@@ -7,8 +7,9 @@ Three of the four are thin sources over a shared run in `core/radar.py`. Adding
 a fourth id-based source is a class with two methods and a fifteen-line
 workflow caller. This file is what you need to write one.
 
-> `docs/architecture.md` plans a rename, `radars/` → `sources/`. It has not
-> happened and may not; if it does, this file moves with it.
+> `docs/architecture.md` planned a rename, `radars/` → `sources/`. That doc is
+> on the `ranking` branch now (D41) and the rename has not happened; with the
+> radars being all that main runs, it is less likely to.
 
 ## The split
 

@@ -143,3 +143,70 @@ def test_the_line_lands_under_the_headline():
     lines = [line for line in body.splitlines() if line]
     assert lines[0].startswith("**0 new releases**")
     assert lines[1] == "Watching 2 of 4 on the list: 2 muted by hand."
+
+
+# --------------------------------------------------------------------------
+# The `watch` and `ended` filters, from the radars' side.
+#
+# These five moved here when the ranking half of the project was archived onto
+# the `ranking` branch (D41). They were written against the --mute/--unmute and
+# --check-active flags of stages/favourites.py, which went with it, but what
+# they actually assert is `core.favourites.ids_for` -- the one function all
+# three radars read the watchlist through. Losing them would have left the two
+# skips that decide who the Friday radar queries covered by nothing.
+# --------------------------------------------------------------------------
+
+
+def muted_rows():
+    return [
+        {"name": "Bobby Cruz", "qobuz_id": 55, "qobuz_match": "exact", "tracks": 1},
+        {"name": "Jorge Drexler", "qobuz_id": 41620, "qobuz_match": "exact"},
+        {"name": "Feli Colina", "qobuz_id": 77, "qobuz_match": "exact", "watch": False},
+    ]
+
+
+def test_the_radar_never_sees_a_muted_artist(tmp_path):
+    path = tmp_path / "favourites.json"
+    assert favourites.ids_for("qobuz_id", {0: "fallback"}, path) == {0: "fallback"}
+
+    path.write_text(json.dumps({"artists": muted_rows()}))
+    assert favourites.ids_for("qobuz_id", {0: "fallback"}, path) == {
+        55: "Bobby Cruz", 41620: "Jorge Drexler"}       # Feli Colina is muted
+
+
+def test_a_file_with_no_id_for_a_source_falls_back(tmp_path, capsys):
+    """Resolving only Qobuz ids must not quietly empty the iTunes radar."""
+    path = tmp_path / "favourites.json"
+    path.write_text(json.dumps({"artists": muted_rows()}))
+    assert favourites.ids_for("itunes_id", {16421943: "Drexler"}, path) == {
+        16421943: "Drexler"}
+    assert "has no itunes_id for any artist" in capsys.readouterr().err
+
+
+def test_an_unreadable_file_degrades_to_the_fallback(tmp_path, capsys):
+    path = tmp_path / "favourites.json"
+    path.write_text("{ not json")
+    assert favourites.ids_for("qobuz_id", {0: "fallback"}, path) == {0: "fallback"}
+    assert "ignoring unreadable" in capsys.readouterr().err
+
+
+def test_an_ended_artist_is_skipped_by_every_radar(tmp_path):
+    """ids_for is the one place all three radars read, so the skip lives there."""
+    path = tmp_path / "favourites.json"
+    path.write_text(json.dumps({"artists": [
+        {"name": "Fela Kuti", "qobuz_id": 1, "ended": "1997-08-02"},
+        {"name": "Jorge Drexler", "qobuz_id": 2},
+    ]}))
+    assert favourites.ids_for("qobuz_id", {}, path) == {2: "Jorge Drexler"}
+
+
+def test_ended_and_watch_false_are_independent_skips(tmp_path):
+    """Lifting a mute must not resurrect a dead artist, and vice versa."""
+    path = tmp_path / "favourites.json"
+    path.write_text(json.dumps({"artists": [
+        {"name": "Dead and watched", "qobuz_id": 1, "ended": True},
+        {"name": "Alive and muted", "qobuz_id": 2, "watch": False},
+        {"name": "Dead and muted", "qobuz_id": 3, "ended": True, "watch": False},
+        {"name": "Alive and watched", "qobuz_id": 4},
+    ]}))
+    assert favourites.ids_for("qobuz_id", {}, path) == {4: "Alive and watched"}

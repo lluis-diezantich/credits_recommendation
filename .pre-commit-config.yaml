@@ -25,13 +25,16 @@ repos:
         args: [--fix]
       - id: ruff-format
         # Format CHECK only, never a rewrite: this project's style is
-        # deliberate in places ruff-format disagrees with -- the aligned
-        # columns in policy.py's ROLE_WEIGHTS, the comment-per-value layout in
-        # load.py's SCHEMA. Reformatting those would cost more than it buys.
+        # deliberate in places ruff-format disagrees with -- the dict laid out
+        # three keys to a line in `Release.row`, the wrapped signature of
+        # `verdict`, both in core/radar.py. Reformatting those would cost more
+        # than it buys. (The examples this comment used to give, policy.py's
+        # ROLE_WEIGHTS and load.py's SCHEMA, went to the `ranking` branch with
+        # D41; the stance did not.)
         #
         # ADVISORY IN FACT, not just in the comment. --diff exits non-zero
-        # whenever it WOULD reformat, which here is 53 of 93 files and will
-        # stay that way as long as the layouts above are deliberate. As a
+        # whenever it WOULD reformat, which after D41 is 23 of 26 files and
+        # will stay that way as long as the layouts above are deliberate. As a
         # commit-stage hook that made every commit unpassable, so each one
         # went through with --no-verify -- which skips ruff-check and the
         # whitespace hooks too, and those are the ones worth having. D12 says
@@ -59,6 +62,5 @@ repos:
 exclude: |
   (?x)^(
     contrib/.*            # vendored gist, as in ruff and ty
-    |notebooks/.*         # exploratory cells
     |requirements.*\.lock  # generated, and trailing-whitespace would churn it
   )$

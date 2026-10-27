@@ -19,40 +19,6 @@ import sys
 import pytest
 
 
-@pytest.fixture(autouse=True)
-def no_real_month_store(monkeypatch, tmp_path):
-    """Nothing may write core.listens' real month directories, patched or not.
-
-    This file's own docstring promises "nothing can touch data/", and for
-    core.listens that was briefly untrue. write_month resolves its directory
-    PER CALL from the module globals, so a test that patched only one of the
-    two names wrote fake months into the real cache/ and data/ and clobbered
-    two months of real listening -- which then moved every band in the report.
-    Redirecting both by default makes forgetting harmless; a test that wants a
-    specific directory patches it afterwards and wins.
-    """
-    import core.listens as listens
-
-    monkeypatch.setattr(listens, "SEEDED", tmp_path / "_seeded")
-    monkeypatch.setattr(listens, "SNAPSHOTS", tmp_path / "_snapshots")
-    monkeypatch.setattr(listens, "MONTHS", tmp_path / "_seeded")
-
-
-@pytest.fixture(autouse=True)
-def no_real_discogs_cache(monkeypatch, tmp_path):
-    """Nothing may write the real cache/discogs/, patched or not.
-
-    Same trap as `no_real_month_store` one fixture up: `core.discogs` resolves
-    its directory from a module global, so a test that stubs the HTTP seam but
-    not the cache would still write a file -- and a stubbed response written
-    into the real corpus is worse than a failing test, because every later run
-    reads it as something Discogs said.
-    """
-    import core.discogs as discogs
-
-    monkeypatch.setattr(discogs, "CACHE_DIR", tmp_path / "_discogs")
-
-
 @pytest.fixture
 def album():
     """A Qobuz album row, in the shape artist/get returns.
@@ -119,45 +85,6 @@ def qobuz(monkeypatch):
                 monkeypatch.setattr(radar, "WATCHED_ARTISTS", watching)
             monkeypatch.setattr(sys, "argv", ["qobuz.py", *args])
             return radar.main()
-
-    return Handle()
-
-
-@pytest.fixture
-def favourites_file(monkeypatch, tmp_path):
-    """stages.favourites pointed at an in-memory favourites list.
-
-    Returns a handle whose `.entries` is what the stage reads and mutates in
-    place, and whose `.saved` is what it would have written -- None when the
-    stage chose not to save, which several tests assert.
-    """
-    import stages.favourites as stage
-
-    class Handle:
-        def __init__(self):
-            self.entries: list[dict] = []
-            self.saved = None
-            self.FILE = tmp_path / "favourites.json"
-
-        def install(self):
-            handle = self
-
-            class Stub:
-                FILE = handle.FILE
-
-                def load(self, *a, **k):
-                    return handle.entries
-
-                def save(self, artists, generated, *a, **k):
-                    handle.saved = artists
-
-            monkeypatch.setattr(stage, "favourites", Stub())
-            return stage
-
-        def answers(self, keys):
-            """Feed --review one line per prompt."""
-            lines = iter(list(keys))
-            monkeypatch.setattr("builtins.input", lambda *a: next(lines))
 
     return Handle()
 

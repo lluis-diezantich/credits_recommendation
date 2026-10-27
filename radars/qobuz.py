@@ -37,7 +37,8 @@ from core.radar import Batch, Radar, Release, execute, parser
 # Qobuz artist IDs -- a third namespace, unrelated to MusicBrainz MBIDs and
 # Apple artist IDs. Find one with:  ./radars/qobuz.py --find "Name"
 # This literal is now only the FALLBACK, used when data/favourites.json
-# carries no qobuz_id. Generate that file with ./stages/favourites.py.
+# carries no qobuz_id. That file is hand-edited on main; the stage that
+# generated it is on the `ranking` branch (D41).
 # watchlist() rather than ids_for(), because the run reports what it dropped:
 # the counts travel into the JSON via report_extra() below.
 WATCHLIST = favourites.watchlist("qobuz_id", {
@@ -176,8 +177,7 @@ def find(name: str, store: str) -> int:
         print(f"No Qobuz artist matched {name!r}.")
         return 0
     print(f"Qobuz artists matching {name!r} - put one in "
-          f"data/favourites.json as qobuz_id, or run:\n"
-          f"  ./stages/favourites.py --review\n")
+          f"data/favourites.json as qobuz_id:\n")
     for artist in found[:15]:
         print(f"  {str(artist.get('id')):>10}  {artist.get('name')}"
               f"   ({artist.get('albumsCount') or 0} albums)")

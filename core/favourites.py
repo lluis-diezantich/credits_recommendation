@@ -54,9 +54,10 @@ def load(path: Path = FILE) -> list[dict]:
 
 # Written into the file itself, because this one is meant to be read and
 # hand-edited: the mute knob is invisible until something flips it.
-NOTE = ('hand-edits are kept: set "watch": false to stop watching an artist '
-        '(or run stages/favourites.py --mute "Name"), and a qobuz_id you fix '
-        'by hand is never re-resolved.')
+NOTE = ('hand-edits are kept: set "watch": false to stop watching an artist, '
+        '"ended": "<date>" when they will not release again, and a qobuz_id '
+        'you fix by hand is never re-resolved. Nothing on main rewrites this '
+        'file -- the stage that generated it is on the `ranking` branch (D41).')
 
 
 def save(artists: list[dict], generated: str, path: Path = FILE) -> None:

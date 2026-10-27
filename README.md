@@ -1,17 +1,29 @@
 # credits_recommendation
 
-Credits-based music discovery. Start from one artist, read who actually made
-their records — producers, engineers, players — then find what else those people
-made. The premise is that a collaborator graph carries signal a genre model
-cannot: sharing a producer means something, sharing a mastering house does not.
+New releases from the artists you already listen to, as a GitHub issue every
+Friday. One watchlist, four sources, no ranking.
+
+> **The credits half of this project is paused.** Starting from one artist,
+> reading who actually made their records — producers, engineers, players — and
+> finding what else those people made was the premise, and the pipeline that
+> did it works. Its recommendations were not good enough to keep iterating on,
+> so on 2026-10-27 all of it moved out of main's way onto the **`ranking`**
+> branch: `policy.py`, `stages/`, nine `core/` modules, the store, the ADRs
+> that govern them. Nothing was deleted — `git checkout ranking` is the whole
+> thing back, and [D41](docs/adr/D41-main-is-the-radar-the-rest-is-a-branch.md)
+> says what moved, why, and what it costs.
 
 ## What runs on a schedule
 
 | | | |
 |---|---|---|
 | new releases from artists you already know | `radars/qobuz.py` over `data/favourites.json` | Fridays, as a GitHub issue |
-| one month of listening, snapshotted | `stages/profile.py --month` | monthly, committed to `data/listens_months/` |
 | the test suite | `pytest` | every push and pull request |
+
+The monthly listening snapshot is off. That one is not free to resume: it fed
+on ListenBrainz's `range=month`, which answers about one past calendar month
+and cannot be asked again, so every month from now on is recoverable only by
+downloading a fresh export by hand. D41 took that cost knowingly.
 
 ## Install
 
@@ -25,69 +37,49 @@ cannot turn the Friday radar red. Both are generated — regenerate with the
 
 ## Running it
 
-    pytest -q                                  # the suite, offline
+    ./radars/qobuz.py --days 90            # what came out, from Qobuz
+    ./radars/qobuz.py --find "Name"        # the Qobuz id for a name
+    ./radars/itunes.py --days 30           # the same question, Apple's catalogue
+    ./radars/listenbrainz.py --days 30     # and MusicBrainz's
+    ./radars/remezcla.py                   # a blog, not an id namespace
+    pytest -q                              # the suite, offline
 
-Each feature's own doc carries its commands and the reasons they are shaped that
-way; the table under [Docs](#docs) is the index. `python -m stages.favourites`
-works as well as `./stages/favourites.py`. Every stage reads and writes JSON in
-`data/`, so any stage can be rerun alone, and `resolve_discogs.py --pool-only`
-resumes a run that died partway through its fan-out.
+`python -m radars.qobuz` works as well as `./radars/qobuz.py`. Each radar
+writes JSON, `radars/report.py` turns that into the markdown the issue carries,
+and `docs/radars.md` is what you need to write another one.
 
 ## Layout
 
-    policy.py          scoring judgement calls - ONE copy, at the root, on purpose
-    core/              plumbing - http, names, aliases, credits, qobuz, discogs,
-                       favourites, listens, musicbrainz, state, paths, radar,
-                       explain, rank, scenes, shown, similar
-    stages/            the pipeline, in order
-      favourites.py      ListenBrainz top artists -> Qobuz ids -> favourites.json
-      profile.py         listens -> who you still play, in months  [DERIVED]
-      seeds.py           profile -> which artist to walk next      [OFFLINE]
-      discover.py        seed artist -> credits -> people          [EXACT]
-      resolve_qobuz.py   people -> Qobuz artist ids -> pool.json   [LOSSY]
-      resolve_discogs.py the ones Qobuz cannot see -> pool_discogs  [LOSSY]
-      writing.py         one person -> what they WROTE, anywhere   [CACHED]
-      load.py            all of the above -> data/music.db         [DERIVED]
-      co_artists.py      who a seed made records WITH, explained   [OFFLINE]
-      rank.py            all seeds at once, by strategy or scene   [OFFLINE]
-      ubiquity.py        candidates -> how prolific each one is    [CACHED]
-      baseline.py        the similar-artist opponent, same log     [CACHED]
+    core/              plumbing - http, names, favourites, qobuz, radar,
+                       state, paths
     radars/            new-release watchers, one thin source each - docs/radars.md
       qobuz.py  listenbrainz.py  itunes.py    core/radar.py drives these three
       remezcla.py        a blog, not an id namespace - its own script
       report.py          a radar's JSON -> markdown, for the weekly issue
     tests/             pytest, offline - every network call stubbed at the seam
-                       `pytest --cov` names what is uncovered; todo.md tracks it
-    data/              generated JSON, gitignored except favourites.json and
-                       aliases.json (hand-edited) and shown.json (the ranking
-                       log, which cannot be regenerated by definition)
+    data/              favourites.json is the watchlist, committed and
+                       hand-edited; data/ci/ is the runner's own seen-state.
+                       Everything else in here is generated and ignored
     cache/             API responses - the source of truth, never regenerated
     .github/workflows/ radar.yml runs any radar; one caller per schedule
                        tests.yml: ruff, ty, pytest --cov on 3.11/3.12/3.13
     requirements*.lock hashed pins for CI - generated, see their headers
 
-`data/music.db` is derived and disposable: `./stages/load.py` rebuilds 216k rows
-in under a second and fetches nothing. Deleting it costs one rerun. Deleting
-`cache/` costs a refetch and, for anything Qobuz has edited since, the ability
-to reproduce an old output exactly - 650 KB of the 85 MB is the part that
-matters, and todo.md has the measurement.
+Deleting `cache/` costs a refetch and, for anything Qobuz has edited since, the
+ability to reproduce an old output exactly. It is 85 MB and is not backed up
+anywhere; `docs/adr/D7-cache-is-the-corpus.md` is the decision.
 
 ## Docs
 
 | | |
 |---|---|
-| [favourites.md](docs/favourites.md) | the watchlist and the release radar, and why their cadences differ |
-| [profile.md](docs/profile.md) | who you still listen to, in active months rather than plays |
+| [favourites.md](docs/favourites.md) | the watchlist: what is in it, and how to edit it by hand |
 | [radars.md](docs/radars.md) | what a radar is, and how to write another one |
-| [architecture.md](docs/architecture.md) | the module map, and the one module the rest waits on |
-| [roadmap.md](docs/roadmap.md) | what this is and is not as a recommender, stage by stage |
-| [store.md](docs/store.md) | `data/music.db` — table map, query cookbook, gotchas |
-| [duckdb.md](docs/duckdb.md) | optional query layer over the store — measured, not quoted |
-| [sources.md](docs/sources.md) | other discovery signals, and what each was tested to carry |
-| [disco-bahia.md](docs/disco-bahia.md) | one recommendation this project could not have made |
 | [adr/](docs/adr/README.md) | one file per decision, with the option it was weighed against and the measurement it rests on |
 
-## TODO
+The docs for the archived half — `architecture.md`, `roadmap.md`, `store.md`,
+`profile.md`, `sources.md`, `duckdb.md`, `disco-bahia.md` — and the 71 KB
+`todo.md` that tracked its backlog are on `ranking`:
 
-Moved to [todo.md](todo.md): the product gaps, what is untested, the
-build-hygiene list, and what is deliberately deferred.
+    git show ranking:docs/roadmap.md
+    git show ranking:todo.md
