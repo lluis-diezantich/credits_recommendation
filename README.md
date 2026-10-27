@@ -3,27 +3,12 @@
 New releases from the artists you already listen to, as a GitHub issue every
 Friday. One watchlist, four sources, no ranking.
 
-> **The credits half of this project is paused.** Starting from one artist,
-> reading who actually made their records — producers, engineers, players — and
-> finding what else those people made was the premise, and the pipeline that
-> did it works. Its recommendations were not good enough to keep iterating on,
-> so on 2026-10-27 all of it moved out of main's way onto the **`ranking`**
-> branch: `policy.py`, `stages/`, nine `core/` modules, the store, the ADRs
-> that govern them. Nothing was deleted — `git checkout ranking` is the whole
-> thing back, and [D41](docs/adr/D41-main-is-the-radar-the-rest-is-a-branch.md)
-> says what moved, why, and what it costs.
-
 ## What runs on a schedule
 
 | | | |
 |---|---|---|
 | new releases from artists you already know | `radars/qobuz.py` over `data/favourites.json` | Fridays, as a GitHub issue |
 | the test suite | `pytest` | every push and pull request |
-
-The monthly listening snapshot is off. That one is not free to resume: it fed
-on ListenBrainz's `range=month`, which answers about one past calendar month
-and cannot be asked again, so every month from now on is recoverable only by
-downloading a fresh export by hand. D41 took that cost knowingly.
 
 ## Install
 
@@ -75,11 +60,8 @@ anywhere; `docs/adr/D7-cache-is-the-corpus.md` is the decision.
 |---|---|
 | [favourites.md](docs/favourites.md) | the watchlist: what is in it, and how to edit it by hand |
 | [radars.md](docs/radars.md) | what a radar is, and how to write another one |
+| [history.md](docs/history.md) | what used to be on main, where it went, and what that cost |
 | [adr/](docs/adr/README.md) | one file per decision, with the option it was weighed against and the measurement it rests on |
 
-The docs for the archived half — `architecture.md`, `roadmap.md`, `store.md`,
-`profile.md`, `sources.md`, `duckdb.md`, `disco-bahia.md` — and the 71 KB
-`todo.md` that tracked its backlog are on `ranking`:
-
-    git show ranking:docs/roadmap.md
-    git show ranking:todo.md
+`main` is the radar and nothing else; the credits pipeline and its docs are
+on the `ranking` branch. [history.md](docs/history.md) is that story.
