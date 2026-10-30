@@ -133,16 +133,18 @@ def test_a_radar_that_reports_no_watchlist_gets_no_line():
     assert "on the list" not in body
 
 
-def test_the_line_lands_under_the_headline():
+def test_the_line_lands_under_the_headline_in_the_folded_block():
     body = rep.to_markdown({"generated": "x", "source": "qobuz", "store": "gb-en",
                             "window": "last 7 days", "watching": 2, "fetched": 2,
                             "failed": 0, "shared": 0, "releases": [],
                             "watchlist": {"entries": 4, "ids": 2, "collapsed": 0,
                                           "watched": 2, "muted": 2, "ended": 0,
                                           "unresolved": 0}})
-    lines = [line for line in body.splitlines() if line]
-    assert lines[0].startswith("**0 new releases**")
-    assert lines[1] == "Watching 2 of 4 on the list: 2 muted by hand."
+    # Both are bookkeeping about the run, so both moved into the collapsed
+    # warnings block -- in this order, directly under the count.
+    folded = body.split("```")[1].strip().splitlines()
+    assert folded[0].startswith("0 new releases")
+    assert folded[1] == "Watching 2 of 4 on the list: 2 muted by hand."
 
 
 # --------------------------------------------------------------------------

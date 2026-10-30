@@ -12,6 +12,15 @@ formatter serves all of them, and a radar never has to know what markdown is.
 
 Optional fields are treated as optional: `hires` and `streamable` come from
 Qobuz, `tracks` from everything, and a report missing them still formats.
+
+The body is the records: one table of what the watched artists released, one of
+what they are credited on (D42), and nothing else. Every count about the run --
+the release total, the watchlist exclusions, the shared note, the credit funnel
+-- is plain text inside the collapsed `warnings` block, because the issue is
+read on a phone and the first thing on the page should be a record rather than
+arithmetic about the job that found it (D43). `Nothing new.` and the
+incomplete-list warning stay in the body, and the docstrings on `run_lines` and
+those two branches say why.
 """
 
 from __future__ import annotations
@@ -98,28 +107,9 @@ def to_markdown(report: dict, warnings: str = "") -> str:
     fetched = report.get("fetched", watching)
     source = report.get("source", "radar")
     store = report.get("store")
-    where = f"`{store}` store" if store else source
-
-    # Counted on the rows the headline is ABOUT. The credit pass adds rows the
-    # watched artists did not release, and folding them into "9 new releases
-    # from 128 artists" would quietly restate what that sentence has meant in
-    # every issue so far. They get their own count below.
-    own = [r for r in releases if not r.get("because")]
-    head = (f"**{len(own)} new release{'s' if len(own) != 1 else ''}** from "
-            f"{fetched} of {watching} artists in the {where} "
-            f"({report.get('window', 'unknown window')}).")
-
-    lines = [head]
-    watchlist = watchlist_line(report.get("watchlist") or {})
-    if watchlist:
-        lines += ["", watchlist]
-
-    shared = report.get("shared")
-    if shared:
-        lines += ["", f"{shared} release{'s' if shared != 1 else ''} "
-                      f"{'were' if shared != 1 else 'was'} credited to more than one "
-                      "artist you watch, and "
-                      f"{'are' if shared != 1 else 'is'} listed once."]
+    # No markdown: the only place this is printed now is inside a fenced block,
+    # where backticks would render as backticks.
+    where = f"{store} store" if store else source
 
     # Two kinds of row, and they answer different questions. A release without
     # `because` is one a watched artist is billed on -- the thing this radar
@@ -129,6 +119,14 @@ def to_markdown(report: dict, warnings: str = "") -> str:
     # for "what did my artists put out" should not have to filter by eye.
     billed = [r for r in releases if not r.get("because")]
     credited = [r for r in releases if r.get("because")]
+
+    # The body is the records and nothing else. Every count the report used to
+    # open with is bookkeeping about the RUN rather than about the music, and
+    # it pushed the first row of the table below the fold -- so it moves into
+    # the warnings block, which is collapsed but one click away. Nothing is
+    # dropped: a number that stops being reported stops being re-measured, and
+    # the funnel in particular only earns its keep by being checked (D42).
+    lines: list[str] = []
 
     if billed:
         lines += ["", table(billed)]
@@ -140,25 +138,56 @@ def to_markdown(report: dict, warnings: str = "") -> str:
                       f"{'s' if len(credited) != 1 else ''}** on other artists' "
                       "releases.", "", table(credited, credit=True)]
 
-    # What the credit pass threw away, from the radar's own count. Printed
-    # because the numbers are the thing to re-measure: the week `writer` stops
-    # dwarfing `appearance` is the week the role denylist needs re-reading, and
-    # a number nothing states is a number nobody checks.
-    funnel = report.get("credits") or {}
-    if funnel:
-        counted = ", ".join(f"{count} {name}" for name, count in funnel.items())
-        lines += ["", f"<sub>credit candidates: {counted}</sub>"]
-
+    # Stays in the body, deliberately. This is not a count, it is a caveat
+    # about whether the list above is the whole answer, and a reader who never
+    # opens the warnings still has to see it.
     if report.get("failed"):
         lines += ["", f"⚠ {report['failed']} of {watching} artists could not be fetched, "
                       "so this list is incomplete."]
 
-    if warnings.strip():
-        lines += ["", "<details><summary>warnings</summary>", "", "```",
-                  warnings.rstrip(), "```", "", "</details>"]
+    bookkeeping = run_lines(report, billed, fetched, watching, where)
+    folded = "\n".join(bookkeeping) + ("\n\n" + warnings.rstrip()
+                                       if warnings.strip() else "")
+    lines += ["", "<details><summary>warnings</summary>", "", "```",
+              folded, "```", "", "</details>"]
 
     lines += ["", f"<sub>{source} · generated {report.get('generated', '?')}</sub>"]
-    return "\n".join(lines) + "\n"
+    return "\n".join(lines).lstrip("\n") + "\n"
+
+
+def run_lines(report: dict, billed: list[dict], fetched: int, watching: int,
+              where: str) -> list[str]:
+    """What the run was, for the collapsed block. Counts, not music.
+
+    Plain text rather than markdown: it goes inside a fenced code block, so a
+    bolded headline would render as asterisks and a backticked store code as
+    backticks.
+    """
+    # Counted on the rows this sentence is ABOUT. The credit pass adds rows the
+    # watched artists did not release, and folding them in would quietly
+    # restate what "9 new releases from 128 artists" has meant in every issue
+    # so far.
+    out = [f"{len(billed)} new release{'s' if len(billed) != 1 else ''} from "
+           f"{fetched} of {watching} artists in the {where} "
+           f"({report.get('window', 'unknown window')})."]
+
+    watchlist = watchlist_line(report.get("watchlist") or {})
+    if watchlist:
+        out.append(watchlist)
+
+    shared = report.get("shared")
+    if shared:
+        out.append(f"{shared} release{'s' if shared != 1 else ''} "
+                   f"{'were' if shared != 1 else 'was'} credited to more than one "
+                   "artist you watch, and "
+                   f"{'are' if shared != 1 else 'is'} listed once.")
+
+    funnel = report.get("credits") or {}
+    if funnel:
+        counted = ", ".join(f"{count} {name}" for name, count in funnel.items())
+        out.append(f"credit candidates: {counted}")
+
+    return out
 
 
 def main() -> int:
