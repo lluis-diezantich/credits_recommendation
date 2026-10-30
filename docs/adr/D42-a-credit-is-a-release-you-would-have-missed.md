@@ -112,12 +112,39 @@ live `gb-en` store. 2467 requests.
 | distinct albums | 45 |
 | after dropping repackages | ~31 |
 
-**≈5 genuine appearances a week**, against the 9 releases pass one reports. A
-weekly run is ~211 searches plus ~170 candidate reads: **~380 requests, about
-85 seconds** at the existing 0.22s pause, against 128 before. The first
-production run came in at 128 searches plus 148 reads — 276 requests, under the
-estimate, because a one-week window admits fewer candidates than a sixth of a
-six-week one.
+**≈5 genuine appearances a week**, against the 9 releases pass one reports. The
+first production run cost 128 searches plus 148 candidate reads — 276 logical
+requests, and more HTTP requests than that, because both `artist_releases` and
+`search_tracks` page at 500.
+
+**It takes about 8 minutes, against about 1.3 before.** Measured on the same 8
+artists, with the network instrumented, 2026-10-30:
+
+| | per artist | 128 artists |
+| --- | --- | --- |
+| `--no-credits` | 0.6s | ~1.3 min |
+| with the credit pass | 5.0s | ~10.7 min |
+
+    artist/get    8 requests   2.1s  (0.27s each)
+    track/search 16 requests  26.9s  (1.68s each)   <- 67% of the wall clock
+    album/get    16 requests   3.7s  (0.23s each)
+    pauses                     5.7s
+
+`track/search` is the whole cost, and for two compounding reasons: a 500-item
+page is a large payload, so it answers in ~1.7s where the other endpoints
+answer in ~0.25s; and it takes TWO requests per artist, because these result
+sets exceed 500 and the endpoint ignores `order`, so there is no way to stop
+once the recent rows are in hand.
+
+An earlier draft of this section claimed 85 seconds. That was ~380 requests
+multiplied by the 0.22s pause with the network latency left out entirely —
+and latency is 85% of the time. The request count was right and the duration
+was not. Corrected here rather than in a new ADR because the decision did not
+change; only a number that was never measured.
+
+Not worth optimising at a weekly cadence, and both obvious moves are worse: a
+smaller `limit` buys more pages, and running the searches concurrently
+contradicts `PAUSE`'s standing "Qobuz publishes no rate limit; be unhurried".
 
 Three numbers decided a rule rather than describing one:
 

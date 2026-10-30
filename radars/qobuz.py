@@ -139,8 +139,9 @@ class QobuzRadar(Radar):
         parser.add_argument("--no-credits", action="store_true",
                             help="skip the credit pass: report only releases the "
                                  "watched artists are billed on, which is what this "
-                                 "radar did before D42. Roughly a third of the "
-                                 "requests")
+                                 "radar did before D42. Measured at 1.3 minutes "
+                                 "against 8 for 128 artists -- track/search is slow "
+                                 "and runs twice per artist")
 
     def watching(self) -> dict:
         return WATCHED_ARTISTS
