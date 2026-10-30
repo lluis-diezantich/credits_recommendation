@@ -4,7 +4,9 @@ Personal project for recommending music.
 
 ## Features
 
-- New releases for known artists
+- New releases for known artists, both what they are billed on and what they
+  are credited on -- a guest spot on somebody else's record is a release you
+  would otherwise never have looked for (D42)
 
 ## Install
 
@@ -14,6 +16,7 @@ Personal project for recommending music.
 ## Running it
 
     ./radars/qobuz.py --days 90            # what came out, from Qobuz
+    ./radars/qobuz.py --days 90 --no-credits   # their own releases only
     ./radars/qobuz.py --find "Name"        # the Qobuz id for a name
     ./radars/itunes.py --days 30           # the same question, Apple's catalogue
     ./radars/listenbrainz.py --days 30     # and MusicBrainz's
@@ -25,7 +28,8 @@ Each radar writes JSON, `radars/report.py` turns that into markdown.
 ## Layout
 
     core/              plumbing - http, names, favourites, qobuz, radar,
-                       state, paths
+                       state, paths; credits + appearances read the per-track
+                       credits Qobuz ships with an album
     radars/            new-release watchers, one thin source each - docs/radars.md
       qobuz.py  listenbrainz.py  itunes.py    core/radar.py drives these three
       remezcla.py        a blog, not an id namespace - its own script

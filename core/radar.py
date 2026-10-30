@@ -66,6 +66,14 @@ class Release:
     hires: bool | None = None
     streamable: bool | None = None
     url: str | None = None
+    #: Why this row is in the report, when that is not simply "they released
+    #: it". Set only by a radar that finds releases some OTHER way than by
+    #: walking a watched artist's discography: radars/qobuz.py's credit pass
+    #: fills it with the watched name and the roles Qobuz credits them with,
+    #: because "Miguel Atwood-Ferguson - Ananta" is not self-explanatory in a
+    #: report about artists you follow (D42). None for every other radar, and
+    #: absent from row() when None, so no existing report changes shape.
+    because: str | None = None
 
     def row(self) -> dict:
         """The JSON shape. Absent knowledge is absent, not false."""
@@ -78,6 +86,8 @@ class Release:
             row["streamable"] = self.streamable
         if self.url:
             row["url"] = self.url
+        if self.because:
+            row["because"] = self.because
         return row
 
 
@@ -233,8 +243,11 @@ class Radar(ABC):
         upcoming = " [upcoming]" if release.date > today.isoformat() else ""
         badges = self.badges(release)
         suffix = f" ({badges})" if badges else ""
+        # A row somebody else released carries the credit that put it here, or
+        # it reads as a release by an artist you have never followed.
+        credit = f"\n           ↳ {release.because}" if release.because else ""
         return (f"{release.date}  {release.kind:<7}{upcoming:<11} "
-                f"{release.artist} - {release.title}{suffix}")
+                f"{release.artist} - {release.title}{suffix}{credit}")
 
     def summary(self, args, run: Run) -> str:
         plural = "s" if run.watching != 1 else ""

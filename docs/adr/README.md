@@ -45,3 +45,5 @@ dangle here and resolve there, and they are left alone on purpose by rule 3.
 | [D32](D32-the-known-artist-radar-reports-the-whole-week.md) | The known-artist radar reports the whole week, late on Friday, and records nothing | Accepted |
 | [D33](D33-a-pre-order-is-not-news.md) | The Qobuz radar drops releases dated after the run, and does not record them | Accepted |
 | [D41](D41-main-is-the-radar-the-rest-is-a-branch.md) | Main is the known-artist radar alone; the credits pipeline is archived on the `ranking` branch | Accepted |
+| [D42](D42-a-credit-is-a-release-you-would-have-missed.md) | The radar also reports what its artists are credited on, found by searching the track index | Accepted |
+| [D43](D43-the-issue-body-is-the-records.md) | The issue body is the records; every count about the run is folded into the warnings block | Accepted |

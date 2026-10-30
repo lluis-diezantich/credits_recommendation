@@ -57,10 +57,29 @@ def qobuz(monkeypatch):
     class Handle:
         def __init__(self):
             self.discography: dict | None = None
+            #: {artist label: [track row]} -- what `track/search` returns for a
+            #: NAME, which is the only thing the credit pass can search on.
+            #: Empty means every artist's search comes back with nothing, which
+            #: is what the tests written before D42 expect.
+            self.index: dict | None = None
+            #: {album id: album detail} for `album/get`. A detail carries the
+            #: REAL date and the per-track `performers`, and the two differing
+            #: from the search row is the point of the call.
+            self.albums: dict | None = None
             self.saved = None
             self.asked: list[int] = []
+            self.searched: list[str] = []
+            self.detailed: list[str] = []
 
         def _get_json(self, url, headers=None, what=""):
+            # Three endpoints now, so dispatch on the URL rather than assuming
+            # artist/get: the credit pass searches the track index and then
+            # reads one album, and a run that only stubbed artist/get used to
+            # fail here with an IndexError off the artist_id split.
+            if "/track/search?" in url:
+                return self._search(url)
+            if "/album/get?" in url:
+                return self._album(url)
             artist = int(url.split("artist_id=")[1].split("&")[0])
             self.asked.append(artist)
             pages = self.discography
@@ -69,6 +88,27 @@ def qobuz(monkeypatch):
                 return items
             return {"name": f"artist-{artist}",
                     "albums_without_last_release": {"items": items}}, "ok"
+
+        def _search(self, url):
+            import urllib.parse
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+            name = query["query"][0]
+            self.searched.append(name)
+            index = self.index
+            rows = index(name) if callable(index) else (index or {}).get(name, [])
+            if isinstance(rows, tuple):         # an explicit (None, "error")
+                return rows
+            return {"tracks": {"items": rows}}, "ok"
+
+        def _album(self, url):
+            import urllib.parse
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+            album_id = query["album_id"][0]
+            self.detailed.append(album_id)
+            detail = (self.albums or {}).get(album_id)
+            if detail is None:
+                return None, "not_found"
+            return detail, "ok"
 
         def run(self, args, watching=None, seen=()):
             import sys

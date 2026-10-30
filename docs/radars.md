@@ -82,10 +82,10 @@ One record, so sources are comparable and `report.py` serves all of them.
 
 ```python
 Release(id=..., date=..., kind=..., artist=..., title=..., source=...,
-        tracks=0, hires=None, streamable=None, url=None)
+        tracks=0, hires=None, streamable=None, url=None, because=None)
 ```
 
-Two things to know. `kind` is written as `type` on the wire — `type` shadows a
+Three things to know. `kind` is written as `type` on the wire — `type` shadows a
 builtin and is a poor attribute name, but `report.py` and every report already
 written key on `"type"`, and renaming a field in files on disk to tidy an
 attribute is not a trade worth making. `Release.row()` is the only place that
@@ -94,6 +94,13 @@ knows.
 And the optional fields are genuinely optional rather than defaulted to
 something false. Qobuz knows whether a release is hi-res; Apple does not.
 `None` is left out of the row entirely, because `false` would claim it is not.
+
+`because` is why the row is in the report, when that is not simply "they
+released it". Only `radars/qobuz.py`'s credit pass sets it, with the watched
+name and the roles Qobuz credits them with, and `report.py` puts those rows in
+their own table — "Miguel Atwood-Ferguson - Ananta" in an issue about artists
+you follow is a stranger otherwise (D42). Leave it alone unless your source
+finds releases some way OTHER than by walking a watched artist's catalogue.
 
 ## Batch, and why a failure is not an absence
 
@@ -111,7 +118,11 @@ into a block nobody opens.
 `scanned` is for feed sources: it is the rows the call *looked at*, when that
 differs from the records it produced. `listenbrainz` reads a few thousand rows
 and keeps the handful crediting someone you watch, so `"scanned 3"` would
-describe the intersection rather than the work.
+describe the intersection rather than the work. `radars/qobuz.py`'s credit pass
+sets it for the same reason, and that pass is also why a batch is **one
+artist** rather than one call: the runner counts a batch as a call and reports
+`fetched` of `watching` as artists, so a second batch per artist made a
+128-artist run say "from 256 of 128 artists" (D42).
 
 ## Feed sources are different
 

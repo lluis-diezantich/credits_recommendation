@@ -18,10 +18,13 @@ Three consequences that bite:
   `core/listens.py` or a threshold from `policy.py`, that is a sign the change
   belongs on `ranking`, or that D41 should be superseded. Copying one file
   across is how both branches end up with a different version of it.
+  `core/credits.py` is the one exception, cherry-picked under D42 for its
+  parser alone — and it is an exception, not a precedent: it carries no
+  policy, and D42 says why a third rewrite was the worse trade.
 - **`core/` is shared with that branch.** `core/http.py`, `core/names.py`,
-  `core/radar.py` and the CI hygiene exist on both. A fix here does not reach
-  `ranking`, and the longer both move the worse the eventual merge. Worth
-  knowing; not worth avoiding a fix over.
+  `core/radar.py`, `core/credits.py` and the CI hygiene exist on both. A fix
+  here does not reach `ranking`, and the longer both move the worse the
+  eventual merge. Worth knowing; not worth avoiding a fix over.
 - **A kept ADR may link to a doc that is not here.** `D32` points at
   `../roadmap.md`, several point at `../../todo.md`. Those resolve on
   `ranking`. **Do not fix them** — an accepted decision is never rewritten,
@@ -62,6 +65,12 @@ Three consequences that bite:
   `--days` silently. `False` where the source is a window rather than a
   catalogue (`radars/listenbrainz.py`), because there, recording an unmatched
   release would hide it for good if you later watched that artist.
+- **The Qobuz radar makes two passes per artist and yields ONE batch.** Pass
+  two searches the track index by name for credits that pass one cannot see
+  (D42). Yielding it as its own batch makes the run report "from 256 of 128
+  artists", because `core/radar.py` counts a batch as a call and calls it an
+  artist. A date from `track/search` is a DELIVERY date and lies; only
+  `album_detail` knows when a record came out.
 - **`--dry-run` is "record nothing", not "make no calls".** It still spends
   every request the run would have spent.
 - **`core/radar.py` drives three of the four radars.** A behaviour change
