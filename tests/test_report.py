@@ -78,3 +78,60 @@ def test_a_report_missing_every_optional_field_still_formats():
 
 def test_the_provenance_line_is_always_there():
     assert "<sub>qobuz · generated 2026-10-16" in body(releases=[release()])
+
+
+# -- credited appearances (D42) ----------------------------------------------
+# A release carrying `because` was found by the credit pass: it is somebody
+# else's record, and it answers a different question from the rest of the
+# table. These are about keeping the two apart.
+
+def appearance(**over):
+    base = {"artist": "Miguel Atwood-Ferguson", "title": "Ananta", "id": "cvj",
+            "tracks": 8, "because": "aja monet - FeaturedArtist, SpokenWord"}
+    return release(**{**base, **over})
+
+
+def test_appearances_get_their_own_section_and_a_credit_column():
+    out = body(releases=[release(), appearance()])
+    assert "**1 credited appearance** on other artists' releases." in out
+    assert "| date | type | artist | release | credit | | id |" in out
+    assert "| aja monet - FeaturedArtist, SpokenWord |" in out
+
+
+def test_the_headline_counts_only_what_the_watched_artists_released():
+    """"9 new releases from 128 artists" has meant one thing in every issue so
+    far, and the credit pass must not quietly restate it."""
+    out = body(releases=[release(), appearance(), appearance(id="two")])
+    assert out.startswith("**1 new release** from 3 of 3 artists")
+    assert "**2 credited appearances**" in out
+
+
+def test_the_first_table_has_no_credit_column():
+    out = body(releases=[release()])
+    assert "| date | type | artist | release | | id |" in out
+    assert "credit |" not in out
+
+
+def test_appearances_alone_do_not_read_as_nothing_new():
+    out = body(releases=[appearance()])
+    assert "Nothing new." not in out
+    assert "**0 new releases** from 3 of 3 artists" in out
+
+
+def test_no_appearances_leaves_the_report_exactly_as_it_was():
+    assert "credited appearance" not in body(releases=[release()])
+
+
+def test_a_quiet_week_in_both_passes_still_says_nothing_new():
+    assert "Nothing new." in body(releases=[])
+
+
+def test_the_funnel_is_printed_so_the_numbers_get_re_measured():
+    out = body(releases=[appearance()],
+               credits={"appearance": 1, "writer": 96, "absent": 42})
+    assert "credit candidates: 1 appearance, 96 writer, 42 absent" in out
+
+
+def test_a_pipe_in_a_credit_cannot_break_the_table():
+    out = body(releases=[appearance(because="x | y")])
+    assert "x \\| y" in out

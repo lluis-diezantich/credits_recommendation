@@ -66,6 +66,32 @@ def watchlist_line(info: dict) -> str:
             f"on the list: {', '.join(parts)}.")
 
 
+def table(releases: list[dict], credit: bool = False) -> str:
+    """One markdown table of releases, with or without the credit column.
+
+    The header differs by one column rather than two tables' worth of
+    formatting, because the rows are the same Release shape either way -- the
+    credit pass finds releases, not a different kind of thing.
+    """
+    who = " credit |" if credit else ""
+    head = [f"| date | type | artist | release |{who} | id |",
+            "|---|---|---|---|---|---|" + ("---|" if credit else "")]
+    rows = []
+    for release in releases:
+        # The radar flags anything dated after the run as upcoming; it
+        # cannot be recomputed here without assuming today is the run day.
+        date = release.get("date", "????-??-??")
+        if release.get("upcoming"):
+            date += " *(upcoming)*"
+        because = f" {cell(release.get('because', ''))} |" if credit else ""
+        rows.append(
+            f"| {date} | {release.get('type', '?')} | {cell(release.get('artist', '?'))} "
+            f"| {cell(release.get('title', '(untitled)'))} |{because} {badges(release)} "
+            f"| `{release.get('id', '')}` |"
+        )
+    return "\n".join(head + rows)
+
+
 def to_markdown(report: dict, warnings: str = "") -> str:
     releases = report.get("releases") or []
     watching = report.get("watching") or 0
@@ -74,7 +100,12 @@ def to_markdown(report: dict, warnings: str = "") -> str:
     store = report.get("store")
     where = f"`{store}` store" if store else source
 
-    head = (f"**{len(releases)} new release{'s' if len(releases) != 1 else ''}** from "
+    # Counted on the rows the headline is ABOUT. The credit pass adds rows the
+    # watched artists did not release, and folding them into "9 new releases
+    # from 128 artists" would quietly restate what that sentence has meant in
+    # every issue so far. They get their own count below.
+    own = [r for r in releases if not r.get("because")]
+    head = (f"**{len(own)} new release{'s' if len(own) != 1 else ''}** from "
             f"{fetched} of {watching} artists in the {where} "
             f"({report.get('window', 'unknown window')}).")
 
@@ -90,21 +121,33 @@ def to_markdown(report: dict, warnings: str = "") -> str:
                       "artist you watch, and "
                       f"{'are' if shared != 1 else 'is'} listed once."]
 
-    if releases:
-        lines += ["", "| date | type | artist | release | | id |", "|---|---|---|---|---|---|"]
-        for release in releases:
-            # The radar flags anything dated after the run as upcoming; it
-            # cannot be recomputed here without assuming today is the run day.
-            date = release.get("date", "????-??-??")
-            if release.get("upcoming"):
-                date += " *(upcoming)*"
-            lines.append(
-                f"| {date} | {release.get('type', '?')} | {cell(release.get('artist', '?'))} "
-                f"| {cell(release.get('title', '(untitled)'))} | {badges(release)} "
-                f"| `{release.get('id', '')}` |"
-            )
-    else:
+    # Two kinds of row, and they answer different questions. A release without
+    # `because` is one a watched artist is billed on -- the thing this radar
+    # has always reported. One WITH it is somebody else's record that credits
+    # them, which needs the credit printed beside it or the artist column reads
+    # as a stranger (D42). Split rather than mixed, because a reader scanning
+    # for "what did my artists put out" should not have to filter by eye.
+    billed = [r for r in releases if not r.get("because")]
+    credited = [r for r in releases if r.get("because")]
+
+    if billed:
+        lines += ["", table(billed)]
+    elif not credited:
         lines += ["", "Nothing new."]
+
+    if credited:
+        lines += ["", f"**{len(credited)} credited appearance"
+                      f"{'s' if len(credited) != 1 else ''}** on other artists' "
+                      "releases.", "", table(credited, credit=True)]
+
+    # What the credit pass threw away, from the radar's own count. Printed
+    # because the numbers are the thing to re-measure: the week `writer` stops
+    # dwarfing `appearance` is the week the role denylist needs re-reading, and
+    # a number nothing states is a number nobody checks.
+    funnel = report.get("credits") or {}
+    if funnel:
+        counted = ", ".join(f"{count} {name}" for name, count in funnel.items())
+        lines += ["", f"<sub>credit candidates: {counted}</sub>"]
 
     if report.get("failed"):
         lines += ["", f"⚠ {report['failed']} of {watching} artists could not be fetched, "

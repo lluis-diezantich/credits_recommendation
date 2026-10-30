@@ -261,3 +261,83 @@ def artist_releases(artist_id: int, store: str,
         offset += PAGE_LIMIT
 
     return name, collected, True
+
+
+# Qobuz stops paging `track/search` here no matter what offset is asked for,
+# and the endpoint ignores every spelling of an `order` parameter, so the
+# results come back by relevance and a very prolific artist's newest track can
+# in principle sit past the cap. Measured 2026-10-30: Björk and Santana both
+# report exactly this total, Jorge Drexler 901. Nothing in the project depends
+# on it being complete -- the first pass is what guarantees a watched artist's
+# OWN releases are seen, and this one only ever adds.
+SEARCH_CAP = 1000
+
+
+def search_tracks(name: str, store: str, cookies: str) -> tuple[list[dict], bool]:
+    """(every track Qobuz's index returns for a name, succeeded).
+
+    The reverse lookup the catalogue does not otherwise offer. `artist/get`
+    files a release under an artist only when they are billed on the ALBUM, so
+    a track-level feature is invisible to it -- and the two id-based ways out
+    are both incomplete: `extra=tracks` returned 32 tracks for aja monet and
+    `extra=tracks_appears_on` returned 3, neither including the feature that
+    prompted this (D42).
+
+    So this searches a NAME, which is why core/appearances.py exists: the index
+    matches composers, tribute acts and anything sharing a substring, and
+    `verdict()` is what makes the result usable. Never raises, same contract as
+    artist_releases -- one artist failing must not end a run of a hundred.
+    """
+    collected: list[dict] = []
+    offset = 0
+    while offset < SEARCH_CAP:
+        query = urllib.parse.urlencode({
+            "query": name,
+            "limit": PAGE_LIMIT,
+            "offset": offset,
+            "zone": store.split("-")[0].upper(),
+            "store": store,
+        })
+        data, outcome = get_json(f"{API}/track/search?{query}",
+                                 {"x-app-id": APP_ID, "cookie": cookies},
+                                 f"track/search {name!r}")
+        if outcome != "ok" or not isinstance(data, dict):
+            return collected, False
+        page = (data.get("tracks") or {}).get("items") or []
+        collected += page
+        if len(page) < PAGE_LIMIT:
+            break
+        offset += PAGE_LIMIT
+    return collected, True
+
+
+def album_detail(album_id: str, store: str, cookies: str) -> tuple[dict | None, str]:
+    """(one album with its tracklist and per-track credits, outcome).
+
+    Two things the search result cannot be trusted for, in one request:
+
+      * THE DATE. `track/search` embeds an album block whose
+        `release_date_original` is the DELIVERY date. Sebastian Jantos
+        re-delivered his 2021 album *Fui Yo* on 2026-10-25, and the search
+        payload says 2026-10-25 while this call says 2021-01-14 for the very
+        same album id. Every reissue and re-delivery looks like news until
+        this runs, and that was 866 of 1163 candidates in D42.
+      * THE CREDITS. `performers` is per track and absent from search rows.
+
+    Both arrive here together, which is why the second pass costs one request
+    per candidate rather than two.
+    """
+    query = urllib.parse.urlencode({"album_id": album_id, "store": store,
+                                    "zone": store.split("-")[0].upper()})
+    data, outcome = get_json(f"{API}/album/get?{query}",
+                             {"x-app-id": APP_ID, "cookie": cookies},
+                             f"album/get {album_id}")
+    if outcome != "ok" or not isinstance(data, dict):
+        return None, outcome
+    return data, "ok"
+
+
+def album_tracks(album: dict) -> list[tuple[str, str]]:
+    """[(track title, performers string)] out of an album_detail() payload."""
+    return [(track.get("title") or "", track.get("performers") or "")
+            for track in (album.get("tracks") or {}).get("items") or []]
