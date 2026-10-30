@@ -508,7 +508,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 391373
+      "qobuz_id": 391373,
+      "watch": false
     },
     {
       "name": "Silvio Rodríguez",
@@ -741,7 +742,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 41883
+      "qobuz_id": 41883,
+      "watch": false
     },
     {
       "name": "Rauw Alejandro",
@@ -751,7 +753,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 3126008
+      "qobuz_id": 3126008,
+      "watch": false
     },
     {
       "name": "Maria Jaume",
@@ -1139,7 +1142,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 148555
+      "qobuz_id": 148555,
+      "watch": false
     },
     {
       "name": "Erykah Badu",
@@ -1485,7 +1489,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 737125
+      "qobuz_id": 737125,
+      "watch": false
     },
     {
       "name": "Gala i Ovidio",
@@ -1526,7 +1531,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 115977
+      "qobuz_id": 115977,
+      "watch": false
     },
     {
       "name": "Teho Teardo",
