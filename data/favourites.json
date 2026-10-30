@@ -1642,7 +1642,8 @@
       "rank": null,
       "itunes_id": null,
       "qobuz_match": "exact",
-      "qobuz_id": 3656436
+      "qobuz_id": 3656436,
+      "watch": false
     },
     {
       "name": "Nilza Costa",
