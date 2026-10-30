@@ -36,7 +36,8 @@ reverse credit index in the API.
    `album/getFeatured?type=new-releases-full` is 425 albums for `gb-en`, and
    *Ananta* is in it. But that feed is an editor's shortlist: 40–47 albums per
    release day for an entire storefront, so a release crediting a watched
-   artist that the editors ignored is invisible, and the coverage is unmeasured.
+   artist that the editors ignored is invisible. Measured after the fact and
+   much worse than it looked — see the scaling table in Evidence.
 3. **Search the track index for each watched artist's NAME, then read each
    candidate album.** The only path that actually reaches the track. Costs a
    fuzzy name match, which drags in composers, tribute acts and anything
@@ -142,9 +143,35 @@ and latency is 85% of the time. The request count was right and the duration
 was not. Corrected here rather than in a new ADR because the decision did not
 change; only a number that was never measured.
 
-Not worth optimising at a weekly cadence, and both obvious moves are worse: a
-smaller `limit` buys more pages, and running the searches concurrently
-contradicts `PAUSE`'s standing "Qobuz publishes no rate limit; be unhurried".
+### What would make it scale, measured 2026-10-30
+
+Cost is linear in watched artists at ~4s each, so the question is which term to
+attack. Four were tried against the live store:
+
+| | result |
+| --- | --- |
+| invert to the new-releases feed (option 2 above) | **dead** — covers 1 of 12 |
+| a bigger search page | **dead** — `limit=1000` returns 500 |
+| run the searches concurrently | **6.3×** at 8 workers, 3.4× at 4 |
+| cache `album_detail` between runs | ~7% of the wall clock |
+
+- **Option 2's coverage is no longer unmeasured, and it is worse than it
+  looked.** `album/getFeatured?type=new-releases-full` holds 425 albums, 52 of
+  them inside a 6-day window, in one 0.95s request — attractively flat in
+  artist count. But of the 12 rows the first production run reported it
+  contains **one**, *Ananta*, missing 8 of 9 own-releases and 2 of 3
+  appearances. It is an editorial shortlist, not an index of what came out.
+  Inverting the loop would trade almost all recall for the speed.
+- **Concurrency is the only real lever**, and it works because the time is
+  wait rather than work: 2.15s per search, twelve in flight for 4.1s, with
+  identical row counts. Measured on disjoint artist sets per condition — the
+  first attempt reused one set and reported 27× off a warmed cache.
+- Not taken here. It contradicts `PAUSE`'s standing "Qobuz publishes no rate
+  limit; be unhurried", and that comment is specific about what provokes the
+  5xx; it needs `core/http.py`'s shared `SESSION` and cookie jar made
+  thread-safe, which is a file `ranking` also holds; and at 128 artists it
+  buys nothing a weekly job notices. The size at which it starts to matter is
+  about 300 artists, or ~20 minutes a run.
 
 Three numbers decided a rule rather than describing one:
 
