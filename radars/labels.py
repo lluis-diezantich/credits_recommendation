@@ -420,17 +420,11 @@ def discover(store: str) -> int:
     cookies = store_cookies(store)
     year = (dt.date.today() - dt.timedelta(days=365)).isoformat()
     found: dict[int, dict] = {}
-    # Through core.names, not .lower(): `Jose Gonzalez` is how the label is
-    # spelled and `José González` is how the artist is, and a plain fold left
-    # his own imprint in the scan as a 12-release label.
-    #
-    # Deliberately NOT extended to the producer list, though the first full run
-    # makes it tempting: five of its thirteen rows were one act on `Sumi Ani`,
-    # which is the producer `Ani Sumiati`'s own label. Matching that needs
-    # `sumi ani` to equal `ani sumiati` and it does not, so the rule would not
-    # have caught the case that motivated it -- while it WOULD have dropped
-    # `Raso Estudio` (341 releases) and `NFL` (73) for sharing a name with
-    # somebody in the file. `--per-label` is what actually fixes that run.
+    # Through core.names, not .lower(): the label is spelled `Jose Gonzalez`
+    # and the artist `José González`, and a plain fold left his own imprint in
+    # the scan. Deliberately NOT extended to the producer list -- it would not
+    # match `Sumi Ani` to `Ani Sumiati` anyway, and would drop `Raso Estudio`
+    # (341 releases) for sharing a name. `--per-label` is the fix there.
     names = {normalise(name) for name in watching.values()}
     failed = 0
 

@@ -231,17 +231,11 @@ def fold_editions(albums: list[dict]) -> list[dict]:
     return list(folded.values())
 
 
-#: Titles that mean "old recordings, new delivery" and are NOT in
-#: `core.appearances.RETROSPECTIVE_PATTERNS`. Kept separately rather than added
-#: there, deliberately: that tuple was measured against D42's 45-album sample
-#: and the Qobuz radar's funnel rests on it, so adding a pattern would change
-#: what THAT radar reports without re-measuring it.
-#:
-#: Found by the first full run of this radar, 2026-10-31: *La Quiniela del Día
-#: (Remastered 2026)* on Fania, a 1960s Ismael Rivera record that Qobuz dates
-#: 2026-10-30 because the remaster is genuinely new. `album_detail`'s date
-#: cannot catch it -- the delivery and the release are the same day -- so the
-#: title is the only evidence there is.
+#: Repackage markers NOT in `core.appearances.RETROSPECTIVE_PATTERNS`. Kept
+#: apart because that tuple was measured against D42's sample and the Qobuz
+#: radar's funnel rests on it. Found by the first run here: *La Quiniela del
+#: Día (Remastered 2026)*, which `album_detail`'s date cannot catch because the
+#: remaster genuinely is new.
 REMASTER_PATTERNS = ("remaster", "remasterizado", "anniversary edition",
                      "deluxe edition", "reissue", "edicion especial",
                      "edición especial")
@@ -257,22 +251,15 @@ def is_reissue(title: str) -> bool:
     return is_retrospective(title) or any(p in low for p in REMASTER_PATTERNS)
 
 
-#: Titles that mean "somebody else's finished record, reworked". D30 on the
-#: `ranking` branch decided a remix is not a collaboration, but it decided it
-#: on ROLES -- a candidate whose only credit is `Re-Mixer` -- and this is the
-#: other shape of it: a `Producer` credit on a release that is itself a remix.
-#: `ROLE_FAMILY` already drops the first (a remixer is not production), so this
-#: is what is left.
+#: Titles that mean "somebody else's finished record, reworked". D30 decided
+#: this on `ranking` and decided it on ROLES -- a `Re-Mixer`-only credit, which
+#: `ROLE_FAMILY` already drops. This is the other shape: a real `Producer`
+#: credit on a release that is itself a rework.
 #:
-#: Measured 2026-10-31 over three corpora of release titles: 8 of the 238 the
-#: Friday radar reported in 90 days, 1 of the label radar's 33, 0 of the 43
-#: credited appearances in the D42 backfill.
-#:
-#: `edit`, `version` and `dub` are deliberately absent. Each appeared in that
-#: measurement -- `Baby Wow (EDIT)`, `Te Odio Y Te Quiero (Salsa Version)`,
-#: `yellow (afrohouse mix)` -- and a salsa version of your own song is a
-#: re-recording rather than a rework. Three titles is not enough to tell which
-#: way those should go, so they are left to be measured.
+#: Measured 2026-10-31 over three corpora of release titles: 8 of the Friday
+#: radar's 238 in 90 days, 1 of this radar's 33, 0 of D42's 43. `edit`,
+#: `version` and `dub` are left out -- a salsa version is a re-recording, and
+#: three titles cannot say which way those should go.
 REMIX_PATTERNS = ("remix", "rmx", "re-mix")
 
 
@@ -366,27 +353,16 @@ PLACEHOLDER_NAMES = frozenset({
 MIN_NAME_LENGTH = 3
 
 #: Records somebody must be credited on before this looks for their new work.
-#: Measured over `data/producers.json` 2026-10-31: 723 of the 1,538 people hold
-#: exactly one, and the rows they generate are the weakest in the report. 2
-#: leaves 785 names.
+#: 723 of 1,538 people held exactly one when measured 2026-10-31, and those
+#: rows are the weakest in the report. One credit does not establish that an
+#: artist chose to work with somebody.
 #:
-#: Not a judgement about them, a judgement about EVIDENCE: one credit does not
-#: establish that an artist chose to work with somebody, and this radar's whole
-#: premise is that a recurring name is a signal.
-#:
-#: COUNTED ACROSS EVERY CREDITED FAMILY, not production alone. Counting
-#: production was tried first and the 90-day backfill measured it down: it cut
-#: the list to 409 but dropped Marta Salogni (9 credits on these artists' records,
-#: 0 of them `Producer` -- she MIXES for them) and Neal Pogue (10, 0), and with
-#: them the two rows that best made this radar's case, Salogni producing
-#: Westerman and Pogue producing Dylan Cartlidge.
-#:
-#: The lesson is that the list and the verdict answer different questions. The
-#: list asks "is this person part of your artists' crew", where a mixing credit
-#: is evidence; `verdict` asks "did they PRODUCE this particular record", and
-#: that is decided per release from its own roles. Filtering the list by the
-#: verdict's question throws away people who mix for your artists and produce
-#: for everybody else, which is exactly who this radar should find.
+#: COUNTED ACROSS EVERY CREDITED FAMILY. Counting production alone was tried
+#: and the 90-day backfill measured it down: it dropped Marta Salogni (9
+#: credits, 0 as Producer -- she MIXES for these artists) and Neal Pogue (10,
+#: 0), and with them the two best rows. The list asks "is this person crew",
+#: where a mixing credit is evidence; `verdict` asks "did they produce THIS
+#: record", per release.
 MIN_PERSON_RECORDS = 2
 
 #: Every verdict `person_verdict` can return, "watched" first.

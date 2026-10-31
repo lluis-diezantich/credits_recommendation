@@ -1,25 +1,13 @@
-# The label radar (D44), on the shared runner.
-#
-# NO CRON yet, and the reason has changed. It used to be that the producer list
-# covered 20 of 167 artists and nobody had seen a run; both are done -- all 167
-# are walked, `data/producers.json` holds 2,763 names, and `data/labels-14d.md`
-# and `data/labels-backfill.md` are what it reports.
-#
-# What is left is not a measurement, it is two decisions and a merge:
-#
-#   * GitHub only offers workflow_dispatch for workflows on the DEFAULT branch,
-#     so until this is on main it cannot be triggered at all, by hand or by
-#     cron. That alone is why the schedule below is still commented.
-#   * 24 rows in 14 days is ~12 a week against the known-artist radar's 5.8, so
-#     this would become the larger of the two issues. Whether that is wanted is
-#     a taste call, and `--per-label` plus `--credit` are the knobs for it.
-#   * D44 is still Proposed, and two patterns it records are unfixed: mastering
-#     engineers now dominate the list by connection count, and three of those
-#     24 rows are executive-producer-only credits.
+# The label radar (D44). No schedule yet: workflow_dispatch is only offered for
+# workflows on the default branch, so this cannot be triggered until it is on
+# main. Two open calls after that -- ~12 rows a week against the known-artist
+# radar's 5.8, and the executive-producer and mastering-engineer patterns D44
+# records. Uncomment to schedule:
 #
 #   on:
 #     schedule:
 #       - cron: "47 5 * * 5"      # Fridays, after the known-artist radar
+
 name: "releases: labels"
 
 on:
@@ -44,11 +32,6 @@ jobs:
       title: "releases: labels"
       days: ${{ inputs.days }}
       extra: "--credit ${{ inputs.credit }}"
-      # STATELESS, which the shared runner no longer is by default: its default
-      # commits the ids back to data/ci/ (D11), and a hand-run trial must not
-      # write state into a branch. Every run therefore reports its whole
-      # window, which is what you want while reading the funnel -- and this
-      # radar records only what it printed anyway (record_scanned = False), so
-      # the file would not have protected an uncredited release from being
-      # re-read.
+      # The runner's default commits ids back to data/ci/ (D11), and a
+      # hand-run trial must not write state into a branch.
       stateless: true
