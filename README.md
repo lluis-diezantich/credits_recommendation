@@ -8,9 +8,8 @@ Personal project for recommending music.
   are credited on -- a guest spot on somebody else's record is a release you
   would otherwise never have looked for (D42)
 - New releases by the PRODUCERS of those artists, found by scanning the labels
-  they work for rather than by asking for the producer: nothing in Qobuz files
-  a release under one, so the label is the query and the credit is the
-  judgement (D44, Proposed -- this branch)
+  they work for: Qobuz indexes a label completely, so the label is the query
+  and the credit is the judgement (D44, Proposed -- this branch)
 
 ## Install
 

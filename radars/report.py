@@ -52,8 +52,8 @@ def badges(release: dict) -> str:
 #: two reports read the same way. `unresolved` is spelled out because "3
 #: unresolved" means nothing to someone who has not read the resolver.
 #:
-#: The last three are the label radar's (D44) and are additive: zeros are left
-#: out, so no report from a source that cannot produce them changes shape.
+#: The last three are the label radar's (D44). Zeros are left out, so every
+#: other report keeps its shape.
 EXCLUSIONS = (("muted", "muted by hand"), ("ended", "ended or split up"),
               ("unresolved", "with no id yet"),
               ("major", "too big to mean anything"),
@@ -112,8 +112,8 @@ def to_markdown(report: dict, warnings: str = "") -> str:
     watching = report.get("watching") or 0
     fetched = report.get("fetched", watching)
     source = report.get("source", "radar")
-    # What this radar counts. Every source but the label radar counts artists,
-    # so that is the default and nothing else has to say so.
+    # What this radar counts. `artists` is the default, so only the label
+    # radar has to say anything.
     unit = report.get("unit", "artists")
     store = report.get("store")
     # No markdown: the only place this is printed now is inside a fenced block,
@@ -177,11 +177,9 @@ def run_lines(report: dict, billed: list[dict], fetched: int, watching: int,
     # watched artists did not release, and folding them in would quietly
     # restate what "9 new releases from 128 artists" has meant in every issue
     # so far.
-    # A source with no billed rows at all would open on "0 new releases",
-    # which is true of the label radar every week: nothing it reports is a
-    # release by somebody it watches, because it watches labels. It counts the
-    # credited rows instead, and every other source is untouched -- `unit` is
-    # absent from their reports.
+    # The label radar watches labels, so every row it reports is somebody
+    # else's record and this would open on "0 new releases". It counts the
+    # credited rows instead; `unit` is absent from every other report.
     counted = billed if unit == "artists" else (credited or [])
     noun = "new release" if unit == "artists" else "credited release"
     out = [f"{len(counted)} {noun}{'s' if len(counted) != 1 else ''} from "

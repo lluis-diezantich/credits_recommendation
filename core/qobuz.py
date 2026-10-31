@@ -263,19 +263,14 @@ def artist_releases(artist_id: int, store: str,
     return name, collected, True
 
 
-# A label catalogue comes back NEWEST FIRST, which is what makes this radar
-# affordable: the window is a prefix of the catalogue, so a page is a date
-# range and nothing has to be read past it. Measured 2026-10-31 against
-# `Sony Music Entertainment` (10,000 releases) and `Young` (271): both strictly
-# descending by `release_date_original`, and 500 Sony rows reached back 11 days.
-#
-# Smaller than PAGE_LIMIT on purpose. 100 rows covers a week on every label
-# measured except the majors, which `core.labels.MAJOR_CATALOGUE` excludes
-# anyway, and paging stops as soon as the window is cleared.
+# A label catalogue comes back NEWEST FIRST, so the window is a prefix of it
+# and a page is a date range. Measured 2026-10-31 on `Sony Music Entertainment`
+# (10,000 releases) and `Young` (271): both strictly descending, and 500 Sony
+# rows reached back 11 days. 100 covers a week on every label the gate keeps.
 LABEL_PAGE = 100
-#: Pages to read before giving up on reaching the cutoff. A label releasing
-#: more than 300 records inside the window is a distributor, and the funnel
-#: will say so rather than this spending twenty requests to prove it.
+#: Pages to read before giving up on reaching the cutoff. A label releasing 300
+#: records inside the window is a distributor, and the funnel says so for the
+#: price of one page.
 LABEL_MAX_PAGES = 3
 
 

@@ -136,20 +136,16 @@ catalogue. Two settings say so, and both are about not lying:
 
 ## The third shape: a source whose QUESTION changes
 
-`radars/labels.py` (D44) reads a catalogue like `qobuz` does, but it sets
-`record_scanned = False` like the feed does, and the pair is neither of the two
-cases above. The reason is not the source, it is the question: what it scans is
-a label's catalogue, and what it ASKS is whether the credits name anybody in
-`data/producers.json` — a list that grows. Recording a release that credited
-nobody would hide it for good the day you add the producer it credits, which is
-`listenbrainz`'s argument reaching a catalogue source by a different route.
+`radars/labels.py` (D44) reads a catalogue like `qobuz` does, but sets
+`record_scanned = False` like the feed does. The reason is the question rather
+than the source: it scans a label's catalogue and asks whether the credits name
+anybody in `data/producers.json`, and that list grows. Banking a release that
+credited nobody would hide it the day you add the producer it credits.
 
-`guard_empty_run` stays `True`, unlike the feed, because a label catalogue
-always returns rows: nothing from any of two hundred labels is an outage, and
-it is the date filter that empties the report rather than the fetch.
+`guard_empty_run` stays `True`, because a label catalogue always returns rows:
+the date filter empties the report, the fetch does not.
 
-So the two settings are about the question and the source separately, and a new
-radar should decide them separately rather than copying either pair wholesale.
+Decide the two settings separately rather than copying either pair.
 
 ## Scheduling one
 

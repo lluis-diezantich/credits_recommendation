@@ -10,13 +10,9 @@ data/*.json
 # Small (under 100 KB), slow-moving, and worth a diff.
 !data/favourites.json
 
-# ...and the two files the label radar reads (D44), for the same reason: both
-# are generated once by a builder mode and then hand-edited, and the edits exist
-# nowhere else. data/labels.json carries the `watch: false` mutes for a label
-# that turned out to be a distributor; data/producers.json carries them for a
-# name that collides with somebody famous. Regenerating either loses that work
-# rather than time -- and `--discover` costs one request per watched artist,
-# which is the only part of this radar that is not flat.
+# ...and the label radar's two (D44), for the same reason: a builder mode
+# generates each one and then you hand-edit it, and the `watch: false` mutes
+# exist nowhere else.
 !data/labels.json
 !data/producers.json
 

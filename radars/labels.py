@@ -420,11 +420,11 @@ def discover(store: str) -> int:
     cookies = store_cookies(store)
     year = (dt.date.today() - dt.timedelta(days=365)).isoformat()
     found: dict[int, dict] = {}
-    # Through core.names, not .lower(): the label is spelled `Jose Gonzalez`
-    # and the artist `José González`, and a plain fold left his own imprint in
-    # the scan. Deliberately NOT extended to the producer list -- it would not
-    # match `Sumi Ani` to `Ani Sumiati` anyway, and would drop `Raso Estudio`
-    # (341 releases) for sharing a name. `--per-label` is the fix there.
+    # Through core.names: the label is spelled `Jose Gonzalez` and the artist
+    # `José González`, and a plain fold left his own imprint in the scan. Scoped
+    # to the watched artists -- on the producer list it would miss `Sumi Ani`
+    # against `Ani Sumiati` and drop `Raso Estudio` (341 releases) for sharing
+    # a name, which `--per-label` handles instead.
     names = {normalise(name) for name in watching.values()}
     failed = 0
 

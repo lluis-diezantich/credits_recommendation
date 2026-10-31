@@ -1,4 +1,4 @@
-# D44: A producer is found by scanning the labels they work for, not by asking for them
+# D44: The label is the query and the credit is the judgement
 
 - **Status:** Proposed
 - **Date:** 2026-10-31
@@ -198,7 +198,7 @@ particular record*, and that is decided per release from its own roles.
 Filtering the list by the verdict's question discards exactly the people who
 mix for your artists and produce for everybody else.
 
-**The 90-day backfill**, 2026-10-31, `data/labels-backfill.md`: 212 labels,
+**The 90-day backfill**, 2026-10-31, run locally: 212 labels,
 `--credit production`, no cap, ~2,000 requests and about twenty minutes.
 **34 releases reported** from 1,484 candidates — funnel 34 credit, 1,210
 absent, 106 sideline, 119 yours, 12 writing, 3 reissue.

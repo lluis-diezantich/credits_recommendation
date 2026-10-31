@@ -270,8 +270,8 @@ def is_remix(title: str) -> bool:
 
 
 #: Why a label release is or is not news, in the order a candidate meets the
-#: tests. `yours` first because it is not a judgement about credits at all, and
-#: `absent` before the family tests for the same reason.
+#: tests. `yours` first because it is a fact about the billing, and `absent`
+#: before the family tests because it is a fact about the credits.
 VERDICTS = ("credit", "absent", "yours", "writing", "sideline", "reissue",
             "remix")
 
@@ -390,9 +390,8 @@ def person_verdict(entry: dict, yours: frozenset[str] = frozenset()) -> str:
         return "junk"
     if yours and {normalise(n) for n in [name, *(entry.get("names") or [])]} & yours:
         return "yourself"
-    # `albums`, which counts every credited family. `production` is recorded
-    # beside it and deliberately NOT read here -- see MIN_PERSON_RECORDS for
-    # the backfill that measured that difference.
+    # `albums`, which counts every credited family. MIN_PERSON_RECORDS has the
+    # backfill that measured this against counting `production`.
     if (entry.get("albums") or 0) < MIN_PERSON_RECORDS:
         return "thin"
     return "watched"
