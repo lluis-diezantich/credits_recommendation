@@ -51,8 +51,14 @@ def badges(release: dict) -> str:
 #: The exclusions worth naming, and what to call them in prose. Ordered, so
 #: two reports read the same way. `unresolved` is spelled out because "3
 #: unresolved" means nothing to someone who has not read the resolver.
+#:
+#: The last three are the label radar's (D44) and are additive: zeros are left
+#: out, so no report from a source that cannot produce them changes shape.
 EXCLUSIONS = (("muted", "muted by hand"), ("ended", "ended or split up"),
-              ("unresolved", "with no id yet"))
+              ("unresolved", "with no id yet"),
+              ("major", "too big to mean anything"),
+              ("self", "an artist's own imprint"),
+              ("thin", "with nothing of yours on them"))
 
 
 def watchlist_line(info: dict) -> str:
@@ -106,6 +112,9 @@ def to_markdown(report: dict, warnings: str = "") -> str:
     watching = report.get("watching") or 0
     fetched = report.get("fetched", watching)
     source = report.get("source", "radar")
+    # What this radar counts. Every source but the label radar counts artists,
+    # so that is the default and nothing else has to say so.
+    unit = report.get("unit", "artists")
     store = report.get("store")
     # No markdown: the only place this is printed now is inside a fenced block,
     # where backticks would render as backticks.
@@ -142,10 +151,10 @@ def to_markdown(report: dict, warnings: str = "") -> str:
     # about whether the list above is the whole answer, and a reader who never
     # opens the warnings still has to see it.
     if report.get("failed"):
-        lines += ["", f"⚠ {report['failed']} of {watching} artists could not be fetched, "
+        lines += ["", f"⚠ {report['failed']} of {watching} {unit} could not be fetched, "
                       "so this list is incomplete."]
 
-    bookkeeping = run_lines(report, billed, fetched, watching, where)
+    bookkeeping = run_lines(report, billed, fetched, watching, where, unit, credited)
     folded = "\n".join(bookkeeping) + ("\n\n" + warnings.rstrip()
                                        if warnings.strip() else "")
     lines += ["", "<details><summary>warnings</summary>", "", "```",
@@ -156,7 +165,8 @@ def to_markdown(report: dict, warnings: str = "") -> str:
 
 
 def run_lines(report: dict, billed: list[dict], fetched: int, watching: int,
-              where: str) -> list[str]:
+              where: str, unit: str = "artists",
+              credited: list[dict] | None = None) -> list[str]:
     """What the run was, for the collapsed block. Counts, not music.
 
     Plain text rather than markdown: it goes inside a fenced code block, so a
@@ -167,8 +177,15 @@ def run_lines(report: dict, billed: list[dict], fetched: int, watching: int,
     # watched artists did not release, and folding them in would quietly
     # restate what "9 new releases from 128 artists" has meant in every issue
     # so far.
-    out = [f"{len(billed)} new release{'s' if len(billed) != 1 else ''} from "
-           f"{fetched} of {watching} artists in the {where} "
+    # A source with no billed rows at all would open on "0 new releases",
+    # which is true of the label radar every week: nothing it reports is a
+    # release by somebody it watches, because it watches labels. It counts the
+    # credited rows instead, and every other source is untouched -- `unit` is
+    # absent from their reports.
+    counted = billed if unit == "artists" else (credited or [])
+    noun = "new release" if unit == "artists" else "credited release"
+    out = [f"{len(counted)} {noun}{'s' if len(counted) != 1 else ''} from "
+           f"{fetched} of {watching} {unit} in the {where} "
            f"({report.get('window', 'unknown window')})."]
 
     watchlist = watchlist_line(report.get("watchlist") or {})

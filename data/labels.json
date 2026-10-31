@@ -1,0 +1,2596 @@
+{
+  "generated": "2026-10-31",
+  "note": "hand-edits are kept: set \"watch\": false to stop scanning a label. Labels over 2000 releases and artists' own imprints are skipped by core/labels.py without being removed from this file.",
+  "labels": [
+    {
+      "id": 4587,
+      "name": "Sony Music Entertainment",
+      "yours": 23,
+      "artists": [
+        "Jorge Drexler",
+        "Sílvia Pérez Cruz",
+        "Caetano Veloso",
+        "Yerai Cortés",
+        "Rodrigo Cuevas",
+        "Niño de Elche",
+        "María José Llergo"
+      ],
+      "catalogue": 47303,
+      "self_release": false
+    },
+    {
+      "id": 1630797,
+      "name": "Young",
+      "yours": 22,
+      "artists": [
+        "Arca",
+        "Thundercat",
+        "Erykah Badu",
+        "Kamasi Washington"
+      ],
+      "catalogue": 546,
+      "self_release": false
+    },
+    {
+      "id": 9357027,
+      "name": "ID10382 - Escrito Gospel",
+      "yours": 13,
+      "artists": [
+        "Arca"
+      ],
+      "catalogue": 26,
+      "self_release": false
+    },
+    {
+      "id": 10426622,
+      "name": "Jose Gonzalez",
+      "yours": 13,
+      "artists": [
+        "José González"
+      ],
+      "catalogue": 12,
+      "self_release": true
+    },
+    {
+      "id": 3845254,
+      "name": "Whale Records",
+      "yours": 13,
+      "artists": [
+        "Arca"
+      ],
+      "catalogue": 107,
+      "self_release": false
+    },
+    {
+      "id": 4592,
+      "name": "Columbia",
+      "yours": 11,
+      "artists": [
+        "Björk",
+        "ROSALÍA",
+        "Tame Impala",
+        "Depeche Mode",
+        "Amerie"
+      ],
+      "catalogue": 28199,
+      "self_release": false
+    },
+    {
+      "id": 1752503,
+      "name": "El Efecto Secundario",
+      "yours": 11,
+      "artists": [
+        "PJ Sin Suela"
+      ],
+      "catalogue": 60,
+      "self_release": false
+    },
+    {
+      "id": 4612,
+      "name": "Sony Music Latin",
+      "yours": 11,
+      "artists": [
+        "Natalia Lafourcade",
+        "Mon Laferte",
+        "Milo j",
+        "Bomba Estéreo",
+        "Rawayana"
+      ],
+      "catalogue": 4239,
+      "self_release": false
+    },
+    {
+      "id": 1632909,
+      "name": "Brownswood Recordings",
+      "yours": 10,
+      "artists": [
+        "Yussef Dayes",
+        "KOKOROKO"
+      ],
+      "catalogue": 379,
+      "self_release": false
+    },
+    {
+      "id": 7227489,
+      "name": "Partisan Records",
+      "yours": 10,
+      "artists": [
+        "PJ Harvey",
+        "IDLES",
+        "Ezra Collective"
+      ],
+      "catalogue": 769,
+      "self_release": false
+    },
+    {
+      "id": 7397,
+      "name": "Atlantic Records",
+      "yours": 9,
+      "artists": [
+        "Charli xcx"
+      ],
+      "catalogue": 7559,
+      "self_release": false
+    },
+    {
+      "id": 30909,
+      "name": "Brainfeeder",
+      "yours": 9,
+      "artists": [
+        "Thundercat",
+        "Flying Lotus"
+      ],
+      "catalogue": 321,
+      "self_release": false
+    },
+    {
+      "id": 7507,
+      "name": "WM Spain",
+      "yours": 9,
+      "artists": [
+        "Gilberto Santa Rosa",
+        "Maria Arnal",
+        "Salvador Sobral"
+      ],
+      "catalogue": 10412,
+      "self_release": false
+    },
+    {
+      "id": 318757,
+      "name": "Fania",
+      "yours": 8,
+      "artists": [
+        "Rubén Blades",
+        "Sonora Ponceña"
+      ],
+      "catalogue": 1648,
+      "self_release": false
+    },
+    {
+      "id": 3839,
+      "name": "Universal Music Latino",
+      "yours": 8,
+      "artists": [
+        "Bomba Estéreo",
+        "Eddie Santiago",
+        "LATIN MAFIA"
+      ],
+      "catalogue": 879,
+      "self_release": false
+    },
+    {
+      "id": 10212606,
+      "name": "Chuwi, LLC",
+      "yours": 7,
+      "artists": [
+        "Chuwi"
+      ],
+      "catalogue": 8,
+      "self_release": false
+    },
+    {
+      "id": 9120372,
+      "name": "Good boy",
+      "yours": 7,
+      "artists": [
+        "James Blake"
+      ],
+      "catalogue": 9,
+      "self_release": false
+    },
+    {
+      "id": 4603399,
+      "name": "Napa",
+      "yours": 7,
+      "artists": [
+        "NAPA"
+      ],
+      "catalogue": 12,
+      "self_release": true
+    },
+    {
+      "id": 10742893,
+      "name": "ALERTA TROMBÓN, SL",
+      "yours": 6,
+      "artists": [
+        "Rita Payés"
+      ],
+      "catalogue": 6,
+      "self_release": false
+    },
+    {
+      "id": 9138469,
+      "name": "BMG Rights Management (US) LLC",
+      "yours": 6,
+      "artists": [
+        "Bomba Estéreo",
+        "A Perfect Circle"
+      ],
+      "catalogue": 4396,
+      "self_release": false
+    },
+    {
+      "id": 10279589,
+      "name": "Bichota/Interscope Records",
+      "yours": 6,
+      "artists": [
+        "KAROL G"
+      ],
+      "catalogue": 31,
+      "self_release": false
+    },
+    {
+      "id": 8798078,
+      "name": "Bordertown records",
+      "yours": 6,
+      "artists": [
+        "Grupo Frontera"
+      ],
+      "catalogue": 41,
+      "self_release": false
+    },
+    {
+      "id": 1615239,
+      "name": "COLORSxSTUDIOS",
+      "yours": 6,
+      "artists": [
+        "Sílvia Pérez Cruz",
+        "Silvana Estrada",
+        "Rawayana",
+        "Maria Arnal",
+        "James Blake",
+        "Ezra Collective"
+      ],
+      "catalogue": 592,
+      "self_release": false
+    },
+    {
+      "id": 43568,
+      "name": "Heavenly Recordings",
+      "yours": 6,
+      "artists": [
+        "Joshua Idehen"
+      ],
+      "catalogue": 859,
+      "self_release": false
+    },
+    {
+      "id": 244153,
+      "name": "Loma Vista Recordings",
+      "yours": 6,
+      "artists": [
+        "Andrew Bird"
+      ],
+      "catalogue": 964,
+      "self_release": false
+    },
+    {
+      "id": 12337,
+      "name": "Play It Again Sam",
+      "yours": 6,
+      "artists": [
+        "Tom Waits",
+        "Massive Attack",
+        "Ghinzu"
+      ],
+      "catalogue": 1209,
+      "self_release": false
+    },
+    {
+      "id": 9975265,
+      "name": "ID14772 - AF",
+      "yours": 5,
+      "artists": [
+        "Alex Ferreira"
+      ],
+      "catalogue": 6,
+      "self_release": false
+    },
+    {
+      "id": 50779,
+      "name": "InsideOutMusic",
+      "yours": 5,
+      "artists": [
+        "The Mars Volta"
+      ],
+      "catalogue": 1156,
+      "self_release": false
+    },
+    {
+      "id": 3123363,
+      "name": "Interscope",
+      "yours": 5,
+      "artists": [
+        "Disco Bahía"
+      ],
+      "catalogue": 545,
+      "self_release": false
+    },
+    {
+      "id": 46809,
+      "name": "Mute",
+      "yours": 5,
+      "artists": [
+        "Yann Tiersen",
+        "Apparat"
+      ],
+      "catalogue": 1599,
+      "self_release": false
+    },
+    {
+      "id": 330844,
+      "name": "Rimas Entertainment LLC.",
+      "yours": 5,
+      "artists": [
+        "RaiNao",
+        "Rawayana"
+      ],
+      "catalogue": 778,
+      "self_release": false
+    },
+    {
+      "id": 8061906,
+      "name": "Costamusic.cr",
+      "yours": 4,
+      "artists": [
+        "José González"
+      ],
+      "catalogue": 8,
+      "self_release": false
+    },
+    {
+      "id": 7822166,
+      "name": "Halley Records distributed by Altafonte",
+      "yours": 4,
+      "artists": [
+        "Maria Jaume"
+      ],
+      "catalogue": 255,
+      "self_release": false
+    },
+    {
+      "id": 5712778,
+      "name": "Independent Co.",
+      "yours": 4,
+      "artists": [
+        "Bhavi"
+      ],
+      "catalogue": 197,
+      "self_release": false
+    },
+    {
+      "id": 10350638,
+      "name": "Lil Monsters, LLC / Top Dawg Entertainment, LLC  under exclusive license to Interscope Records and Capitol Records",
+      "yours": 4,
+      "artists": [
+        "Doechii"
+      ],
+      "catalogue": 4,
+      "self_release": false
+    },
+    {
+      "id": 9202791,
+      "name": "Napa",
+      "yours": 4,
+      "artists": [
+        "NAPA"
+      ],
+      "catalogue": 4,
+      "self_release": true
+    },
+    {
+      "id": 11131821,
+      "name": "O&G Records LTD",
+      "yours": 4,
+      "artists": [
+        "iLe"
+      ],
+      "catalogue": 4,
+      "self_release": false
+    },
+    {
+      "id": 1500270,
+      "name": "Psychic Hotline",
+      "yours": 4,
+      "artists": [
+        "Reyna Tropical"
+      ],
+      "catalogue": 182,
+      "self_release": false
+    },
+    {
+      "id": 9293,
+      "name": "Rough Trade",
+      "yours": 4,
+      "artists": [
+        "Warpaint"
+      ],
+      "catalogue": 1390,
+      "self_release": false
+    },
+    {
+      "id": 10278698,
+      "name": "Top Dawg Entertainment/Capitol Records",
+      "yours": 4,
+      "artists": [
+        "Doechii"
+      ],
+      "catalogue": 80,
+      "self_release": false
+    },
+    {
+      "id": 9313,
+      "name": "XL Recordings",
+      "yours": 4,
+      "artists": [
+        "ROSALÍA",
+        "Arca"
+      ],
+      "catalogue": 1816,
+      "self_release": false
+    },
+    {
+      "id": 11337707,
+      "name": "acid test",
+      "yours": 4,
+      "artists": [
+        "John Frusciante"
+      ],
+      "catalogue": 44,
+      "self_release": false
+    },
+    {
+      "id": 9073749,
+      "name": "10777892 Records DK",
+      "yours": 3,
+      "artists": [
+        "iLe"
+      ],
+      "catalogue": 4,
+      "self_release": false
+    },
+    {
+      "id": 7754087,
+      "name": "Altafonte bajo licencia exclusiva de Victoria Producciones SpA",
+      "yours": 3,
+      "artists": [
+        "Ana Tijoux"
+      ],
+      "catalogue": 22,
+      "self_release": false
+    },
+    {
+      "id": 5562353,
+      "name": "Brutture moderne",
+      "yours": 3,
+      "artists": [
+        "Nilza Costa"
+      ],
+      "catalogue": 252,
+      "self_release": false
+    },
+    {
+      "id": 396646,
+      "name": "Codiscos",
+      "yours": 3,
+      "artists": [
+        "Grupo Niche"
+      ],
+      "catalogue": 2682,
+      "self_release": false
+    },
+    {
+      "id": 10557680,
+      "name": "Django Music",
+      "yours": 3,
+      "artists": [
+        "Seun Kuti"
+      ],
+      "catalogue": 3,
+      "self_release": false
+    },
+    {
+      "id": 9957786,
+      "name": "Domino Recording Co.",
+      "yours": 3,
+      "artists": [
+        "Buscabulla"
+      ],
+      "catalogue": 78,
+      "self_release": false
+    },
+    {
+      "id": 5571683,
+      "name": "FLY HIGH RECORDS",
+      "yours": 3,
+      "artists": [
+        "Arca"
+      ],
+      "catalogue": 134,
+      "self_release": false
+    },
+    {
+      "id": 5453080,
+      "name": "ILÉ Music",
+      "yours": 3,
+      "artists": [
+        "iLe"
+      ],
+      "catalogue": 8,
+      "self_release": false
+    },
+    {
+      "id": 100022,
+      "name": "Joyful Noise Recordings",
+      "yours": 3,
+      "artists": [
+        "Kishi Bashi"
+      ],
+      "catalogue": 944,
+      "self_release": false
+    },
+    {
+      "id": 10540285,
+      "name": "MEDIAISLA bajo licencia exclusiva de Alex Ferreira distribuido por Altafonte",
+      "yours": 3,
+      "artists": [
+        "Alex Ferreira"
+      ],
+      "catalogue": 3,
+      "self_release": false
+    },
+    {
+      "id": 10224250,
+      "name": "Nico Roig",
+      "yours": 3,
+      "artists": [
+        "Nico Roig",
+        "Joan Colomo"
+      ],
+      "catalogue": 11,
+      "self_release": true
+    },
+    {
+      "id": 1081115,
+      "name": "Phonomotor",
+      "yours": 3,
+      "artists": [
+        "Seu Jorge",
+        "Marisa Monte"
+      ],
+      "catalogue": 45,
+      "self_release": false
+    },
+    {
+      "id": 7921740,
+      "name": "RRR Records distributed by Altafonte",
+      "yours": 3,
+      "artists": [
+        "Gala i Ovidio"
+      ],
+      "catalogue": 8,
+      "self_release": false
+    },
+    {
+      "id": 10837335,
+      "name": "Rosalia",
+      "yours": 3,
+      "artists": [
+        "ROSALÍA"
+      ],
+      "catalogue": 3,
+      "self_release": true
+    },
+    {
+      "id": 9798595,
+      "name": "SUPERMAMBO",
+      "yours": 3,
+      "artists": [
+        "Rubén Blades"
+      ],
+      "catalogue": 4,
+      "self_release": false
+    },
+    {
+      "id": 83070,
+      "name": "Sonido Muchacho",
+      "yours": 3,
+      "artists": [
+        "Los Punsetes"
+      ],
+      "catalogue": 372,
+      "self_release": false
+    },
+    {
+      "id": 10967294,
+      "name": "Valthi Valthi",
+      "yours": 3,
+      "artists": [
+        "Nosfell"
+      ],
+      "catalogue": 3,
+      "self_release": false
+    },
+    {
+      "id": 9300,
+      "name": "4AD",
+      "yours": 2,
+      "artists": [
+        "Big Thief"
+      ],
+      "catalogue": 1969,
+      "self_release": false
+    },
+    {
+      "id": 10277614,
+      "name": "5020 Records / Sony Music Entertainment",
+      "yours": 2,
+      "artists": [
+        "Nathy Peluso"
+      ],
+      "catalogue": 15,
+      "self_release": false
+    },
+    {
+      "id": 10445425,
+      "name": "ACEITUNE",
+      "yours": 2,
+      "artists": [
+        "Ángeles Toledano"
+      ],
+      "catalogue": 2,
+      "self_release": false
+    },
+    {
+      "id": 7764838,
+      "name": "Altafonte bajo licencia exclusiva de Alejandro Sepúlveda Producciones",
+      "yours": 2,
+      "artists": [
+        "Daniel, me estás matando",
+        "Silvana Estrada"
+      ],
+      "catalogue": 14,
+      "self_release": false
+    },
+    {
+      "id": 599065,
+      "name": "Anti - Epitaph",
+      "yours": 2,
+      "artists": [
+        "Andy Shauf"
+      ],
+      "catalogue": 1013,
+      "self_release": false
+    },
+    {
+      "id": 10623438,
+      "name": "Anti/Epitaph",
+      "yours": 2,
+      "artists": [
+        "Tom Waits",
+        "Andy Shauf"
+      ],
+      "catalogue": 35,
+      "self_release": false
+    },
+    {
+      "id": 7526,
+      "name": "Atlantic Records UK",
+      "yours": 2,
+      "artists": [
+        "LATIN MAFIA",
+        "Ezra Collective"
+      ],
+      "catalogue": 2993,
+      "self_release": false
+    },
+    {
+      "id": 10106055,
+      "name": "BAM SONGS S.A. DE C.V./Sony Music México",
+      "yours": 2,
+      "artists": [
+        "Paloma Morphy"
+      ],
+      "catalogue": 14,
+      "self_release": false
+    },
+    {
+      "id": 9138488,
+      "name": "BMG Rights Management Italy S.R.L.",
+      "yours": 2,
+      "artists": [
+        "Teho Teardo"
+      ],
+      "catalogue": 760,
+      "self_release": false
+    },
+    {
+      "id": 2966827,
+      "name": "Black Room Records",
+      "yours": 2,
+      "artists": [
+        "Fajardo"
+      ],
+      "catalogue": 13,
+      "self_release": false
+    },
+    {
+      "id": 11129081,
+      "name": "Califato 3/4",
+      "yours": 2,
+      "artists": [
+        "Califato ¾"
+      ],
+      "catalogue": 1,
+      "self_release": false
+    },
+    {
+      "id": 64820,
+      "name": "Capitol Records",
+      "yours": 2,
+      "artists": [
+        "Kali Uchis"
+      ],
+      "catalogue": 5496,
+      "self_release": false
+    },
+    {
+      "id": 5835244,
+      "name": "City Slang",
+      "yours": 2,
+      "artists": [
+        "José González"
+      ],
+      "catalogue": 483,
+      "self_release": false
+    },
+    {
+      "id": 64843,
+      "name": "EMI",
+      "yours": 2,
+      "artists": [
+        "Mon Laferte"
+      ],
+      "catalogue": 7756,
+      "self_release": false
+    },
+    {
+      "id": 4586,
+      "name": "Epic",
+      "yours": 2,
+      "artists": [
+        "Amerie"
+      ],
+      "catalogue": 8723,
+      "self_release": false
+    },
+    {
+      "id": 8762208,
+      "name": "Fiction Records – Jehnny Beth",
+      "yours": 2,
+      "artists": [
+        "Mike Patton"
+      ],
+      "catalogue": 8,
+      "self_release": false
+    },
+    {
+      "id": 3323409,
+      "name": "Glassnote Music LLC",
+      "yours": 2,
+      "artists": [
+        "Silvana Estrada"
+      ],
+      "catalogue": 340,
+      "self_release": false
+    },
+    {
+      "id": 38830,
+      "name": "Glitterbeat Records",
+      "yours": 2,
+      "artists": [
+        "Ana Lua Caiano"
+      ],
+      "catalogue": 206,
+      "self_release": false
+    },
+    {
+      "id": 124294,
+      "name": "Global Underground",
+      "yours": 2,
+      "artists": [
+        "Moderat"
+      ],
+      "catalogue": 265,
+      "self_release": false
+    },
+    {
+      "id": 199078,
+      "name": "Hidden Track Records",
+      "yours": 2,
+      "artists": [
+        "Niño de Elche",
+        "Maria Coma"
+      ],
+      "catalogue": 286,
+      "self_release": false
+    },
+    {
+      "id": 17451,
+      "name": "Interscope",
+      "yours": 2,
+      "artists": [
+        "Doechii"
+      ],
+      "catalogue": 2498,
+      "self_release": false
+    },
+    {
+      "id": 1752643,
+      "name": "Laura Itandehui",
+      "yours": 2,
+      "artists": [
+        "Laura Itandehui"
+      ],
+      "catalogue": 8,
+      "self_release": true
+    },
+    {
+      "id": 5166798,
+      "name": "Los Pleneros de la Cresta",
+      "yours": 2,
+      "artists": [
+        "Los Pleneros de la Cresta",
+        "PJ Sin Suela"
+      ],
+      "catalogue": 10,
+      "self_release": true
+    },
+    {
+      "id": 11294548,
+      "name": "Manu Masaedo",
+      "yours": 2,
+      "artists": [
+        "Yerai Cortés",
+        "Ángeles Toledano"
+      ],
+      "catalogue": 1,
+      "self_release": false
+    },
+    {
+      "id": 5518,
+      "name": "Masterworks",
+      "yours": 2,
+      "artists": [
+        "St. Vincent",
+        "Andy Shauf"
+      ],
+      "catalogue": 1860,
+      "self_release": false
+    },
+    {
+      "id": 9303,
+      "name": "Matador",
+      "yours": 2,
+      "artists": [
+        "Natalia Lafourcade"
+      ],
+      "catalogue": 1414,
+      "self_release": false
+    },
+    {
+      "id": 1824357,
+      "name": "Midnight Confessions",
+      "yours": 2,
+      "artists": [
+        "Øyunn"
+      ],
+      "catalogue": 63,
+      "self_release": false
+    },
+    {
+      "id": 7428589,
+      "name": "Moonhoney Records",
+      "yours": 2,
+      "artists": [
+        "Los Panchos"
+      ],
+      "catalogue": 1139,
+      "self_release": false
+    },
+    {
+      "id": 8954423,
+      "name": "NEON16 LLC",
+      "yours": 2,
+      "artists": [
+        "KAROL G"
+      ],
+      "catalogue": 6,
+      "self_release": false
+    },
+    {
+      "id": 7418,
+      "name": "Nonesuch",
+      "yours": 2,
+      "artists": [
+        "Laurie Anderson"
+      ],
+      "catalogue": 1674,
+      "self_release": false
+    },
+    {
+      "id": 7746252,
+      "name": "Ojalá",
+      "yours": 2,
+      "artists": [
+        "Silvio Rodríguez",
+        "Chico Buarque"
+      ],
+      "catalogue": 48,
+      "self_release": false
+    },
+    {
+      "id": 3517242,
+      "name": "One Little Independent Records",
+      "yours": 2,
+      "artists": [
+        "Björk"
+      ],
+      "catalogue": 1551,
+      "self_release": false
+    },
+    {
+      "id": 49233,
+      "name": "PEZ RECORDS",
+      "yours": 2,
+      "artists": [
+        "Vicente García"
+      ],
+      "catalogue": 98,
+      "self_release": false
+    },
+    {
+      "id": 11292773,
+      "name": "Pleneros de la Cresta, Inc.",
+      "yours": 2,
+      "artists": [
+        "Los Pleneros de la Cresta"
+      ],
+      "catalogue": 3,
+      "self_release": false
+    },
+    {
+      "id": 11196274,
+      "name": "Producciones Anónimas & Calle 54 distributed by Altafonte for Bajañí promotional use",
+      "yours": 2,
+      "artists": [
+        "Rubén Blades",
+        "Marisa Monte"
+      ],
+      "catalogue": 2,
+      "self_release": false
+    },
+    {
+      "id": 6718693,
+      "name": "Rusia-IDK - Warner Records",
+      "yours": 2,
+      "artists": [
+        "rusowsky"
+      ],
+      "catalogue": 14,
+      "self_release": false
+    },
+    {
+      "id": 322006,
+      "name": "September Recordings",
+      "yours": 2,
+      "artists": [
+        "Obongjayar"
+      ],
+      "catalogue": 94,
+      "self_release": false
+    },
+    {
+      "id": 23981,
+      "name": "Som Livre",
+      "yours": 2,
+      "artists": [
+        "Caetano Veloso",
+        "Chico Buarque"
+      ],
+      "catalogue": 6493,
+      "self_release": false
+    },
+    {
+      "id": 350844,
+      "name": "Sony Music México",
+      "yours": 2,
+      "artists": [
+        "Paloma Morphy"
+      ],
+      "catalogue": 1047,
+      "self_release": false
+    },
+    {
+      "id": 10768809,
+      "name": "Sounds of Crenshaw / EMPIRE",
+      "yours": 2,
+      "artists": [
+        "Kamasi Washington"
+      ],
+      "catalogue": 3,
+      "self_release": false
+    },
+    {
+      "id": 2880792,
+      "name": "Tanca Records",
+      "yours": 2,
+      "artists": [
+        "Iosonouncane"
+      ],
+      "catalogue": 13,
+      "self_release": false
+    },
+    {
+      "id": 10267085,
+      "name": "The Null Corporation under exclusive license to Interscope Records",
+      "yours": 2,
+      "artists": [
+        "Nine Inch Nails"
+      ],
+      "catalogue": 2,
+      "self_release": false
+    },
+    {
+      "id": 10611463,
+      "name": "The Null Corporation/Interscope Records",
+      "yours": 2,
+      "artists": [
+        "Nine Inch Nails"
+      ],
+      "catalogue": 6,
+      "self_release": false
+    },
+    {
+      "id": 352432,
+      "name": "Unheard Of Hope",
+      "yours": 2,
+      "artists": [
+        "Mabe Fratti"
+      ],
+      "catalogue": 67,
+      "self_release": false
+    },
+    {
+      "id": 17119,
+      "name": "Universal Music Division Barclay",
+      "yours": 2,
+      "artists": [
+        "Seu Jorge",
+        "Dora Morelenbaum"
+      ],
+      "catalogue": 3552,
+      "self_release": false
+    },
+    {
+      "id": 1295933,
+      "name": "Universal Music Ltda.",
+      "yours": 2,
+      "artists": [
+        "Seu Jorge"
+      ],
+      "catalogue": 13845,
+      "self_release": false
+    },
+    {
+      "id": 40650,
+      "name": "Universal Music S.A.",
+      "yours": 2,
+      "artists": [
+        "Bhavi"
+      ],
+      "catalogue": 2811,
+      "self_release": false
+    },
+    {
+      "id": 190230,
+      "name": "Universal Music Spain S.L.",
+      "yours": 2,
+      "artists": [
+        "Ángeles Toledano"
+      ],
+      "catalogue": 8549,
+      "self_release": false
+    },
+    {
+      "id": 9596464,
+      "name": "War Child Records",
+      "yours": 2,
+      "artists": [
+        "Ezra Collective"
+      ],
+      "catalogue": 15,
+      "self_release": false
+    },
+    {
+      "id": 2313572,
+      "name": "1196059 Records DK",
+      "yours": 1,
+      "artists": [
+        "Rubén Blades"
+      ],
+      "catalogue": 7,
+      "self_release": false
+    },
+    {
+      "id": 7204808,
+      "name": "1844",
+      "yours": 1,
+      "artists": [
+        "Wisin & Yandel"
+      ],
+      "catalogue": 1539,
+      "self_release": false
+    },
+    {
+      "id": 8645041,
+      "name": "5493723 Records DK",
+      "yours": 1,
+      "artists": [
+        "Rita Payés"
+      ],
+      "catalogue": 2,
+      "self_release": false
+    },
+    {
+      "id": 11569,
+      "name": "ACQUA RECORDS",
+      "yours": 1,
+      "artists": [
+        "Omara Portuondo"
+      ],
+      "catalogue": 1357,
+      "self_release": false
+    },
+    {
+      "id": 7223310,
+      "name": "ALTER Music LLC",
+      "yours": 1,
+      "artists": [
+        "Childish Gambino"
+      ],
+      "catalogue": 73,
+      "self_release": false
+    },
+    {
+      "id": 1490160,
+      "name": "ATO Records",
+      "yours": 1,
+      "artists": [
+        "Primus"
+      ],
+      "catalogue": 785,
+      "self_release": false
+    },
+    {
+      "id": 285502,
+      "name": "Afinarte Music",
+      "yours": 1,
+      "artists": [
+        "Grupo Frontera"
+      ],
+      "catalogue": 1535,
+      "self_release": false
+    },
+    {
+      "id": 10121198,
+      "name": "Alejo Stivel",
+      "yours": 1,
+      "artists": [
+        "Silvio Rodríguez"
+      ],
+      "catalogue": 7,
+      "self_release": false
+    },
+    {
+      "id": 6519612,
+      "name": "Alis",
+      "yours": 1,
+      "artists": [
+        "Ángeles Toledano"
+      ],
+      "catalogue": 43,
+      "self_release": false
+    },
+    {
+      "id": 6534787,
+      "name": "All Night Long",
+      "yours": 1,
+      "artists": [
+        "Los Pleneros de la Cresta"
+      ],
+      "catalogue": 69,
+      "self_release": false
+    },
+    {
+      "id": 9672617,
+      "name": "Altafonte under exclusive license from Lolein Music S.A. de C.V.",
+      "yours": 1,
+      "artists": [
+        "Natalia Lafourcade"
+      ],
+      "catalogue": 4,
+      "self_release": false
+    },
+    {
+      "id": 10594448,
+      "name": "Amorante",
+      "yours": 1,
+      "artists": [
+        "Niño de Elche"
+      ],
+      "catalogue": 1,
+      "self_release": false
+    },
+    {
+      "id": 6957269,
+      "name": "Aquilo",
+      "yours": 1,
+      "artists": [
+        "Kishi Bashi"
+      ],
+      "catalogue": 17,
+      "self_release": false
+    },
+    {
+      "id": 10899722,
+      "name": "Ar:ca",
+      "yours": 1,
+      "artists": [
+        "Arca"
+      ],
+      "catalogue": 1,
+      "self_release": false
+    },
+    {
+      "id": 3397047,
+      "name": "Arca",
+      "yours": 1,
+      "artists": [
+        "Arca"
+      ],
+      "catalogue": 3,
+      "self_release": true
+    },
+    {
+      "id": 8212863,
+      "name": "BAM SONGS S.A. DE C.V. - Sony Music México",
+      "yours": 1,
+      "artists": [
+        "Paloma Morphy"
+      ],
+      "catalogue": 78,
+      "self_release": false
+    },
+    {
+      "id": 6341903,
+      "name": "Beatclap",
+      "yours": 1,
+      "artists": [
+        "Ángeles Toledano"
+      ],
+      "catalogue": 16109,
+      "self_release": false
+    },
+    {
+      "id": 99564,
+      "name": "Bis Music",
+      "yours": 1,
+      "artists": [
+        "Gilberto Santa Rosa"
+      ],
+      "catalogue": 530,
+      "self_release": false
+    },
+    {
+      "id": 3353021,
+      "name": "Black Horse Edizioni",
+      "yours": 1,
+      "artists": [
+        "Omara Portuondo"
+      ],
+      "catalogue": 315,
+      "self_release": false
+    },
+    {
+      "id": 11449464,
+      "name": "Bolero Records LTD/Sony Music Latin",
+      "yours": 1,
+      "artists": [
+        "Nathy Peluso"
+      ],
+      "catalogue": 1,
+      "self_release": false
+    },
+    {
+      "id": 11421809,
+      "name": "Borderkid Records, LLC/Esperanto Filmoj Ltd/Sony Music Latin",
+      "yours": 1,
+      "artists": [
+        "Rawayana"
+      ],
+      "catalogue": 1,
+      "self_release": false
+    },
+    {
+      "id": 10908635,
+      "name": "Boris González",
+      "yours": 1,
+      "artists": [
+        "Rodrigo Cuevas"
+      ],
+      "catalogue": 2,
+      "self_release": false
+    },
+    {
+      "id": 10861903,
+      "name": "CAM Sugar",
+      "yours": 1,
+      "artists": [
+        "Teho Teardo"
+      ],
+      "catalogue": 1127,
+      "self_release": false
+    },
+    {
+      "id": 8987596,
+      "name": "CUMBIA PEDREGAL",
+      "yours": 1,
+      "artists": [
+        "Daniel, me estás matando"
+      ],
+      "catalogue": 12,
+      "self_release": false
+    },
+    {
+      "id": 7668550,
+      "name": "Candid",
+      "yours": 1,
+      "artists": [
+        "Marc Ribot"
+      ],
+      "catalogue": 417,
+      "self_release": false
+    },
+    {
+      "id": 8467035,
+      "name": "Cercle Records",
+      "yours": 1,
+      "artists": [
+        "Rawayana"
+      ],
+      "catalogue": 36,
+      "self_release": false
+    },
+    {
+      "id": 2795465,
+      "name": "Chico Mambo Distribution",
+      "yours": 1,
+      "artists": [
+        "Vicente García"
+      ],
+      "catalogue": 774,
+      "self_release": false
+    },
+    {
+      "id": 6210587,
+      "name": "Circus Prod Culturais [dist. Tratore]",
+      "yours": 1,
+      "artists": [
+        "Caetano Veloso"
+      ],
+      "catalogue": 23,
+      "self_release": false
+    },
+    {
+      "id": 9275096,
+      "name": "Club del Disco",
+      "yours": 1,
+      "artists": [
+        "Rita Payés"
+      ],
+      "catalogue": 96,
+      "self_release": false
+    },
+    {
+      "id": 3009433,
+      "name": "Colaboraê",
+      "yours": 1,
+      "artists": [
+        "Majur"
+      ],
+      "catalogue": 27,
+      "self_release": false
+    },
+    {
+      "id": 1756953,
+      "name": "Consorzio ZdB",
+      "yours": 1,
+      "artists": [
+        "Iosonouncane"
+      ],
+      "catalogue": 42,
+      "self_release": false
+    },
+    {
+      "id": 7151024,
+      "name": "Crea Music",
+      "yours": 1,
+      "artists": [
+        "Gilberto Santa Rosa"
+      ],
+      "catalogue": 321,
+      "self_release": false
+    },
+    {
+      "id": 7864782,
+      "name": "DBF  -  Planete Des Zins",
+      "yours": 1,
+      "artists": [
+        "Aphex Twin"
+      ],
+      "catalogue": 3,
+      "self_release": false
+    },
+    {
+      "id": 7869278,
+      "name": "Damadriña distributed by Altafonte",
+      "yours": 1,
+      "artists": [
+        "Silvio Rodríguez"
+      ],
+      "catalogue": 14,
+      "self_release": false
+    },
+    {
+      "id": 3195145,
+      "name": "Daniel, Me Estás Matando",
+      "yours": 1,
+      "artists": [
+        "Daniel, me estás matando"
+      ],
+      "catalogue": 24,
+      "self_release": true
+    },
+    {
+      "id": 3011029,
+      "name": "Demônios da Garoa",
+      "yours": 1,
+      "artists": [
+        "Seu Jorge"
+      ],
+      "catalogue": 15,
+      "self_release": false
+    },
+    {
+      "id": 5298538,
+      "name": "Dinastia Inc",
+      "yours": 1,
+      "artists": [
+        "Salvador Sobral"
+      ],
+      "catalogue": 14979,
+      "self_release": false
+    },
+    {
+      "id": 10857883,
+      "name": "Distrokids",
+      "yours": 1,
+      "artists": [
+        "Arca"
+      ],
+      "catalogue": 1,
+      "self_release": false
+    },
+    {
+      "id": 10460388,
+      "name": "Django Music SRL",
+      "yours": 1,
+      "artists": [
+        "Seun Kuti"
+      ],
+      "catalogue": 1,
+      "self_release": false
+    },
+    {
+      "id": 4779031,
+      "name": "Double P Records",
+      "yours": 1,
+      "artists": [
+        "Rawayana"
+      ],
+      "catalogue": 198,
+      "self_release": false
+    },
+    {
+      "id": 134209,
+      "name": "Dox Records",
+      "yours": 1,
+      "artists": [
+        "Rita Payés"
+      ],
+      "catalogue": 565,
+      "self_release": false
+    },
+    {
+      "id": 6278488,
+      "name": "Droges - Grand Musique Management",
+      "yours": 1,
+      "artists": [
+        "Yann Tiersen"
+      ],
+      "catalogue": 11,
+      "self_release": false
+    },
+    {
+      "id": 4921880,
+      "name": "Dúo Pajarito",
+      "yours": 1,
+      "artists": [
+        "Ana Tijoux"
+      ],
+      "catalogue": 9,
+      "self_release": false
+    },
+    {
+      "id": 10550600,
+      "name": "ELEFANTE BLANCO  -  DALE PLAY Records",
+      "yours": 1,
+      "artists": [
+        "Jorge Drexler"
+      ],
+      "catalogue": 1,
+      "self_release": false
+    },
+    {
+      "id": 9507724,
+      "name": "EMI Nordic",
+      "yours": 1,
+      "artists": [
+        "Andreas Odbjerg"
+      ],
+      "catalogue": 40,
+      "self_release": false
+    },
+    {
+      "id": 10032321,
+      "name": "FADER Label",
+      "yours": 1,
+      "artists": [
+        "Obongjayar"
+      ],
+      "catalogue": 374,
+      "self_release": false
+    },
+    {
+      "id": 10466855,
+      "name": "Fight Back",
+      "yours": 1,
+      "artists": [
+        "Gilberto Santa Rosa"
+      ],
+      "catalogue": 2,
+      "self_release": false
+    },
+    {
+      "id": 10653954,
+      "name": "GAK",
+      "yours": 1,
+      "artists": [
+        "Aphex Twin"
+      ],
+      "catalogue": 1,
+      "self_release": false
+    },
+    {
+      "id": 7179426,
+      "name": "Gandula",
+      "yours": 1,
+      "artists": [
+        "Za!"
+      ],
+      "catalogue": 17,
+      "self_release": false
+    },
+    {
+      "id": 9140776,
+      "name": "Garra Records",
+      "yours": 1,
+      "artists": [
+        "José González"
+      ],
+      "catalogue": 814,
+      "self_release": false
+    },
+    {
+      "id": 6454341,
+      "name": "Gil",
+      "yours": 1,
+      "artists": [
+        "Milo j"
+      ],
+      "catalogue": 28,
+      "self_release": false
+    },
+    {
+      "id": 8604447,
+      "name": "HEAVY WEATHER",
+      "yours": 1,
+      "artists": [
+        "Bob Vylan"
+      ],
+      "catalogue": 6,
+      "self_release": false
+    },
+    {
+      "id": 11329156,
+      "name": "ILE",
+      "yours": 1,
+      "artists": [
+        "iLe"
+      ],
+      "catalogue": 1,
+      "self_release": true
+    },
+    {
+      "id": 1131993,
+      "name": "Independent",
+      "yours": 1,
+      "artists": [
+        "José González"
+      ],
+      "catalogue": 1168865,
+      "self_release": false
+    },
+    {
+      "id": 1261065,
+      "name": "Indica Entertainment",
+      "yours": 1,
+      "artists": [
+        "Omara Portuondo"
+      ],
+      "catalogue": 101,
+      "self_release": false
+    },
+    {
+      "id": 10262593,
+      "name": "Inmadurez Records",
+      "yours": 1,
+      "artists": [
+        "Daniel, me estás matando"
+      ],
+      "catalogue": 3,
+      "self_release": false
+    },
+    {
+      "id": 9002360,
+      "name": "José y el Toro",
+      "yours": 1,
+      "artists": [
+        "Daniel, me estás matando"
+      ],
+      "catalogue": 30,
+      "self_release": false
+    },
+    {
+      "id": 10118552,
+      "name": "K Music/Sony Music Latin",
+      "yours": 1,
+      "artists": [
+        "Grupo Frontera"
+      ],
+      "catalogue": 35,
+      "self_release": false
+    },
+    {
+      "id": 10106062,
+      "name": "KAYTRANADA/RCA Records",
+      "yours": 1,
+      "artists": [
+        "KAYTRANADA"
+      ],
+      "catalogue": 7,
+      "self_release": false
+    },
+    {
+      "id": 8755697,
+      "name": "Kong",
+      "yours": 1,
+      "artists": [
+        "IDLES"
+      ],
+      "catalogue": 9,
+      "self_release": false
+    },
+    {
+      "id": 959816,
+      "name": "Kooperativa - Bacilos LLC",
+      "yours": 1,
+      "artists": [
+        "Gilberto Santa Rosa"
+      ],
+      "catalogue": 16,
+      "self_release": false
+    },
+    {
+      "id": 82415,
+      "name": "Kuarup Music",
+      "yours": 1,
+      "artists": [
+        "Chico Buarque"
+      ],
+      "catalogue": 922,
+      "self_release": false
+    },
+    {
+      "id": 10856160,
+      "name": "LYNKX",
+      "yours": 1,
+      "artists": [
+        "Björk"
+      ],
+      "catalogue": 1,
+      "self_release": false
+    },
+    {
+      "id": 1075549,
+      "name": "La Buena Fortuna Music LLC",
+      "yours": 1,
+      "artists": [
+        "iLe"
+      ],
+      "catalogue": 212,
+      "self_release": false
+    },
+    {
+      "id": 9057913,
+      "name": "La Leyenda LLC under exclusive distribution to Rimas Entertainment LLC",
+      "yours": 1,
+      "artists": [
+        "LATIN MAFIA"
+      ],
+      "catalogue": 4,
+      "self_release": false
+    },
+    {
+      "id": 10505813,
+      "name": "Lalo Meneses",
+      "yours": 1,
+      "artists": [
+        "Ana Tijoux"
+      ],
+      "catalogue": 3,
+      "self_release": false
+    },
+    {
+      "id": 140494,
+      "name": "Last Gang",
+      "yours": 1,
+      "artists": [
+        "Arca"
+      ],
+      "catalogue": 887,
+      "self_release": false
+    },
+    {
+      "id": 8563311,
+      "name": "Lex Records",
+      "yours": 1,
+      "artists": [
+        "KAYTRANADA"
+      ],
+      "catalogue": 356,
+      "self_release": false
+    },
+    {
+      "id": 7565710,
+      "name": "Little Simz",
+      "yours": 1,
+      "artists": [
+        "Little Simz"
+      ],
+      "catalogue": 7,
+      "self_release": true
+    },
+    {
+      "id": 3538880,
+      "name": "Loci Records",
+      "yours": 1,
+      "artists": [
+        "Kishi Bashi"
+      ],
+      "catalogue": 227,
+      "self_release": false
+    },
+    {
+      "id": 5291737,
+      "name": "Lua de Santana",
+      "yours": 1,
+      "artists": [
+        "Lua de Santana"
+      ],
+      "catalogue": 5,
+      "self_release": true
+    },
+    {
+      "id": 3325865,
+      "name": "Lucas Bun",
+      "yours": 1,
+      "artists": [
+        "Niño de Elche"
+      ],
+      "catalogue": 16,
+      "self_release": false
+    },
+    {
+      "id": 9089655,
+      "name": "Lucas Delgado",
+      "yours": 1,
+      "artists": [
+        "Rita Payés"
+      ],
+      "catalogue": 3,
+      "self_release": false
+    },
+    {
+      "id": 11296405,
+      "name": "Luis Eduardo Aute Silvio Rodríguez",
+      "yours": 1,
+      "artists": [
+        "Silvio Rodríguez"
+      ],
+      "catalogue": 1,
+      "self_release": false
+    },
+    {
+      "id": 528433,
+      "name": "Luna Negra Productions Inc",
+      "yours": 1,
+      "artists": [
+        "Rey Ruiz"
+      ],
+      "catalogue": 3,
+      "self_release": false
+    },
+    {
+      "id": 7799321,
+      "name": "MEDIAISLA bajo licencia exclusiva de Alex Ferreira",
+      "yours": 1,
+      "artists": [
+        "Alex Ferreira"
+      ],
+      "catalogue": 4,
+      "self_release": false
+    },
+    {
+      "id": 7743755,
+      "name": "MILA RECORDS",
+      "yours": 1,
+      "artists": [
+        "Nico Roig"
+      ],
+      "catalogue": 25,
+      "self_release": false
+    },
+    {
+      "id": 8307694,
+      "name": "Montebello",
+      "yours": 1,
+      "artists": [
+        "Ángeles Toledano"
+      ],
+      "catalogue": 120,
+      "self_release": false
+    },
+    {
+      "id": 136774,
+      "name": "Montevideo Music Group",
+      "yours": 1,
+      "artists": [
+        "Jorge Drexler"
+      ],
+      "catalogue": 5261,
+      "self_release": false
+    },
+    {
+      "id": 7780285,
+      "name": "Máquina de Louco",
+      "yours": 1,
+      "artists": [
+        "Seu Jorge"
+      ],
+      "catalogue": 51,
+      "self_release": false
+    },
+    {
+      "id": 607039,
+      "name": "NFL",
+      "yours": 1,
+      "artists": [
+        "Bad Bunny"
+      ],
+      "catalogue": 73,
+      "self_release": false
+    },
+    {
+      "id": 8217409,
+      "name": "Nakamura Industrie",
+      "yours": 1,
+      "artists": [
+        "Kali Uchis"
+      ],
+      "catalogue": 14,
+      "self_release": false
+    },
+    {
+      "id": 9833235,
+      "name": "Nande  -  5G Managament.",
+      "yours": 1,
+      "artists": [
+        "Rawayana"
+      ],
+      "catalogue": 1,
+      "self_release": false
+    },
+    {
+      "id": 9228736,
+      "name": "Nella",
+      "yours": 1,
+      "artists": [
+        "Gilberto Santa Rosa"
+      ],
+      "catalogue": 7,
+      "self_release": false
+    },
+    {
+      "id": 10463342,
+      "name": "Nova Records",
+      "yours": 1,
+      "artists": [
+        "Milo j"
+      ],
+      "catalogue": 42,
+      "self_release": false
+    },
+    {
+      "id": 5528609,
+      "name": "Omnichord",
+      "yours": 1,
+      "artists": [
+        "Salvador Sobral"
+      ],
+      "catalogue": 115,
+      "self_release": false
+    },
+    {
+      "id": 3512059,
+      "name": "PAULO RICARDO OFICIAL",
+      "yours": 1,
+      "artists": [
+        "Seu Jorge"
+      ],
+      "catalogue": 10,
+      "self_release": false
+    },
+    {
+      "id": 10420140,
+      "name": "Parallel Worlds",
+      "yours": 1,
+      "artists": [
+        "Rita Indiana y Los Misterios"
+      ],
+      "catalogue": 1,
+      "self_release": false
+    },
+    {
+      "id": 337537,
+      "name": "Parlophone (France)",
+      "yours": 1,
+      "artists": [
+        "Yann Tiersen"
+      ],
+      "catalogue": 3838,
+      "self_release": false
+    },
+    {
+      "id": 8696485,
+      "name": "Patatra Production",
+      "yours": 1,
+      "artists": [
+        "Manu Chao"
+      ],
+      "catalogue": 7,
+      "self_release": false
+    },
+    {
+      "id": 11419349,
+      "name": "Phone Records",
+      "yours": 1,
+      "artists": [
+        "Newen Afrobeat"
+      ],
+      "catalogue": 1,
+      "self_release": false
+    },
+    {
+      "id": 73266,
+      "name": "Pi Recordings",
+      "yours": 1,
+      "artists": [
+        "Marc Ribot"
+      ],
+      "catalogue": 120,
+      "self_release": false
+    },
+    {
+      "id": 2963324,
+      "name": "Pixel Records México",
+      "yours": 1,
+      "artists": [
+        "Valeria Castro"
+      ],
+      "catalogue": 7087,
+      "self_release": false
+    },
+    {
+      "id": 10537471,
+      "name": "Plus Media",
+      "yours": 1,
+      "artists": [
+        "Silvio Rodríguez"
+      ],
+      "catalogue": 479,
+      "self_release": false
+    },
+    {
+      "id": 1186213,
+      "name": "QTV",
+      "yours": 1,
+      "artists": [
+        "Índio da Cuíca"
+      ],
+      "catalogue": 10,
+      "self_release": false
+    },
+    {
+      "id": 7049795,
+      "name": "RB CREW",
+      "yours": 1,
+      "artists": [
+        "Fajardo"
+      ],
+      "catalogue": 40,
+      "self_release": false
+    },
+    {
+      "id": 11161640,
+      "name": "REM-U-LAK RECORDS",
+      "yours": 1,
+      "artists": [
+        "Flying Lotus"
+      ],
+      "catalogue": 1,
+      "self_release": false
+    },
+    {
+      "id": 108694,
+      "name": "RGB Suports",
+      "yours": 1,
+      "artists": [
+        "Els Pets"
+      ],
+      "catalogue": 480,
+      "self_release": false
+    },
+    {
+      "id": 8702249,
+      "name": "RGS Music bajo licencia exclusiva de Sonamos",
+      "yours": 1,
+      "artists": [
+        "Juana Molina"
+      ],
+      "catalogue": 2,
+      "self_release": false
+    },
+    {
+      "id": 201578,
+      "name": "Radio Bemba",
+      "yours": 1,
+      "artists": [
+        "Manu Chao"
+      ],
+      "catalogue": 41,
+      "self_release": false
+    },
+    {
+      "id": 99526,
+      "name": "Ramseur Records",
+      "yours": 1,
+      "artists": [
+        "Mike Patton"
+      ],
+      "catalogue": 163,
+      "self_release": false
+    },
+    {
+      "id": 7748843,
+      "name": "Raso Estudio",
+      "yours": 1,
+      "artists": [
+        "Fajardo"
+      ],
+      "catalogue": 341,
+      "self_release": false
+    },
+    {
+      "id": 2966327,
+      "name": "Relicario",
+      "yours": 1,
+      "artists": [
+        "Marisa Monte"
+      ],
+      "catalogue": 52,
+      "self_release": false
+    },
+    {
+      "id": 8840370,
+      "name": "Rimas Entertainment Europa S.L",
+      "yours": 1,
+      "artists": [
+        "Salvador Sobral"
+      ],
+      "catalogue": 4,
+      "self_release": false
+    },
+    {
+      "id": 10828734,
+      "name": "Rochelle Jordan / EMPIRE",
+      "yours": 1,
+      "artists": [
+        "KAYTRANADA"
+      ],
+      "catalogue": 11,
+      "self_release": false
+    },
+    {
+      "id": 9456056,
+      "name": "Rosa León",
+      "yours": 1,
+      "artists": [
+        "Silvio Rodríguez"
+      ],
+      "catalogue": 8,
+      "self_release": false
+    },
+    {
+      "id": 10009340,
+      "name": "Rosalia",
+      "yours": 1,
+      "artists": [
+        "ROSALÍA"
+      ],
+      "catalogue": 1,
+      "self_release": true
+    },
+    {
+      "id": 7433409,
+      "name": "Rubén Blades",
+      "yours": 1,
+      "artists": [
+        "Rubén Blades"
+      ],
+      "catalogue": 31,
+      "self_release": true
+    },
+    {
+      "id": 11126718,
+      "name": "STAND UP GUY RECORDS",
+      "yours": 1,
+      "artists": [
+        "KAYTRANADA"
+      ],
+      "catalogue": 2,
+      "self_release": false
+    },
+    {
+      "id": 3658,
+      "name": "Satélite K",
+      "yours": 1,
+      "artists": [
+        "Ana Tijoux"
+      ],
+      "catalogue": 1514,
+      "self_release": false
+    },
+    {
+      "id": 10843768,
+      "name": "Sicario Music",
+      "yours": 1,
+      "artists": [
+        "Disco Bahía"
+      ],
+      "catalogue": 23,
+      "self_release": false
+    },
+    {
+      "id": 6335016,
+      "name": "Socios Music, LLC",
+      "yours": 1,
+      "artists": [
+        "Rawayana"
+      ],
+      "catalogue": 93,
+      "self_release": false
+    },
+    {
+      "id": 5348857,
+      "name": "Soho Music Records",
+      "yours": 1,
+      "artists": [
+        "Seu Jorge"
+      ],
+      "catalogue": 433,
+      "self_release": false
+    },
+    {
+      "id": 7899201,
+      "name": "Sonamos",
+      "yours": 1,
+      "artists": [
+        "Juana Molina"
+      ],
+      "catalogue": 3,
+      "self_release": false
+    },
+    {
+      "id": 7287822,
+      "name": "Sonidos Lindavista",
+      "yours": 1,
+      "artists": [
+        "PJ Sin Suela"
+      ],
+      "catalogue": 45,
+      "self_release": false
+    },
+    {
+      "id": 1615016,
+      "name": "Sons Em Trânsito",
+      "yours": 1,
+      "artists": [
+        "Caetano Veloso"
+      ],
+      "catalogue": 151,
+      "self_release": false
+    },
+    {
+      "id": 3517632,
+      "name": "Sony Music Argentina",
+      "yours": 1,
+      "artists": [
+        "Natalia Lafourcade"
+      ],
+      "catalogue": 755,
+      "self_release": false
+    },
+    {
+      "id": 216757,
+      "name": "Sony Music Entertainment Chile S.A",
+      "yours": 1,
+      "artists": [
+        "Bhavi"
+      ],
+      "catalogue": 334,
+      "self_release": false
+    },
+    {
+      "id": 38051,
+      "name": "Specula",
+      "yours": 1,
+      "artists": [
+        "Teho Teardo"
+      ],
+      "catalogue": 25,
+      "self_release": false
+    },
+    {
+      "id": 6147861,
+      "name": "St. Vincent",
+      "yours": 1,
+      "artists": [
+        "St. Vincent"
+      ],
+      "catalogue": 21,
+      "self_release": true
+    },
+    {
+      "id": 6961055,
+      "name": "Sumerian Records",
+      "yours": 1,
+      "artists": [
+        "Tame Impala"
+      ],
+      "catalogue": 1313,
+      "self_release": false
+    },
+    {
+      "id": 10035570,
+      "name": "Sumi Ani",
+      "yours": 1,
+      "artists": [
+        "ROSALÍA"
+      ],
+      "catalogue": 20,
+      "self_release": false
+    },
+    {
+      "id": 6210679,
+      "name": "SurrenderMusic",
+      "yours": 1,
+      "artists": [
+        "José González"
+      ],
+      "catalogue": 7,
+      "self_release": false
+    },
+    {
+      "id": 11423076,
+      "name": "Take-Two Interactive Software, Inc. / Rockstar Games",
+      "yours": 1,
+      "artists": [
+        "Tame Impala"
+      ],
+      "catalogue": 2,
+      "self_release": false
+    },
+    {
+      "id": 7055881,
+      "name": "Trjr Records",
+      "yours": 1,
+      "artists": [
+        "Gilberto Santa Rosa"
+      ],
+      "catalogue": 2,
+      "self_release": false
+    },
+    {
+      "id": 11070519,
+      "name": "Tropical Lab",
+      "yours": 1,
+      "artists": [
+        "Chico Buarque"
+      ],
+      "catalogue": 22,
+      "self_release": false
+    },
+    {
+      "id": 9712665,
+      "name": "Tropical Lab Records",
+      "yours": 1,
+      "artists": [
+        "Chico Buarque"
+      ],
+      "catalogue": 17,
+      "self_release": false
+    },
+    {
+      "id": 9159434,
+      "name": "Tu Música",
+      "yours": 1,
+      "artists": [
+        "Bhavi"
+      ],
+      "catalogue": 81,
+      "self_release": false
+    },
+    {
+      "id": 7801048,
+      "name": "Tuétano Music.",
+      "yours": 1,
+      "artists": [
+        "Fajardo"
+      ],
+      "catalogue": 13,
+      "self_release": false
+    },
+    {
+      "id": 10258032,
+      "name": "Universal Music A/S",
+      "yours": 1,
+      "artists": [
+        "Andreas Odbjerg"
+      ],
+      "catalogue": 2866,
+      "self_release": false
+    },
+    {
+      "id": 210772,
+      "name": "Universal Music Portugal SA",
+      "yours": 1,
+      "artists": [
+        "NAPA"
+      ],
+      "catalogue": 1894,
+      "self_release": false
+    },
+    {
+      "id": 7782226,
+      "name": "Uns e Outros Produções e Filmes",
+      "yours": 1,
+      "artists": [
+        "Caetano Veloso"
+      ],
+      "catalogue": 2,
+      "self_release": false
+    },
+    {
+      "id": 7743082,
+      "name": "VII",
+      "yours": 1,
+      "artists": [
+        "Bhavi"
+      ],
+      "catalogue": 12,
+      "self_release": false
+    },
+    {
+      "id": 7707375,
+      "name": "Ventilador Music",
+      "yours": 1,
+      "artists": [
+        "Rita Payés"
+      ],
+      "catalogue": 261,
+      "self_release": false
+    },
+    {
+      "id": 1623080,
+      "name": "Virgin Music Label And Artist Services (S&D)",
+      "yours": 1,
+      "artists": [
+        "Rubén Blades"
+      ],
+      "catalogue": 12247,
+      "self_release": false
+    },
+    {
+      "id": 11084893,
+      "name": "Visionari SPA",
+      "yours": 1,
+      "artists": [
+        "Kali Uchis"
+      ],
+      "catalogue": 1,
+      "self_release": false
+    },
+    {
+      "id": 7456,
+      "name": "WEA Latina",
+      "yours": 1,
+      "artists": [
+        "Rawayana"
+      ],
+      "catalogue": 2862,
+      "self_release": false
+    },
+    {
+      "id": 6815281,
+      "name": "WM Colombia",
+      "yours": 1,
+      "artists": [
+        "PJ Sin Suela"
+      ],
+      "catalogue": 69,
+      "self_release": false
+    },
+    {
+      "id": 10796857,
+      "name": "Wagram Music / Chapter Two Records",
+      "yours": 1,
+      "artists": [
+        "Ana Tijoux"
+      ],
+      "catalogue": 8,
+      "self_release": false
+    },
+    {
+      "id": 324017,
+      "name": "Warner Records",
+      "yours": 1,
+      "artists": [
+        "Charli xcx"
+      ],
+      "catalogue": 7392,
+      "self_release": false
+    },
+    {
+      "id": 7239871,
+      "name": "Wegawam Music Co.",
+      "yours": 1,
+      "artists": [
+        "Andrew Bird"
+      ],
+      "catalogue": 23,
+      "self_release": false
+    },
+    {
+      "id": 4844260,
+      "name": "Young Flex",
+      "yours": 1,
+      "artists": [
+        "Bhavi"
+      ],
+      "catalogue": 10,
+      "self_release": false
+    },
+    {
+      "id": 3289141,
+      "name": "drink sum wtr",
+      "yours": 1,
+      "artists": [
+        "aja monet"
+      ],
+      "catalogue": 124,
+      "self_release": false
+    },
+    {
+      "id": 10168327,
+      "name": "fidel",
+      "yours": 1,
+      "artists": [
+        "KAROL G"
+      ],
+      "catalogue": 1,
+      "self_release": false
+    },
+    {
+      "id": 938927,
+      "name": "luna negra productions",
+      "yours": 1,
+      "artists": [
+        "Rey Ruiz"
+      ],
+      "catalogue": 15,
+      "self_release": false
+    },
+    {
+      "id": 8295122,
+      "name": "section1",
+      "yours": 1,
+      "artists": [
+        "Blonde Redhead"
+      ],
+      "catalogue": 34,
+      "self_release": false
+    }
+  ]
+}

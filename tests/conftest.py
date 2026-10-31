@@ -261,3 +261,129 @@ def listenbrainz(monkeypatch):
             return radar.main()
 
     return Handle()
+
+
+@pytest.fixture
+def labels(monkeypatch):
+    """radars.labels with Qobuz, state, the watchlists and sleeping stubbed.
+
+    Set `.catalogues` to {label_id: [album row, ...]} and `.albums` to
+    {album id: album detail}, then call `.run(args)`. A catalogue row is what
+    `label/get?extra=albums` returns and carries no credits at all; the detail
+    is what `album/get` returns and is the only thing that does. The two
+    differing -- in date as well as in credits -- is the point of the second
+    request, so the fixture keeps them separate rather than deriving one.
+
+    `.saved` is what would have reached the state file, and is None when the
+    radar recorded nothing.
+    """
+    import core.favourites as favourites
+    import core.qobuz as client
+    import core.radar as runner
+    import radars.labels as radar
+
+    class Handle:
+        def __init__(self):
+            self.catalogues: dict | None = None
+            self.albums: dict | None = None
+            self.totals: dict[int, int] = {}
+            self.saved = None
+            self.asked: list[int] = []
+            self.detailed: list[str] = []
+
+        def _get_json(self, url, headers=None, what=""):
+            if "/album/get?" in url:
+                return self._album(url)
+            return self._label(url)
+
+        def _label(self, url):
+            import urllib.parse
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+            label_id = int(query["label_id"][0])
+            offset = int(query["offset"][0])
+            self.asked.append(label_id)
+            rows = self.catalogues
+            items = rows(label_id) if callable(rows) else (rows or {}).get(label_id, [])
+            if isinstance(items, tuple):        # an explicit (None, "error")
+                return items
+            assert isinstance(items, list), (
+                "catalogues values are a list of rows or an explicit "
+                '(None, "error") tuple')
+            # Paged by the client, so the stub has to honour the offset or a
+            # catalogue longer than one page never terminates.
+            page = items[offset:offset + client.LABEL_PAGE]
+            return {"name": f"label-{label_id}",
+                    "albums": {"items": page,
+                               "total": self.totals.get(label_id, len(items))}}, "ok"
+
+        def _album(self, url):
+            import urllib.parse
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+            album_id = query["album_id"][0]
+            self.detailed.append(album_id)
+            detail = (self.albums or {}).get(album_id)
+            if detail is None:
+                return None, "not_found"
+            return detail, "ok"
+
+        def run(self, args, watching=None, people=None, favourite_ids=None,
+                worked_for=None, seen=()):
+            import sys
+            monkeypatch.setattr(client, "get_json", self._get_json)
+            monkeypatch.setattr(radar, "WORKED_FOR", worked_for or {})
+            monkeypatch.setattr(radar, "store_cookies", lambda store: "c=1")
+            monkeypatch.setattr(runner, "load_seen", lambda path: set(seen))
+            monkeypatch.setattr(runner, "save_seen",
+                                lambda path, s: setattr(self, "saved", s))
+            monkeypatch.setattr(runner.time, "sleep", lambda s: None)
+            monkeypatch.setattr(radar.time, "sleep", lambda s: None)
+            monkeypatch.setattr(radar, "WATCHED_LABELS", watching or {})
+            monkeypatch.setattr(radar, "PEOPLE", people if people is not None else {})
+            monkeypatch.setattr(favourites, "ids_for",
+                                lambda key, fallback, **kw: favourite_ids or {})
+            monkeypatch.setattr(sys, "argv", ["labels.py", *args])
+            return radar.main()
+
+    return Handle()
+
+
+@pytest.fixture
+def catalogue_row():
+    """One row as `label/get?extra=albums` returns it: no credits, a date.
+
+    `artists` carries ids because the radar drops a release already billed to
+    an artist you watch before spending a request on it -- a row without them
+    is treated as nobody's and always costs the detail call.
+    """
+    def make(album_id, title, date="2026-10-28", artists=(), tracks=10):
+        return {
+            "id": album_id,
+            "title": title,
+            "release_date_original": date,
+            "tracks_count": tracks,
+            "artists": [{"id": i, "name": n} for i, n in artists],
+            "artist": {"id": artists[0][0], "name": artists[0][1]} if artists else {},
+        }
+    return make
+
+
+@pytest.fixture
+def album_detail_row():
+    """One album as `album/get` returns it: the real date and the credits."""
+    def make(album_id, title, performers, date="2026-10-28", artists=(("9", "Stranger"),),
+             tracks=None, label="Some Label", hires=True, streamable=True):
+        rows = performers if isinstance(performers, list) else [performers]
+        return {
+            "id": album_id,
+            "title": title,
+            "release_date_original": date,
+            "tracks_count": tracks if tracks is not None else len(rows),
+            "hires": hires,
+            "streamable": streamable,
+            "label": {"name": label},
+            "artists": [{"id": i, "name": n} for i, n in artists],
+            "artist": {"id": artists[0][0], "name": artists[0][1]} if artists else {},
+            "tracks": {"items": [{"title": f"Track {n}", "performers": p}
+                                 for n, p in enumerate(rows, 1)]},
+        }
+    return make

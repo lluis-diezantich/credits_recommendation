@@ -7,6 +7,10 @@ Personal project for recommending music.
 - New releases for known artists, both what they are billed on and what they
   are credited on -- a guest spot on somebody else's record is a release you
   would otherwise never have looked for (D42)
+- New releases by the PRODUCERS of those artists, found by scanning the labels
+  they work for rather than by asking for the producer: nothing in Qobuz files
+  a release under one, so the label is the query and the credit is the
+  judgement (D44, Proposed -- this branch)
 
 ## Install
 
@@ -21,6 +25,9 @@ Personal project for recommending music.
     ./radars/itunes.py --days 30           # the same question, Apple's catalogue
     ./radars/listenbrainz.py --days 30     # and MusicBrainz's
     ./radars/remezcla.py                   # a blog, not an id namespace
+    ./radars/labels.py --days 14           # labels your artists use, filtered
+                                           #   to records their producers made
+    ./radars/labels.py --discover          # rebuild data/labels.json
     pytest -q                              # the suite, offline
 
 Each radar writes JSON, `radars/report.py` turns that into markdown.
@@ -28,16 +35,19 @@ Each radar writes JSON, `radars/report.py` turns that into markdown.
 ## Layout
 
     core/              plumbing - http, names, favourites, qobuz, radar,
-                       state, paths; credits + appearances read the per-track
-                       credits Qobuz ships with an album
+                       state, paths; credits + appearances + labels read the
+                       per-track credits Qobuz ships with an album
     radars/            new-release watchers, one thin source each - docs/radars.md
-      qobuz.py  listenbrainz.py  itunes.py    core/radar.py drives these three
+      qobuz.py  listenbrainz.py  itunes.py    core/radar.py drives these,
+      labels.py                               and this one (D44)
       remezcla.py        a blog, not an id namespace - its own script
       report.py          a radar's JSON -> markdown, for the weekly issue
     tests/             pytest, offline - every network call stubbed at the seam
     data/              favourites.json is the watchlist, committed and
-                       hand-edited; data/ci/ is the runner's own seen-state.
-                       Everything else in here is generated and ignored
+                       hand-edited; labels.json and producers.json are the
+                       label radar's two, the same way; data/ci/ is the
+                       runner's own seen-state. Everything else in here is
+                       generated and ignored
     cache/             API responses - the source of truth, never regenerated
     .github/workflows/ radar.yml runs any radar; one caller per schedule
                        tests.yml: ruff, ty, pytest --cov on 3.11/3.12/3.13

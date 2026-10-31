@@ -263,6 +263,79 @@ def artist_releases(artist_id: int, store: str,
     return name, collected, True
 
 
+# A label catalogue comes back NEWEST FIRST, which is what makes this radar
+# affordable: the window is a prefix of the catalogue, so a page is a date
+# range and nothing has to be read past it. Measured 2026-10-31 against
+# `Sony Music Entertainment` (10,000 releases) and `Young` (271): both strictly
+# descending by `release_date_original`, and 500 Sony rows reached back 11 days.
+#
+# Smaller than PAGE_LIMIT on purpose. 100 rows covers a week on every label
+# measured except the majors, which `core.labels.MAJOR_CATALOGUE` excludes
+# anyway, and paging stops as soon as the window is cleared.
+LABEL_PAGE = 100
+#: Pages to read before giving up on reaching the cutoff. A label releasing
+#: more than 300 records inside the window is a distributor, and the funnel
+#: will say so rather than this spending twenty requests to prove it.
+LABEL_MAX_PAGES = 3
+
+
+def label_catalogue(label_id: int, store: str, cookies: str, cutoff: str = "",
+                    max_pages: int = LABEL_MAX_PAGES,
+                    ) -> tuple[str, list[dict], int, bool]:
+    """(label name, releases newest first, catalogue size, succeeded).
+
+    `extra=albums` puts the catalogue under `albums`, with the true size in
+    `albums.total` -- the same arrangement `core.discogs.total_releases` reads
+    on the `ranking` branch, and it matters for the same reason: the size is
+    the gate on whether this label is worth scanning at all, and it arrives
+    with page one rather than costing a page per thousand releases.
+
+    `cutoff` stops paging once a page's oldest release predates the window.
+    Without it a label with a 500-release catalogue costs five requests a week
+    to re-read its back catalogue, which is the whole cost of the radar spent
+    on rows the date filter will drop.
+
+    Never raises, and returns what it has on a failed page -- same contract as
+    artist_releases, and for the same reason: one label failing must not end a
+    run over sixty of them. A partial catalogue is safe here because a release
+    that was not seen is simply not recorded, and the next run reports it.
+    """
+    zone = store.split("-")[0].upper()
+    headers = {"x-app-id": APP_ID, "cookie": cookies}
+    name = "?"
+    collected: list[dict] = []
+    total = 0
+
+    for page in range(max_pages):
+        query = urllib.parse.urlencode({
+            "label_id": label_id,
+            "extra": "albums",
+            "limit": LABEL_PAGE,
+            "offset": page * LABEL_PAGE,
+            "zone": zone,
+            "store": store,
+        })
+        data, outcome = get_json(f"{API}/label/get?{query}", headers,
+                                 f"label/get {label_id}")
+        if outcome != "ok" or not isinstance(data, dict):
+            return name, collected, total, False
+
+        name = data.get("name") or name
+        albums = data.get("albums") or {}
+        rows = albums.get("items") or []
+        total = albums.get("total") or albums.get("albums_count") or total
+        collected += rows
+        if len(rows) < LABEL_PAGE:
+            break
+        # The catalogue is descending, so the LAST row of the page is its
+        # oldest: once that is outside the window every later page is too.
+        oldest = (rows[-1].get("release_date_original") or "")[:10]
+        if cutoff and oldest and oldest < cutoff:
+            break
+
+    return name, collected, total, True
+
+
 # Qobuz stops paging `track/search` here no matter what offset is asked for,
 # and the endpoint ignores every spelling of an `order` parameter, so the
 # results come back by relevance and a very prolific artist's newest track can

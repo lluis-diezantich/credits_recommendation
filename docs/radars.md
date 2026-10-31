@@ -3,9 +3,9 @@
 A radar answers one question — *what came out that I have not been told about?*
 — against one source, and reports it the same way whatever the source is.
 
-Three of the four are thin sources over a shared run in `core/radar.py`. Adding
-a fourth id-based source is a class with two methods and a fifteen-line
-workflow caller. This file is what you need to write one.
+Four of the five are thin sources over a shared run in `core/radar.py`. Adding
+another id-based source is a class with two methods and a fifteen-line workflow
+caller. This file is what you need to write one.
 
 > `docs/architecture.md` planned a rename, `radars/` → `sources/`. That doc is
 > on the `ranking` branch now (D41) and the rename has not happened; with the
@@ -133,6 +133,23 @@ catalogue. Two settings say so, and both are about not lying:
   it for good if you later started watching that artist.
 - `guard_empty_run = False` — a feed answering with zero rows is a legitimate
   quiet window, and nothing distinguishes it from an outage.
+
+## The third shape: a source whose QUESTION changes
+
+`radars/labels.py` (D44) reads a catalogue like `qobuz` does, but it sets
+`record_scanned = False` like the feed does, and the pair is neither of the two
+cases above. The reason is not the source, it is the question: what it scans is
+a label's catalogue, and what it ASKS is whether the credits name anybody in
+`data/producers.json` — a list that grows. Recording a release that credited
+nobody would hide it for good the day you add the producer it credits, which is
+`listenbrainz`'s argument reaching a catalogue source by a different route.
+
+`guard_empty_run` stays `True`, unlike the feed, because a label catalogue
+always returns rows: nothing from any of two hundred labels is an outage, and
+it is the date filter that empties the report rather than the fetch.
+
+So the two settings are about the question and the source separately, and a new
+radar should decide them separately rather than copying either pair wholesale.
 
 ## Scheduling one
 
