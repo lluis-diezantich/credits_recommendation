@@ -269,6 +269,19 @@ def is_remix(title: str) -> bool:
     return any(pattern in low for pattern in REMIX_PATTERNS)
 
 
+#: Verdicts that still describe a real new release, just not one anybody you
+#: follow made. They are the feed (D45): worth reporting on a label you follow,
+#: with no reason attached beyond the label itself.
+FEED_VERDICTS = frozenset({"absent", "writing", "sideline"})
+
+#: Kinds the feed carries by default. Singles are 175 of the 300 releases these
+#: labels put out in a fortnight, measured 2026-10-31, and they are the bulk of
+#: the volume: dropping them takes the feed from 128 a week to 62, and the
+#: per-label cap then takes it to 34. Credited rows ignore this -- the producer
+#: rows are mostly singles, including Marta Salogni on Westerman's `L/C`.
+FEED_KINDS = frozenset({"Album", "EP"})
+
+
 #: Why a label release is or is not news, in the order a candidate meets the
 #: tests. `yours` first because it is a fact about the billing, and `absent`
 #: before the family tests because it is a fact about the credits.

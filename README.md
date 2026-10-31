@@ -5,8 +5,8 @@ Personal project for recommending music.
 ## Features
 
 - New releases by the artists you follow, and the records they guest on (D42)
-- New records made by their producers, found through the labels those
-  producers work for (D44)
+- New albums on the labels those artists release on, with the ones a producer
+  you follow made named as such (D44, D45)
 
 ## Install
 

@@ -39,6 +39,8 @@ from core import favourites
 from core.appearances import appearance_key
 from core.labels import (
     FAMILIES,
+    FEED_KINDS,
+    FEED_VERDICTS,
     LABELS_FILE,
     MAJOR_CATALOGUE,
     PEOPLE_FILE,
@@ -69,7 +71,7 @@ from core.radar import Batch, Radar, Release, execute, parser
 # and `core/credits.py` exists because the last function that got written twice
 # drifted -- discover.py scored collaborator names as instruments for as long
 # as both copies lived.
-from radars.qobuz import normalize
+from radars.qobuz import classify, normalize
 
 WATCHLIST = load_labels()
 WATCHED_LABELS: dict[int, str] = WATCHLIST.ids
@@ -113,6 +115,11 @@ NAME_AT_MOST = 3
 FUNNEL = (*VERDICTS, "redelivery", "duplicate", "unreadable", "capped")
 
 
+def label_of(detail: dict) -> str:
+    """The label name off an album_detail payload."""
+    return (detail.get("label") or {}).get("name") or ""
+
+
 class LabelRadar(Radar):
     name = "labels"
     keep_types = {"Album", "EP", "Single"}
@@ -141,6 +148,10 @@ class LabelRadar(Radar):
     def __init__(self) -> None:
         self.funnel: collections.Counter[str] = collections.Counter()
         self.catalogues: dict[str, int] = {}
+        #: Feed rows kept, counted after the per-label cap. Apart from the
+        #: funnel, whose outcomes sum to the candidates read: a row can be
+        #: `absent` AND on the feed.
+        self.feed = 0
 
     def add_arguments(self, parser) -> None:
         parser.add_argument("--store", default=STORE,
@@ -153,6 +164,13 @@ class LabelRadar(Radar):
                                  # Doubled for argparse, which reads % as a
                                  # format spec in a help string and raises.
                                  "measured 73%% of its referrals arriving that way")
+        parser.add_argument("--feed", choices=("albums", "all", "off"),
+                            default="albums",
+                            help="which releases to report that nobody you follow "
+                                 "made: albums and EPs (default), everything, or "
+                                 "nothing. Measured over a fortnight on these "
+                                 "labels: 34 a week, 65, and 0. Credited releases "
+                                 "are reported whatever this says")
         parser.add_argument("--max-pages", type=int, default=LABEL_MAX_PAGES,
                             metavar="N",
                             help="catalogue pages to read per label before giving up "
@@ -251,16 +269,27 @@ class LabelRadar(Radar):
             found = [r for r in (self.examine(args, album, cookies, families,
                                               folded, watched_artists, cutoff)
                                  for album in candidates) if r is not None]
-            # Newest first, so a cap keeps the most recent rather than whatever
-            # order the catalogue happened to return.
-            found.sort(key=lambda release: release.date, reverse=True)
-            cap = getattr(args, "per_label", 0)
-            if cap and len(found) > cap:
-                self.funnel["capped"] += len(found) - cap
-                found = found[:cap]
-            releases = found
+            # Capped per GROUP, so a label with a busy week cannot push its one
+            # credited release out of the report with its own feed rows.
+            credited = [r for r in found if r.because]
+            feed = self.cap(args, [r for r in found if not r.because])
+            # Counted AFTER the cap, so the summary cannot claim rows the
+            # report does not hold -- the same discipline the funnel keeps.
+            # The runner drops pre-orders after this (D33), so this is still
+            # an upper bound on what is printed.
+            self.feed += len(feed)
+            releases = self.cap(args, credited) + feed
             yield Batch(releases=releases, ok=ok, label=label or name,
                         scanned=len(catalogue), warning="; ".join(warnings))
+
+    def cap(self, args, rows: list[Release]) -> list[Release]:
+        """The newest `--per-label` of one group, since a report has to be read."""
+        rows.sort(key=lambda release: release.date, reverse=True)
+        limit = getattr(args, "per_label", 0)
+        if limit and len(rows) > limit:
+            self.funnel["capped"] += len(rows) - limit
+            return rows[:limit]
+        return rows
 
     def examine(self, args, album: dict, cookies: str, families: set[str],
                 folded: set[str], watched_artists: set[str],
@@ -313,6 +342,11 @@ class LabelRadar(Radar):
             why = "duplicate"
         self.funnel[why] += 1
         if why != "credit":
+            # A real new release on a label you follow, which nobody you follow
+            # made. Reported with no reason attached beyond the label (D45).
+            if (args.feed != "off" and why in FEED_VERDICTS
+                    and (args.feed == "all" or classify(detail) in FEED_KINDS)):
+                return normalize(detail, artists or label_of(detail))
             return None
 
         folded.add(appearance_key(artists, title))
@@ -322,7 +356,7 @@ class LabelRadar(Radar):
         # future verdict that does not cannot crash a run.
         best = earned(credited, families) or credited[0]
         roles = [role for role in best.roles if family_of(role) in families]
-        label_name = (detail.get("label") or {}).get("name") or ""
+        label_name = label_of(detail)
         because = f"{best.name} - {', '.join(roles) or best.describe()}"
         if label_name:
             because += f" (on {label_name})"
@@ -362,6 +396,8 @@ class LabelRadar(Radar):
                      f"{PEOPLE_LIST.total} people ({left}).")
         if self.funnel:
             line += f" Credits: {self.funnel_line()}."
+        if self.feed:
+            line += f" {self.feed} on the feed."
         return line
 
     def funnel_line(self) -> str:
@@ -376,6 +412,7 @@ class LabelRadar(Radar):
             # radars' reports, which is why the formatter defaults it.
             "unit": "labels",
             "credit": sorted(self.families(args)),
+            "feed": args.feed,
             # The people BLOCK, not a count: which entries the file lost and
             # why is the same question the label watchlist answers, and a run
             # that looked for 430 of 1,538 names should say so.
