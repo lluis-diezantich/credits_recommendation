@@ -169,3 +169,38 @@ def test_an_incomplete_list_is_flagged_in_the_body_not_folded_away():
     """A caveat about whether the table is the whole answer, not a count."""
     out = body(releases=[release()], failed=2)
     assert "⚠ 2 of 3 artists could not be fetched" in out.split("<details>")[0]
+
+
+def test_a_label_report_counts_labels_and_credited_rows():
+    """The label radar (D44) has no billed rows at all -- everything it reports
+    is somebody else's record -- so the headline cannot be about releases by
+    artists it watches, and the noun cannot be "artists"."""
+    report = {
+        "source": "labels", "unit": "labels", "window": "last 14 days",
+        "watching": 212, "fetched": 212, "store": "gb-en",
+        "releases": [{"date": "2026-10-28", "type": "Album", "artist": "Napa",
+                      "title": "Semitrópico", "id": "abc", "source": "qobuz",
+                      "tracks": 9, "because": "Carles Campi Campón - Producer"}],
+        "watchlist": {"ids": 212, "entries": 254, "major": 27, "self": 15},
+        "credits": {"credit": 1, "absent": 180, "sideline": 9},
+    }
+    body = rep.to_markdown(report)
+    assert "1 credited release from 212 of 212 labels" in body
+    assert "Watching 212 of 254 on the list: 27 too big to mean anything" in body
+    assert "an artist's own imprint" in body
+    assert "credit candidates: 1 credit, 180 absent, 9 sideline" in body
+    assert "Carles Campi Campón - Producer" in body
+
+
+def test_an_artist_report_is_unchanged_without_a_unit():
+    """Every other radar omits `unit`, and its headline must read exactly as it
+    did before the label radar existed."""
+    report = {
+        "source": "qobuz", "window": "last 10 days", "watching": 128,
+        "fetched": 128, "store": "gb-en",
+        "releases": [{"date": "2026-10-28", "type": "Album", "artist": "Björk",
+                      "title": "Some Record", "id": "abc", "source": "qobuz",
+                      "tracks": 9}],
+    }
+    body = rep.to_markdown(report)
+    assert "1 new release from 128 of 128 artists" in body

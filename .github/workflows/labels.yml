@@ -1,0 +1,32 @@
+# The label radar (D44). Manual on purpose: at ~12 rows a week against the
+# known-artist radar's 5.8 it would be the larger of the two issues, and D44's
+# executive-producer and mastering-engineer patterns are unfixed. To schedule
+# it, add `schedule: - cron: "47 5 * * 5"` -- Fridays, after that radar.
+
+name: "releases: labels"
+
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "lookback window in days"
+        default: "14"
+      credit:
+        description: "role families that count as news"
+        default: "production"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  labels:
+    uses: ./.github/workflows/radar.yml
+    with:
+      radar: radars/labels.py
+      title: "releases: labels"
+      days: ${{ inputs.days }}
+      extra: "--credit ${{ inputs.credit }}"
+      # The runner's default commits ids back to data/ci/ (D11), and a
+      # hand-run trial must not write state into a branch.
+      stateless: true

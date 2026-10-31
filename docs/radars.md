@@ -3,9 +3,9 @@
 A radar answers one question — *what came out that I have not been told about?*
 — against one source, and reports it the same way whatever the source is.
 
-Three of the four are thin sources over a shared run in `core/radar.py`. Adding
-a fourth id-based source is a class with two methods and a fifteen-line
-workflow caller. This file is what you need to write one.
+Four of the five are thin sources over a shared run in `core/radar.py`. Adding
+another id-based source is a class with two methods and a fifteen-line workflow
+caller. This file is what you need to write one.
 
 > `docs/architecture.md` planned a rename, `radars/` → `sources/`. That doc is
 > on the `ranking` branch now (D41) and the rename has not happened; with the
@@ -133,6 +133,19 @@ catalogue. Two settings say so, and both are about not lying:
   it for good if you later started watching that artist.
 - `guard_empty_run = False` — a feed answering with zero rows is a legitimate
   quiet window, and nothing distinguishes it from an outage.
+
+## The third shape: a source whose QUESTION changes
+
+`radars/labels.py` (D44) reads a catalogue like `qobuz` does, but sets
+`record_scanned = False` like the feed does. The reason is the question rather
+than the source: it scans a label's catalogue and asks whether the credits name
+anybody in `data/producers.json`, and that list grows. Banking a release that
+credited nobody would hide it the day you add the producer it credits.
+
+`guard_empty_run` stays `True`, because a label catalogue always returns rows:
+the date filter empties the report, the fetch does not.
+
+Decide the two settings separately rather than copying either pair.
 
 ## Scheduling one
 

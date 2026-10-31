@@ -47,3 +47,4 @@ dangle here and resolve there, and they are left alone on purpose by rule 3.
 | [D41](D41-main-is-the-radar-the-rest-is-a-branch.md) | Main is the known-artist radar alone; the credits pipeline is archived on the `ranking` branch | Accepted |
 | [D42](D42-a-credit-is-a-release-you-would-have-missed.md) | The radar also reports what its artists are credited on, found by searching the track index | Accepted |
 | [D43](D43-the-issue-body-is-the-records.md) | The issue body is the records; every count about the run is folded into the warnings block | Accepted |
+| [D44](D44-the-label-is-the-query-the-credit-is-the-judgement.md) | The label is the query and the credit is the judgement: producers are found by scanning the labels they work for | Proposed |
