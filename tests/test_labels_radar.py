@@ -1,10 +1,8 @@
-"""radars/labels.py end to end, offline: catalogue in, credited rows out.
+"""radars/labels.py end to end, offline: catalogue in, rows out.
 
-What these cover that tests/test_labels.py cannot is the SHAPE of the run --
-how many requests a candidate costs, which ones are dropped before a request is
-spent, and what the radar records as seen. Those are the properties the whole
-design rests on: one `label/get` per label, one `album_detail` per surviving
-candidate, and nothing recorded that nobody was credited on.
+These cover the SHAPE of a run, which tests/test_labels.py cannot: one
+`label/get` per label, one `album_detail` per surviving candidate, which ones
+are dropped before a request is spent, and what gets recorded.
 """
 
 from __future__ import annotations

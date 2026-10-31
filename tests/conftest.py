@@ -267,15 +267,11 @@ def listenbrainz(monkeypatch):
 def labels(monkeypatch):
     """radars.labels with Qobuz, state, the watchlists and sleeping stubbed.
 
-    Set `.catalogues` to {label_id: [album row, ...]} and `.albums` to
-    {album id: album detail}, then call `.run(args)`. A catalogue row is what
-    `label/get?extra=albums` returns and carries no credits at all; the detail
-    is what `album/get` returns and is the only thing that does. The two
-    differing -- in date as well as in credits -- is the point of the second
-    request, so the fixture keeps them separate rather than deriving one.
-
-    `.saved` is what would have reached the state file, and is None when the
-    radar recorded nothing.
+    Set `.catalogues` to {label_id: [album row, ...]} and `.albums` to {album
+    id: album detail}, then call `.run(args)`. A catalogue row carries no
+    credits and the detail does, and the two differing in date as well is the
+    point of the second request, so they stay separate. `.saved` is what would
+    have reached the state file.
     """
     import core.favourites as favourites
     import core.qobuz as client
@@ -351,9 +347,8 @@ def labels(monkeypatch):
 def catalogue_row():
     """One row as `label/get?extra=albums` returns it: no credits, a date.
 
-    `artists` carries ids because the radar drops a release already billed to
-    an artist you watch before spending a request on it -- a row without them
-    is treated as nobody's and always costs the detail call.
+    `artists` carries ids because a release already credited to an artist you
+    watch is dropped before a request is spent on it.
     """
     def make(album_id, title, date="2026-10-28", artists=(), tracks=10):
         return {
