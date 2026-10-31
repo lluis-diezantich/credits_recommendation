@@ -1,11 +1,21 @@
 # The label radar (D44), on the shared runner.
 #
-# NO CRON, deliberately. This radar is a trial on its own branch: the decision
-# is Proposed, the producer list behind it covers 20 of 167 artists, and the
-# first thing to learn is what one run reports rather than what fifty of them
-# do to an issue tracker. Run it by hand from the Actions tab, read the funnel
-# in the warnings block, and add the schedule when the numbers in D44's
-# Evidence have been re-measured here.
+# NO CRON yet, and the reason has changed. It used to be that the producer list
+# covered 20 of 167 artists and nobody had seen a run; both are done -- all 167
+# are walked, `data/producers.json` holds 2,763 names, and `data/labels-14d.md`
+# and `data/labels-backfill.md` are what it reports.
+#
+# What is left is not a measurement, it is two decisions and a merge:
+#
+#   * GitHub only offers workflow_dispatch for workflows on the DEFAULT branch,
+#     so until this is on main it cannot be triggered at all, by hand or by
+#     cron. That alone is why the schedule below is still commented.
+#   * 24 rows in 14 days is ~12 a week against the known-artist radar's 5.8, so
+#     this would become the larger of the two issues. Whether that is wanted is
+#     a taste call, and `--per-label` plus `--credit` are the knobs for it.
+#   * D44 is still Proposed, and two patterns it records are unfixed: mastering
+#     engineers now dominate the list by connection count, and three of those
+#     24 rows are executive-producer-only credits.
 #
 #   on:
 #     schedule:
