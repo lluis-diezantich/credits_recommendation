@@ -1,10 +1,8 @@
-"""radars/labels.py end to end, offline: catalogue in, credited rows out.
+"""radars/labels.py end to end, offline: catalogue in, rows out.
 
-What these cover that tests/test_labels.py cannot is the SHAPE of the run --
-how many requests a candidate costs, which ones are dropped before a request is
-spent, and what the radar records as seen. Those are the properties the whole
-design rests on: one `label/get` per label, one `album_detail` per surviving
-candidate, and nothing recorded that nobody was credited on.
+These cover the SHAPE of a run, which tests/test_labels.py cannot: one
+`label/get` per label, one `album_detail` per surviving candidate, which ones
+are dropped before a request is spent, and what gets recorded.
 """
 
 from __future__ import annotations
@@ -310,3 +308,95 @@ def test_a_remix_is_not_a_record_they_made(labels, catalogue_row,
     out = capsys.readouterr().out
     assert "Nothing new." in out
     assert "1 remix" in out
+
+
+STRANGER = "Stranger, MainArtist - Nobody You Know, Producer"
+
+
+def test_the_feed_reports_an_album_nobody_you_follow_made(labels, catalogue_row,
+                                                          album_detail_row, capsys):
+    """D45: the label is reason enough for an album, with no credit attached."""
+    labels.catalogues = {7: [catalogue_row("alb", "Some Album")]}
+    labels.albums = {"alb": album_detail_row("alb", "Some Album", STRANGER, tracks=10)}
+    assert labels.run(["--days", "0"], watching={7: "Mute"}, people=PEOPLE) == 0
+    out = capsys.readouterr().out
+    assert "Some Album" in out
+    assert "↳" not in out          # no credit line: nothing earned it one
+    assert "1 on the feed" in out
+
+
+def test_the_feed_leaves_singles_out_by_default(labels, catalogue_row,
+                                                album_detail_row, capsys):
+    """Singles were 175 of 300 releases in the measured fortnight."""
+    labels.catalogues = {7: [catalogue_row("sng", "Some Single")]}
+    labels.albums = {"sng": album_detail_row("sng", "Some Single", STRANGER, tracks=1)}
+    assert labels.run(["--days", "0"], watching={7: "Mute"}, people=PEOPLE) == 0
+    assert "Nothing new." in capsys.readouterr().out
+
+
+def test_feed_all_takes_the_singles_too(labels, catalogue_row, album_detail_row,
+                                        capsys):
+    labels.catalogues = {7: [catalogue_row("sng", "Some Single")]}
+    labels.albums = {"sng": album_detail_row("sng", "Some Single", STRANGER, tracks=1)}
+    assert labels.run(["--days", "0", "--feed", "all"],
+                      watching={7: "Mute"}, people=PEOPLE) == 0
+    assert "Some Single" in capsys.readouterr().out
+
+
+def test_feed_off_is_the_old_credits_only_behaviour(labels, catalogue_row,
+                                                    album_detail_row, capsys):
+    labels.catalogues = {7: [catalogue_row("alb", "Some Album")]}
+    labels.albums = {"alb": album_detail_row("alb", "Some Album", STRANGER, tracks=10)}
+    assert labels.run(["--days", "0", "--feed", "off"],
+                      watching={7: "Mute"}, people=PEOPLE) == 0
+    assert "Nothing new." in capsys.readouterr().out
+
+
+def test_a_credited_single_is_reported_although_the_feed_drops_singles(
+        labels, catalogue_row, album_detail_row, capsys):
+    """Westerman's `L/C` is a single, and Marta Salogni producing it is the
+    whole point of the radar."""
+    labels.catalogues = {7: [catalogue_row("sng", "L/C")]}
+    labels.albums = {"sng": album_detail_row(
+        "sng", "L/C", f"Westerman, MainArtist - {PRODUCER}, Producer", tracks=1)}
+    assert labels.run(["--days", "0"], watching={7: "Partisan"}, people=PEOPLE) == 0
+    out = capsys.readouterr().out
+    assert "L/C" in out
+    assert f"{PRODUCER} - Producer" in out
+
+
+def test_a_busy_feed_cannot_push_out_a_credited_release(labels, catalogue_row,
+                                                        album_detail_row, capsys):
+    """The cap is per group, so one label's feed rows and its credited row do
+    not compete for the same two slots."""
+    rows = [catalogue_row(f"f{n}", f"Feed {n}", date=f"2026-10-2{n}")
+            for n in range(4)]
+    rows.append(catalogue_row("good", "The Credited One", date="2026-10-10"))
+    labels.catalogues = {7: rows}
+    labels.albums = {f"f{n}": album_detail_row(f"f{n}", f"Feed {n}", STRANGER,
+                                               tracks=10, date=f"2026-10-2{n}")
+                     for n in range(4)}
+    labels.albums["good"] = album_detail_row(
+        "good", "The Credited One", f"Someone, MainArtist - {PRODUCER}, Producer",
+        tracks=10, date="2026-10-10")
+    assert labels.run(["--days", "0", "--per-label", "2"],
+                      watching={7: "Mute"}, people=PEOPLE) == 0
+    out = capsys.readouterr().out
+    assert "The Credited One" in out
+    assert out.count("Feed ") == 2
+
+
+def test_the_feed_count_excludes_what_the_cap_removed(labels, catalogue_row,
+                                                      album_detail_row, capsys):
+    """A first run said "103 on the feed" beside 50 printed rows."""
+    rows = [catalogue_row(f"f{n}", f"Feed {n}", date=f"2026-10-2{n}")
+            for n in range(5)]
+    labels.catalogues = {7: rows}
+    labels.albums = {f"f{n}": album_detail_row(f"f{n}", f"Feed {n}", STRANGER,
+                                               tracks=10, date=f"2026-10-2{n}")
+                     for n in range(5)}
+    assert labels.run(["--days", "0", "--per-label", "2"],
+                      watching={7: "Mute"}, people=PEOPLE) == 0
+    out = capsys.readouterr().out
+    assert "2 on the feed" in out
+    assert "2 new releases" in out

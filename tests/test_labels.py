@@ -1,10 +1,8 @@
 """core/labels.py: the judgement the label radar rests on, without a network.
 
-The funnel order is what most of this is about. Each verdict is the reason a
-row stopped, and the radar prints those counts as the measurement behind
-`--credit`, so a reordering that looks harmless silently moves rows between
-categories -- which is exactly what D42's `appearance`/`duplicate` double-count
-was.
+Mostly about the funnel order. Each verdict is where a row stopped and the
+radar prints those counts, so a reordering that looks harmless moves rows
+between categories -- D42's `appearance`/`duplicate` double-count.
 """
 
 from __future__ import annotations

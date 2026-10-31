@@ -1,29 +1,24 @@
 #!/usr/bin/env python3
-"""Report new releases on the LABELS your artists release on, kept only where
-somebody you follow is credited on them.
+"""Report new releases on the LABELS your artists release on: albums and EPs
+as a feed, and the ones a producer you follow made named as such. D44, D45.
 
-The other three radars ask a source what a PERSON released. This one asks what
-a label put out, and then reads the credits to decide what to keep -- because
-the person this is really about is a producer, and nothing in Qobuz files a
-release under a producer. `core/labels.py` has the measurement and the
-judgement; this file is the fetch loop and the printing.
+Nothing in Qobuz files a release under a producer, so the loop runs the other
+way. `core/labels.py` has the measurements and the judgement; this file fetches
+and prints.
 
-Two requests shape the cost. One `label/get` per label returns the catalogue
-newest-first, so the window is a prefix and a page is a date range. Everything
-that survives the window and is not already billed to an artist you watch costs
-one `album_detail`, which answers the two questions the catalogue row cannot:
-the real date, and the credits.
+One `label/get` per label returns the catalogue newest-first, so the window is
+a prefix of it. Everything in the window that is not already credited to an
+artist you watch costs one `album_detail`, which answers the two questions the
+catalogue row cannot: the real date, and the credits.
 
-    ./radars/labels.py                          # the Friday scan
-    ./radars/labels.py --days 14 --dry-run
+    ./radars/labels.py                          # the weekly scan
+    ./radars/labels.py --feed off               # credited rows only
     ./radars/labels.py --credit production,engineering
     ./radars/labels.py --discover               # build data/labels.json
     ./radars/labels.py --people-from "data/discovery_*.json"
 
-Both builder modes write a file you then hand-edit, the same arrangement as
-data/favourites.json: `"watch": false` mutes a label or a person and nothing
-re-resolves it. Neither is part of a run -- see --discover's own help for what
-it costs.
+Both builders write a file you then hand-edit, as data/favourites.json works:
+`"watch": false` mutes a label or a person and nothing re-resolves it.
 """
 from __future__ import annotations
 
@@ -39,6 +34,8 @@ from core import favourites
 from core.appearances import appearance_key
 from core.labels import (
     FAMILIES,
+    FEED_KINDS,
+    FEED_VERDICTS,
     LABELS_FILE,
     MAJOR_CATALOGUE,
     PEOPLE_FILE,
@@ -69,7 +66,7 @@ from core.radar import Batch, Radar, Release, execute, parser
 # and `core/credits.py` exists because the last function that got written twice
 # drifted -- discover.py scored collaborator names as instruments for as long
 # as both copies lived.
-from radars.qobuz import normalize
+from radars.qobuz import classify, normalize
 
 WATCHLIST = load_labels()
 WATCHED_LABELS: dict[int, str] = WATCHLIST.ids
@@ -83,34 +80,28 @@ PEOPLE_LIST = load_people(yours=YOURS)
 PEOPLE: dict[str, str] = PEOPLE_LIST.names
 WORKED_FOR: dict[str, list[str]] = PEOPLE_LIST.worked_for
 
-# Shorter than the Qobuz radar's 90. That radar reports a watched artist's own
-# releases, where months of back catalogue on a first run is a one-off cost
-# worth paying; here the same window is sixty labels' worth of catalogue and
-# every row of it costs an album_detail.
+# Shorter than the Qobuz radar's 90: here a wide window is 200 labels' worth of
+# catalogue and every row in it costs an album_detail.
 RECENT_DAYS = 14
 
-#: Rows one label may contribute to a run. The archived pipeline's roadmap
-#: wanted this as "diversification: not ten records by the same producer", and
-#: the first full run of this radar is the measurement: of 212 labels scanned,
-#: exactly one produced more than two rows, and it produced five -- an act
-#: releasing singles on a label named after its own producer. So a cap of 2
-#: costs three rows from that label and nothing at all from the other 211,
-#: measured 2026-10-31 over one run.
-#:
-#: A cap rather than another gate, because the problem is not that the label is
-#: wrong -- the credits are real -- it is that a weekly report has to be read.
+#: Rows one label may contribute, per group. Measured over one run of 212
+#: labels: exactly one produced more than two, and it produced five -- an act
+#: releasing singles on a label named after its own producer. The credits are
+#: real; a weekly report just has to be read.
 PER_LABEL = 2
 
-#: How many of YOUR artists to name beside a producer before saying "+N more".
-#: The names are the reason the row is in the report at all, so three of them
-#: earn their width; the fourth onwards is reassurance rather than information.
+#: Artists to name beside a producer before "+N more". Three earn their width.
 NAME_AT_MOST = 3
 
-#: The outcomes a candidate can stop at, in the order it meets them.
-#: core/labels.py's verdicts plus the three this file decides: `unreadable` is
-#: an album/get that failed, `redelivery` is a catalogue date that was newer
-#: than the record, and `duplicate` is the same release under a second id.
+#: core/labels.py's verdicts plus the three this file decides: a failed
+#: album/get, a catalogue date newer than the record, and one release under two
+#: ids.
 FUNNEL = (*VERDICTS, "redelivery", "duplicate", "unreadable", "capped")
+
+
+def label_of(detail: dict) -> str:
+    """The label name off an album_detail payload."""
+    return (detail.get("label") or {}).get("name") or ""
 
 
 class LabelRadar(Radar):
@@ -122,25 +113,22 @@ class LabelRadar(Radar):
     pause = PAUSE
     default_days = RECENT_DAYS
 
-    #: FALSE, and this radar is the first catalogue source where that is right.
-    #: `record_scanned` exists so a release cannot resurface the week it falls
-    #: out of the window, and the Qobuz radar sets it because what it scans is
-    #: a watched artist's discography -- a fixed question. What this scans is a
-    #: label catalogue, but what it ASKS is "does this credit anybody in
-    #: data/producers.json", and that list grows. Recording a release that
-    #: matched nobody would hide it for good the day you add the producer it
-    #: credits, which is radars/listenbrainz.py's argument arriving at a
-    #: catalogue source for a different reason.
+    #: FALSE: what this scans is a catalogue, but what it ASKS is whether the
+    #: credits name anybody in data/producers.json, and that list grows.
+    #: Banking a release that matched nobody would hide it the day you add the
+    #: producer it credits.
     record_scanned = False
-    #: True, unlike the other source that sets record_scanned False. A label
-    #: catalogue always returns rows, so nothing from any of sixty labels is an
-    #: outage rather than a quiet week -- the date filter empties the report,
-    #: never the fetch.
+    #: A label catalogue always returns rows, so nothing from any of them is an
+    #: outage: the date filter empties the report, the fetch does not.
     guard_empty_run = True
 
     def __init__(self) -> None:
         self.funnel: collections.Counter[str] = collections.Counter()
         self.catalogues: dict[str, int] = {}
+        #: Feed rows kept, counted after the per-label cap. Apart from the
+        #: funnel, whose outcomes sum to the candidates read: a row can be
+        #: `absent` AND on the feed.
+        self.feed = 0
 
     def add_arguments(self, parser) -> None:
         parser.add_argument("--store", default=STORE,
@@ -153,6 +141,13 @@ class LabelRadar(Radar):
                                  # Doubled for argparse, which reads % as a
                                  # format spec in a help string and raises.
                                  "measured 73%% of its referrals arriving that way")
+        parser.add_argument("--feed", choices=("albums", "all", "off"),
+                            default="albums",
+                            help="which releases to report that nobody you follow "
+                                 "made: albums and EPs (default), everything, or "
+                                 "nothing. Measured over a fortnight on these "
+                                 "labels: 34 a week, 65, and 0. Credited releases "
+                                 "are reported whatever this says")
         parser.add_argument("--max-pages", type=int, default=LABEL_MAX_PAGES,
                             metavar="N",
                             help="catalogue pages to read per label before giving up "
@@ -200,11 +195,10 @@ class LabelRadar(Radar):
         return asked
 
     def batches(self, args, watching: dict) -> Iterator[Batch]:
-        """One Batch per LABEL, from one catalogue read plus a detail per candidate.
+        """One Batch per LABEL: one catalogue read plus a detail per candidate.
 
-        One batch per label rather than per call, for the reason D42 records:
-        the runner counts a batch as a call and reports `fetched` of `watching`,
-        so a second batch would make a 60-label run say "from 120 of 60".
+        Per label rather than per call, for the reason D42 records: the runner
+        counts a batch as a call, so a second would say "from 120 of 60".
         """
         if not PEOPLE:
             print(f"warning: {PEOPLE_FILE.name} is empty, so nothing can be credited - "
@@ -251,27 +245,37 @@ class LabelRadar(Radar):
             found = [r for r in (self.examine(args, album, cookies, families,
                                               folded, watched_artists, cutoff)
                                  for album in candidates) if r is not None]
-            # Newest first, so a cap keeps the most recent rather than whatever
-            # order the catalogue happened to return.
-            found.sort(key=lambda release: release.date, reverse=True)
-            cap = getattr(args, "per_label", 0)
-            if cap and len(found) > cap:
-                self.funnel["capped"] += len(found) - cap
-                found = found[:cap]
-            releases = found
+            # Capped per GROUP, so a label with a busy week cannot push its one
+            # credited release out of the report with its own feed rows.
+            credited = [r for r in found if r.because]
+            feed = self.cap(args, [r for r in found if not r.because])
+            # Counted AFTER the cap, so the summary cannot claim rows the
+            # report does not hold -- the same discipline the funnel keeps.
+            # The runner drops pre-orders after this (D33), so this is still
+            # an upper bound on what is printed.
+            self.feed += len(feed)
+            releases = self.cap(args, credited) + feed
             yield Batch(releases=releases, ok=ok, label=label or name,
                         scanned=len(catalogue), warning="; ".join(warnings))
+
+    def cap(self, args, rows: list[Release]) -> list[Release]:
+        """The newest `--per-label` of one group, since a report has to be read."""
+        rows.sort(key=lambda release: release.date, reverse=True)
+        limit = getattr(args, "per_label", 0)
+        if limit and len(rows) > limit:
+            self.funnel["capped"] += len(rows) - limit
+            return rows[:limit]
+        return rows
 
     def examine(self, args, album: dict, cookies: str, families: set[str],
                 folded: set[str], watched_artists: set[str],
                 cutoff: str) -> Release | None:
-        """One candidate, at the cost of one album_detail: a Release or nothing.
+        """One candidate, for one album_detail: a Release or nothing.
 
-        The detail is what decides everything -- the credits are not in a
-        catalogue row at all, and the date in one is a DELIVERY date that errs
-        new, so a re-delivered 2019 record reaches here looking like news. D42
-        measured that at 866 of 1163 candidates, which is why the funnel counts
-        `redelivery` separately rather than letting the runner call it `old`.
+        The credits are absent from a catalogue row and its date is a DELIVERY
+        date that errs new, so a re-delivered 2019 record arrives looking like
+        news -- 866 of 1163 candidates in D42, which is why `redelivery` is its
+        own count.
         """
         if self.pause:
             time.sleep(self.pause)
@@ -313,6 +317,11 @@ class LabelRadar(Radar):
             why = "duplicate"
         self.funnel[why] += 1
         if why != "credit":
+            # A real new release on a label you follow, which nobody you follow
+            # made. Reported with no reason attached beyond the label (D45).
+            if (args.feed != "off" and why in FEED_VERDICTS
+                    and (args.feed == "all" or classify(detail) in FEED_KINDS)):
+                return normalize(detail, artists or label_of(detail))
             return None
 
         folded.add(appearance_key(artists, title))
@@ -322,7 +331,7 @@ class LabelRadar(Radar):
         # future verdict that does not cannot crash a run.
         best = earned(credited, families) or credited[0]
         roles = [role for role in best.roles if family_of(role) in families]
-        label_name = (detail.get("label") or {}).get("name") or ""
+        label_name = label_of(detail)
         because = f"{best.name} - {', '.join(roles) or best.describe()}"
         if label_name:
             because += f" (on {label_name})"
@@ -362,6 +371,8 @@ class LabelRadar(Radar):
                      f"{PEOPLE_LIST.total} people ({left}).")
         if self.funnel:
             line += f" Credits: {self.funnel_line()}."
+        if self.feed:
+            line += f" {self.feed} on the feed."
         return line
 
     def funnel_line(self) -> str:
@@ -376,6 +387,7 @@ class LabelRadar(Radar):
             # radars' reports, which is why the formatter defaults it.
             "unit": "labels",
             "credit": sorted(self.families(args)),
+            "feed": args.feed,
             # The people BLOCK, not a count: which entries the file lost and
             # why is the same question the label watchlist answers, and a run
             # that looked for 430 of 1,538 names should say so.
@@ -402,14 +414,10 @@ class LabelRadar(Radar):
 def discover(store: str) -> int:
     """Rebuild data/labels.json from the labels your artists release on.
 
-    The analogue of `radars/qobuz.py --find`: a mode that exits before any run,
-    because what it writes is a file you then read and edit. One request per
-    watched artist, and the counts it records -- how many of your releases came
-    out on the label, how many of your artists use it, and the catalogue size
-    the gate reads -- are what `core.labels.watch_verdict` decides on.
-
-    Hand-edits survive: a `watch` flag already in the file is carried over, for
-    the same reason core/favourites.py keeps a manual qobuz_id.
+    The analogue of `radars/qobuz.py --find`: it exits before any run, because
+    what it writes is a file you then edit. The counts it records are what
+    `core.labels.watch_verdict` reads. A `watch` flag already in the file is
+    carried over.
     """
     existing = {int(e["id"]): e for e in json.loads(LABELS_FILE.read_text()).get("labels", [])
                 if e.get("id")} if LABELS_FILE.exists() else {}
@@ -482,14 +490,10 @@ def _catalogue_size(label_id: int, store: str, cookies: str) -> int:
 def people_from(pattern: str) -> int:
     """Rebuild data/producers.json from discovery_*.json files. Offline.
 
-    Those files are `stages/discover.py`'s output on the `ranking` branch: one
-    per seed artist, listing every person credited on their records with the
-    roles and the albums. D41 is the reason this reads them rather than
-    importing the stage -- the walk belongs on that branch, and what main needs
-    from it is a list of names.
-
-    Keeps anyone with a production or engineering credit, records which of your
-    artists they worked for, and carries a `watch` flag already in the file.
+    Those are `stages/discover.py`'s output on `ranking`, one per seed artist.
+    Read rather than imported because the walk belongs on that branch (D41) and
+    what main needs from it is a list of names. Keeps anyone with a production
+    or engineering credit and records which of your artists they worked for.
     """
     paths = sorted(glob.glob(pattern))
     if not paths:

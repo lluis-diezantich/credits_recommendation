@@ -1,6 +1,8 @@
 # D44: The label is the query and the credit is the judgement
 
-- **Status:** Proposed
+- **Status:** Accepted. Its default is amended by
+  [D45](D45-the-label-is-reason-enough-for-an-album.md), which reports every
+  album on a watched label and keeps this file's judgement for the credits.
 - **Date:** 2026-10-31
 - **Where it lives:** `core/labels.py` (the judgement), `core/qobuz.py`
   (`label_catalogue`), `radars/labels.py` (the loop and the two builders),
