@@ -6,7 +6,7 @@ Personal project for recommending music.
 
 - New releases by the artists you follow, and the records they guest on (D42)
 - New records made by their producers, found through the labels those
-  producers work for (D44, Proposed -- this branch)
+  producers work for (D44)
 
 ## Install
 
