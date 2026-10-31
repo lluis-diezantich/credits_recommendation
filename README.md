@@ -4,12 +4,9 @@ Personal project for recommending music.
 
 ## Features
 
-- New releases for known artists, both what they are billed on and what they
-  are credited on -- a guest spot on somebody else's record is a release you
-  would otherwise never have looked for (D42)
-- New releases by the PRODUCERS of those artists, found by scanning the labels
-  they work for: Qobuz indexes a label completely, so the label is the query
-  and the credit is the judgement (D44, Proposed -- this branch)
+- New releases by the artists you follow, and the records they guest on (D42)
+- New records made by their producers, found through the labels those
+  producers work for (D44, Proposed -- this branch)
 
 ## Install
 
