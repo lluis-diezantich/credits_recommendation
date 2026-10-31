@@ -1,7 +1,4 @@
-# The label radar (D44). Manual on purpose: at ~12 rows a week against the
-# known-artist radar's 5.8 it would be the larger of the two issues, and D44's
-# executive-producer and mastering-engineer patterns are unfixed. To schedule
-# it, add `schedule: - cron: "47 5 * * 5"` -- Fridays, after that radar.
+# The label radar (D44). Manual on purpose: at ~12 rows a week
 
 name: "releases: labels"
 
@@ -16,7 +13,7 @@ on:
         default: "production"
 
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 jobs:
@@ -27,6 +24,4 @@ jobs:
       title: "releases: labels"
       days: ${{ inputs.days }}
       extra: "--credit ${{ inputs.credit }}"
-      # The runner's default commits ids back to data/ci/ (D11), and a
-      # hand-run trial must not write state into a branch.
       stateless: true
