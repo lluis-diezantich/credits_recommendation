@@ -1,12 +1,7 @@
-# The label radar (D44). No schedule yet: workflow_dispatch is only offered for
-# workflows on the default branch, so this cannot be triggered until it is on
-# main. Two open calls after that -- ~12 rows a week against the known-artist
-# radar's 5.8, and the executive-producer and mastering-engineer patterns D44
-# records. Uncomment to schedule:
-#
-#   on:
-#     schedule:
-#       - cron: "47 5 * * 5"      # Fridays, after the known-artist radar
+# The label radar (D44). Manual on purpose: at ~12 rows a week against the
+# known-artist radar's 5.8 it would be the larger of the two issues, and D44's
+# executive-producer and mastering-engineer patterns are unfixed. To schedule
+# it, add `schedule: - cron: "47 5 * * 5"` -- Fridays, after that radar.
 
 name: "releases: labels"
 
