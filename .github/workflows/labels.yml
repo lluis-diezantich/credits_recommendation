@@ -15,8 +15,11 @@ on:
         description: "role families that count as news"
         default: "production"
 
+# `contents: write` because radar.yml declares it to commit the state file, and
+# a caller cannot grant a reusable workflow less than it asks for. This one
+# passes stateless: true and commits nothing.
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 jobs:
